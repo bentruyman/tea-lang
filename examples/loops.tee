@@ -1,0 +1,13 @@
+var list = ["a", "b", "c", "d"]
+
+for letter of list
+  print letter 
+end # a, b, c, d
+
+while condition
+ # do something
+end
+
+until condition
+# do something
+end

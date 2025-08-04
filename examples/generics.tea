@@ -1,0 +1,19 @@
+use assert = "std.assert"
+
+struct Box[T]
+  value: T
+end
+
+def identity[T](value: T) -> T
+  value
+end
+
+def make_box[T](value: T) -> Box[T]
+  Box[T](value: value)
+end
+
+var int_box = make_box[Int](identity[Int](42))
+assert.assert_eq(int_box.value, 42)
+
+var string_box = make_box[String]("tea")
+assert.assert_eq(string_box.value, "tea")

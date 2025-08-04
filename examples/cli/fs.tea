@@ -1,0 +1,29 @@
+use fs = "std.fs"
+use print = "std.print"
+
+# Demonstrates the expanded std.fs helpers:
+# - ensure_dir / ensure_parent for creating directories
+# - atomic writes for text/bytes
+# - list_dir, walk, glob, and metadata
+fs.ensure_dir("tmp/fs-demo")
+
+fs.write_text_atomic("tmp/fs-demo/README.txt", "hello from std.fs")
+fs.ensure_parent("tmp/fs-demo/logs/demo.log")
+fs.write_text_atomic("tmp/fs-demo/logs/demo.log", "first entry")
+
+print.print("list_dir:")
+print.print(fs.list_dir("tmp/fs-demo"))
+
+print.print("walk:")
+print.print(fs.walk("tmp/fs-demo"))
+
+print.print("glob:")
+print.print(fs.glob("tmp/fs-demo/**/*.txt"))
+
+print.print("metadata:")
+print.print(fs.metadata("tmp/fs-demo/README.txt"))
+
+fs.remove("tmp/fs-demo/logs/demo.log")
+fs.remove("tmp/fs-demo/logs")
+fs.remove("tmp/fs-demo/README.txt")
+fs.remove("tmp/fs-demo")

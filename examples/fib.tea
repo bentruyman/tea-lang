@@ -1,0 +1,12 @@
+# Import the standard print function
+use print = "std.print"
+
+def fib(n: Int) -> Int
+  if n <= 1
+    return n
+  end
+
+  fib(n - 1) + fib(n - 2)
+end
+
+print.print(fib(30))

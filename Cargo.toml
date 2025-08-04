@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+  "tea-cli",
+  "tea-compiler",
+  "tea-runtime",
+  "tea-support"
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["tea-lang contributors"]
+repository = "https://github.com/bentruyman/tea-lang"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+thiserror = "1"

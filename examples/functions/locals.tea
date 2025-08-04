@@ -1,0 +1,10 @@
+use print = "std.print"
+
+# Expect: 5
+
+def increment(value: Int) -> Int
+  var result = value + 1
+  result
+end
+
+print.print(increment(4))

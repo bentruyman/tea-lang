@@ -1,0 +1,17 @@
+use print = "std.print"
+
+# Expect: 0, 1, 2, true
+
+var count = 0
+while count < 2
+  print.print(count)
+  count = count + 1
+end
+
+var flag = false
+until flag == true
+  flag = true
+end
+
+print.print(count)
+print.print(flag)

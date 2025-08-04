@@ -1,0 +1,36 @@
+# Demonstrates std.fs helpers for working with files and directories.
+
+use assert = "std.assert"
+use fs = "std.fs"
+use util = "std.util"
+
+var dir_path = "./fs_example"
+fs.create_dir(dir_path, true)
+
+var source_path = "./fs_example/greeting.txt"
+fs.write_text(source_path, "hello from fs")
+assert.assert(fs.exists(source_path))
+assert.assert(fs.is_dir(dir_path))
+
+var contents = fs.read_text(source_path)
+assert.assert_eq(contents, "hello from fs")
+
+var bytes = fs.read_bytes(source_path)
+assert.assert_eq(util.len(bytes), 13)
+assert.assert_eq(bytes[0], 104)
+assert.assert_eq(bytes[util.len(bytes) - 1], 115)
+
+var copy_path = "./fs_example/copy.bin"
+fs.write_bytes(copy_path, bytes)
+assert.assert(fs.exists(copy_path))
+assert.assert_eq(fs.size(copy_path), fs.size(source_path))
+
+var handle = fs.open_read(copy_path)
+var chunk = fs.read_chunk(handle, 5)
+assert.assert_eq(util.len(chunk), 5)
+assert.assert_eq(chunk[0], 104)
+fs.close(handle)
+
+fs.remove(copy_path)
+fs.remove(source_path)
+fs.remove(dir_path)

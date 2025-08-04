@@ -1,0 +1,39 @@
+# Demonstrates std.path helpers for cross-platform path manipulation.
+
+use print = "std.print"
+use path = "std.path"
+
+var joined = path.join(["logs", "2025", "october"])
+print.print("joined path")
+print.print(joined)
+
+var parts = path.components(joined)
+print.print("components")
+print.print(parts)
+
+print.print("dirname")
+print.print(path.dirname(joined))
+
+print.print("basename")
+print.print(path.basename(joined))
+
+print.print("extension")
+print.print(path.extension("report.txt"))
+
+print.print("set_extension")
+print.print(path.set_extension("report.txt", "md"))
+
+print.print("strip_extension")
+print.print(path.strip_extension("report.txt"))
+
+print.print("normalize")
+print.print(path.normalize("logs/./2025/../current"))
+
+print.print("absolute (relative to ./workspace)")
+print.print(path.absolute("bin/tea", "./workspace"))
+
+print.print("relative to ./workspace")
+print.print(path.relative(path.absolute("bin/tea", "./workspace"), "./workspace"))
+
+print.print("separator")
+print.print(path.separator())

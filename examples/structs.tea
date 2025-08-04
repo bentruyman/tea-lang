@@ -1,0 +1,14 @@
+use print = "std.print"
+
+struct User
+  name: String
+  age: Int
+end
+
+def print_user(user: User) -> Nil
+  print.print(user.name)
+  print.print(user.age)
+end
+
+var ada = User(name: "Ada", age: 37)
+print_user(ada)

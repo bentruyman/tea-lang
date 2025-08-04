@@ -1,0 +1,12 @@
+use print = "std.print"
+
+def make_adder(base: Int) -> Func(Int) -> Int
+  |value: Int| => base + value
+end
+
+def run() -> Int
+  var add = make_adder(10)
+  return add(32)
+end
+
+print.print(run()) # => 42

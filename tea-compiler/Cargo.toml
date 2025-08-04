@@ -1,0 +1,26 @@
+[package]
+name = "tea-compiler"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+llvm-aot = ["inkwell", "tea-runtime"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde_json = "1"
+serde_yaml = "0.9"
+glob = "0.3"
+tempfile = "3"
+walkdir = "2"
+inkwell = { version = "0.5.0", optional = true, default-features = false, features = ["llvm17-0"] }
+tea-runtime = { path = "../tea-runtime", optional = true }
+tea-support = { path = "../tea-support" }
+path-clean = "1"
+pathdiff = "0.2"
+dirs-next = "2"

@@ -1,0 +1,39 @@
+use cli = "support.cli"
+use print = "std.print"
+use util = "std.util"
+
+# Demonstrates parsing CLI arguments using support.cli
+var spec = {
+  name: "tea-sample",
+  description: "Demo CLI parser",
+  options: [
+    { name: "verbose", aliases: ["-v", "--verbose"], kind: "flag" },
+    { name: "count", aliases: ["-c", "--count"], kind: "option", type: "Int", default: 1 }
+  ],
+  positionals: [
+    { name: "input", type: "String", required: true }
+  ],
+  subcommands: []
+}
+
+# Parse either supplied arguments or a demo set when run without CLI args
+var argv = cli.args()
+if util.len(argv) == 0
+  argv = ["--count", "3", "--verbose", "input.txt"]
+end
+
+var parsed = cli.parse(spec, argv)
+
+if parsed.ok
+  print.print("command:")
+  print.print(parsed.command)
+  print.print("- verbose:")
+  print.print(util.to_string(parsed.options["verbose"]))
+  print.print("- count:")
+  print.print(util.to_string(parsed.options["count"]))
+  print.print("- input:")
+  print.print(parsed.positionals["input"])
+else
+  print.print(parsed.message)
+  print.print(parsed.help)
+end

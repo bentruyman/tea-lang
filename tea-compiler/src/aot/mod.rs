@@ -269,13 +269,19 @@ pub fn compile_module_to_object(
     let features = options.features.unwrap_or("");
     let opt_level = options.opt_level;
 
+    let reloc_mode = if triple_str.contains("windows") {
+        RelocMode::Default
+    } else {
+        RelocMode::PIC
+    };
+
     let target_machine = target
         .create_target_machine(
             &target_triple,
             cpu,
             features,
             opt_level,
-            RelocMode::Default,
+            reloc_mode,
             CodeModel::Default,
         )
         .ok_or_else(|| anyhow!("failed to create target machine"))?;

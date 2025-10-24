@@ -613,14 +613,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         tea_list.set_body(&[i64.into(), i64.into(), ptr_type.into()], false);
         tea_struct_template.set_body(&[ptr_type.into(), i64.into(), ptr_type.into()], false);
         tea_struct_instance.set_body(&[ptr_type.into(), ptr_type.into()], false);
-        tea_closure.set_body(
-            &[
-                ptr_type.into(),
-                ptr_type.into(),
-                i64.into(),
-            ],
-            false,
-        );
+        tea_closure.set_body(&[ptr_type.into(), ptr_type.into(), i64.into()], false);
 
         Self {
             context,

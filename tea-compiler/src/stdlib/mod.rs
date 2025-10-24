@@ -1,6 +1,6 @@
-mod debug;
 mod assert;
 mod cli;
+mod debug;
 mod env;
 mod fs;
 mod io;

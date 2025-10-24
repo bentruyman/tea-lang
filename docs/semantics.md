@@ -40,7 +40,7 @@ This document captures the first working cut of tea-lang. It is the contract for
   6. `and`.
   7. `or`.
 - Assignment uses `=`. Desugaring for `+=`, `++`, etc. is a future addition.
-- Function calls currently require parentheses: `alias.function(args)` (e.g. `print.print(message)`). A shorthand without parentheses may be added later.
+- Function calls currently require parentheses: `alias.function(args)` (e.g. `debug.print(message)`). A shorthand without parentheses may be added later.
 - List literals evaluate their elements left-to-right (`[expr, ...]`) and produce a boxed list value. Indexing (`list[index]`) evaluates the receiver followed by the index expression; indices must be `Int` at runtime.
 - Dictionary literals use braces (`{ key: value, ... }`), where keys may be identifiers or string literals. Member access (`record.field`) reads struct fields or dictionary entries (the property is lowered to a string key). Direct indexing (`dict["field"]`) is also supported. Keys must be strings at runtime.
 - Function literals: `|args| => expr` (single-expression) or `|args| => { ... }` (block body). Arguments follow the same annotation/default syntax as `def`.
@@ -49,7 +49,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 
 ## Statements
 - `use alias = "module"` loads std modules or relative paths (`use helpers = "./math"`). Dot access resolves exported constants/functions/structs under the chosen alias. The builtin library currently ships:
-  - `"std.print"` — exposes `print` for console output.
+  - `"std.debug"` — exposes `print` for console output.
   - `"std.assert"` — provides `assert`, `assert_eq`, `assert_ne`, and `fail` helpers for runtime checks.
   - `"std.util"` — type guards (`is_nil`/`is_int`/... ), `len`, `to_string`, and `clamp_int` utilities.
   - `"std.fs"` — file helpers for reading/writing text or bytes, creating/removing directories, querying metadata, and streaming chunked reads via handles.

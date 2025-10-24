@@ -1,10 +1,10 @@
-use print = "std.print"
+use debug = "std.debug"
 
 # Expect: 3, 4, 8
 
 var point = { x: 3, y: 4 }
-print.print(point.x)
-print.print(point.y)
+debug.print(point.x)
+debug.print(point.y)
 
 var scores = { "alice": 10, "bob": 8 }
-print.print(scores.bob)
+debug.print(scores.bob)

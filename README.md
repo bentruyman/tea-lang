@@ -5,7 +5,7 @@ tea-lang is a strongly typed scripting language with Ruby-inspired surface synta
 ## At a Glance
 
 ```tea
-use print = "std.print"
+use debug = "std.debug"
 
 def inc(value: Int) -> Int
   value + 1
@@ -15,10 +15,10 @@ var scores = [1, 2, 3]
 var point = { x: 4, y: 5 }
 
 if scores[0] < 5
-  print.print(inc(scores[0]))
+  debug.print(inc(scores[0]))
 end
 
-print.print(point.x)
+debug.print(point.x)
 ```
 
 ## Why tea-lang?
@@ -34,17 +34,17 @@ print.print(point.x)
 Build the CLI once with `make build` (or `cargo build`) so `./bin/tea` is available, then create `examples/basics.tea`:
 
 ```tea
-use print = "std.print"
+use debug = "std.debug"
 
 var greeting = "Hello from tea-lang"
 var count = 2
 
 if count == 2
-  print.print(greeting)
+  debug.print(greeting)
 end
 
 var total = 1 + 2 + 3
-print.print(total)
+debug.print(total)
 ```
 
 Every `use` must introduce a local alias (for example `use fs = "std.fs"`), and helpers exposed

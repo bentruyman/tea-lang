@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId, Vm};
 #[test]
 fn lambda_captures_local_variable() -> anyhow::Result<()> {
     let source = r#"
-use print = "std.print"
+use debug = "std.debug"
 
 def run() -> Int
   var base = 40
@@ -13,7 +13,7 @@ def run() -> Int
   add(2)
 end
 
-print.print(run())
+debug.print(run())
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

@@ -1,10 +1,10 @@
-use print = "std.print"
+use debug = "std.debug"
 
 # Expect: 3.5, true, false
 
 var value = 1.5
 var result = value + 2.0
 
-print.print(result)
-print.print(result > 3.0)
-print.print(result < 3.0)
+debug.print(result)
+debug.print(result > 3.0)
+debug.print(result < 3.0)

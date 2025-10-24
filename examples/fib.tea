@@ -1,5 +1,5 @@
-# Import the standard print function
-use print = "std.print"
+# Import debug helpers for console output
+use debug = "std.debug"
 
 def fib(n: Int) -> Int
   if n <= 1
@@ -9,4 +9,4 @@ def fib(n: Int) -> Int
   fib(n - 1) + fib(n - 2)
 end
 
-print.print(fib(30))
+debug.print(fib(30))

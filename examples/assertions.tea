@@ -1,5 +1,5 @@
 use assert = "std.assert"
-use print = "std.print"
+use debug = "std.debug"
 use util = "std.util"
 
 var words = ["tea", "lang"]
@@ -8,11 +8,11 @@ assert.assert(util.len(words) == 2, "expected two elements")
 assert.assert_eq(true, util.is_bool(true))
 assert.assert_ne(1, 2)
 
-print.print("len of 'tea':")
-print.print(util.len("tea"))
-print.print("clamped:")
-print.print(util.clamp_int(12, 0, 5))
-print.print("as string:")
-print.print(util.to_string(words))
-print.print("is struct?:")
-print.print(util.is_struct(words))
+debug.print("len of 'tea':")
+debug.print(util.len("tea"))
+debug.print("clamped:")
+debug.print(util.clamp_int(12, 0, 5))
+debug.print("as string:")
+debug.print(util.to_string(words))
+debug.print("is struct?:")
+debug.print(util.is_struct(words))

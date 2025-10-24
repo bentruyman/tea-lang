@@ -1,5 +1,5 @@
 use cli = "support.cli"
-use print = "std.print"
+use debug = "std.debug"
 use util = "std.util"
 
 # Demonstrates parsing CLI arguments using support.cli
@@ -25,15 +25,15 @@ end
 var parsed = cli.parse(spec, argv)
 
 if parsed.ok
-  print.print("command:")
-  print.print(parsed.command)
-  print.print("- verbose:")
-  print.print(util.to_string(parsed.options["verbose"]))
-  print.print("- count:")
-  print.print(util.to_string(parsed.options["count"]))
-  print.print("- input:")
-  print.print(parsed.positionals["input"])
+  debug.print("command:")
+  debug.print(parsed.command)
+  debug.print("- verbose:")
+  debug.print(util.to_string(parsed.options["verbose"]))
+  debug.print("- count:")
+  debug.print(util.to_string(parsed.options["count"]))
+  debug.print("- input:")
+  debug.print(parsed.positionals["input"])
 else
-  print.print(parsed.message)
-  print.print(parsed.help)
+  debug.print(parsed.message)
+  debug.print(parsed.help)
 end

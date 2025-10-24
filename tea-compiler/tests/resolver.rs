@@ -14,8 +14,8 @@ fn collect_diagnostics(compiler: &Compiler) -> Vec<String> {
 #[test]
 fn rejects_use_of_undefined_binding() {
     let source = r#"
-use print = "std.print"
-print.print(missing)
+use debug = "std.debug"
+debug.print(missing)
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
@@ -132,9 +132,9 @@ fn suggests_import_for_std_function() {
         diagnostics.iter().any(|diagnostic| {
             diagnostic
                 .message
-                .contains("add `use print = \"std.print\"` to import it")
+                .contains("add `use debug = \"std.debug\"` to import it")
         }),
-        "expected suggestion to import std.print, found {:?}",
+        "expected suggestion to import std.debug, found {:?}",
         diagnostics
             .iter()
             .map(|d| d.message.clone())

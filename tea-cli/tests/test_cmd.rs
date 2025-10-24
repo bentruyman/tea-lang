@@ -124,10 +124,10 @@ fn build_creates_bundle_and_checksum() {
     fs::write(
         &source_path,
         r#"
-use print = "std.print"
+use debug = "std.debug"
 
 def main() -> Int
-  print.print("hello from bundle")
+  debug.print("hello from bundle")
   0
 end
 

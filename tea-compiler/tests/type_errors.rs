@@ -4,7 +4,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
 #[test]
 fn rejects_mismatched_annotation() {
-    let source = "use print = \"std.print\"\nvar flag: Bool = 1\n";
+    let source = "use debug = \"std.debug\"\nvar flag: Bool = 1\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
     let result = compiler.compile(&source_file);
@@ -32,7 +32,7 @@ fn rejects_untyped_function_parameters() {
 
 #[test]
 fn requires_alias_for_use_statement() {
-    let source = "use \"std.print\"\nprint(\"hi\")\n";
+    let source = "use \"std.debug\"\nprint(\"hi\")\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
         SourceId(0),
@@ -350,7 +350,7 @@ fn accepts_lambda_annotations() {
 #[test]
 fn accepts_container_annotations() {
     let source = r#"
-use print = "std.print"
+use debug = "std.debug"
 
 var values: List[Int] = [1, 2, 3]
 var lookup: Dict[String, Int] = { foo: 42 }
@@ -361,7 +361,7 @@ end
 
 var transformer: Func(Int) -> Int = apply
 
-print.print(transformer(values[0]))
+debug.print(transformer(values[0]))
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(

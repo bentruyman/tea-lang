@@ -1,4 +1,4 @@
-use print = "std.print"
+use debug = "std.debug"
 
 struct User
   name: String
@@ -6,8 +6,8 @@ struct User
 end
 
 def print_user(user: User) -> Nil
-  print.print(user.name)
-  print.print(user.age)
+  debug.print(user.name)
+  debug.print(user.age)
 end
 
 var ada = User(name: "Ada", age: 37)

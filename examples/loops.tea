@@ -1,10 +1,10 @@
-use print = "std.print"
+use debug = "std.debug"
 
 # Expect: 0, 1, 2, true
 
 var count = 0
 while count < 2
-  print.print(count)
+  debug.print(count)
   count = count + 1
 end
 
@@ -13,5 +13,5 @@ until flag == true
   flag = true
 end
 
-print.print(count)
-print.print(flag)
+debug.print(count)
+debug.print(flag)

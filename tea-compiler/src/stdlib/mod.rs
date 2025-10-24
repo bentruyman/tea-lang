@@ -1,3 +1,4 @@
+mod debug;
 mod assert;
 mod cli;
 mod env;
@@ -156,6 +157,7 @@ pub struct StdModule {
 }
 
 pub static MODULES: &[StdModule] = &[
+    debug::MODULE,
     print::MODULE,
     assert::MODULE,
     util::MODULE,

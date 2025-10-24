@@ -1,17 +1,17 @@
-use print = "std.print"
+use debug = "std.debug"
 use process = "std.process"
 use util = "std.util"
 
 # Run a command and capture its output.
 var result = process.run("sh", ["-c", "printf hello"])
-print.print("run stdout:")
-print.print(result.stdout)
+debug.print("run stdout:")
+debug.print(result.stdout)
 
 # Spawn a process and read from it incrementally.
 var handle = process.spawn("sh", ["-c", "printf world"])
 var chunk = process.read_stdout(handle)
 var status = process.wait(handle)
-print.print("spawn chunk:")
-print.print(chunk)
-print.print("spawn exit:")
-print.print(util.to_string(status.exit))
+debug.print("spawn chunk:")
+debug.print(chunk)
+debug.print("spawn exit:")
+debug.print(util.to_string(status.exit))

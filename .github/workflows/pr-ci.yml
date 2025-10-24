@@ -9,6 +9,9 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      LLVM_SYS_170_PREFIX: /usr/lib/llvm-17
+      LLVM_CONFIG_PATH: /usr/lib/llvm-17/bin/llvm-config
 
     steps:
       - name: Checkout repository
@@ -16,6 +19,13 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev
 
       - name: Cache cargo builds
         uses: Swatinem/rust-cache@v2

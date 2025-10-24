@@ -1,4 +1,5 @@
 use debug = "std.debug"
+use env = "std.env"
 use process = "std.process"
 use util = "std.util"
 
@@ -8,7 +9,7 @@ debug.print("run stdout:")
 debug.print(result.stdout)
 
 # Spawn a process and read from it incrementally.
-var handle = process.spawn("sh", ["-c", "printf world"])
+var handle = process.spawn("sh", ["-c", "printf world"], env.vars())
 var chunk = process.read_stdout(handle)
 var status = process.wait(handle)
 debug.print("spawn chunk:")

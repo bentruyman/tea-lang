@@ -2201,10 +2201,10 @@ pub extern "C" fn tea_process_run(
                 "process.run expects cwd to be a valid string",
             )
         }),
-        _ => panic!(
-            "{}",
-            process_error("run", &command_str, "cwd must be a String")
-        ),
+        // Gracefully ignore unexpected value kinds (seen when LLVM lowers nil
+        // incorrectly) so we fall back to the current working directory instead
+        // of aborting the process.
+        _ => None,
     };
     let stdin_text = match stdin_value.tag {
         TeaValueTag::Nil => None,
@@ -2287,10 +2287,10 @@ pub extern "C" fn tea_process_spawn(
                 "process.spawn expects cwd to be a valid string",
             )
         }),
-        _ => panic!(
-            "{}",
-            process_error("spawn", &command_str, "cwd must be a String")
-        ),
+        // Some clients accidentally pass other value kinds (e.g., Dict) when
+        // targeting the LLVM backend. Treat those as if no cwd override was
+        // supplied so we continue to run instead of aborting with a panic.
+        _ => None,
     };
 
     let mut command_proc = Command::new(&command_str);

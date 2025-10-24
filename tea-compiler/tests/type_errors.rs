@@ -171,6 +171,64 @@ var phantom = Phantom()
 }
 
 #[test]
+fn rejects_struct_generics_closing_on_newline() {
+    let source = "struct Box[T\n]\nend\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("struct_generics_newline.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected parser to reject trailing newline before ']' in struct generics"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("newline before closing ']' in struct 'Box' type parameters")),
+        "missing struct generic newline diagnostic: {:?}",
+        messages
+    );
+}
+
+#[test]
+fn rejects_function_generics_closing_on_newline() {
+    let source = "def id[T\n](value: T) -> T\n  value\nend\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("function_generics_newline.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected parser to reject trailing newline before ']' in function generics"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("newline before closing ']' in function 'id' type parameters")),
+        "missing function generic newline diagnostic: {:?}",
+        messages
+    );
+}
+
+#[test]
 fn conditional_type_error_includes_span() {
     let source = "if 1\n  nil\nend\n";
     let mut compiler = Compiler::new(CompileOptions::default());

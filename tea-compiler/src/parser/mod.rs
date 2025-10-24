@@ -289,7 +289,7 @@ impl<'a> Parser<'a> {
 
         let type_parameters = if matches!(self.peek_kind(), TokenKind::LBracket) {
             self.advance(); // consume '['
-            let params = self.parse_type_parameters("function", &name)?;
+            let params = self.parse_type_parameters("function", &name, name_span.line)?;
             params
         } else {
             Vec::new()
@@ -436,6 +436,7 @@ impl<'a> Parser<'a> {
         &mut self,
         owner_kind: &str,
         owner_name: &str,
+        owner_name_line: usize,
     ) -> Result<Vec<TypeParameter>> {
         let mut params = Vec::new();
         self.skip_newlines();
@@ -491,7 +492,18 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
                 TokenKind::RBracket => {
-                    self.advance();
+                    let closing_token = self.advance().clone();
+                    if closing_token.line != owner_name_line {
+                        let closing_span = Self::span_from_token(&closing_token);
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "newline before closing ']' in {} '{}' type parameters; closing bracket must be on the same line as the name",
+                                owner_kind, owner_name
+                            ),
+                            Some(closing_span),
+                        );
+                        bail!("type parameter list closed on a new line");
+                    }
                     break;
                 }
                 other => {
@@ -533,7 +545,7 @@ impl<'a> Parser<'a> {
 
         let type_parameters = if matches!(self.peek_kind(), TokenKind::LBracket) {
             self.advance(); // consume '['
-            self.parse_type_parameters("struct", &name)?
+            self.parse_type_parameters("struct", &name, name_span.line)?
         } else {
             Vec::new()
         };

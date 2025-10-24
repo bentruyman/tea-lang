@@ -1074,6 +1074,33 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             return Ok(ptr);
         }
 
+        if !self.structs.contains_key(name) {
+            if let Some(definition) = self.struct_definitions_tc.get(name) {
+                if definition.type_parameters.is_empty() {
+                    let mut lowering = StructLowering::new();
+                    lowering.field_names = definition
+                        .fields
+                        .iter()
+                        .map(|field| field.name.clone())
+                        .collect();
+
+                    let mut lowered_types = Vec::with_capacity(definition.fields.len());
+                    for field in &definition.fields {
+                        lowered_types.push(type_to_value_type(&field.ty)?);
+                    }
+                    lowering.field_types = lowered_types.clone();
+
+                    self.struct_field_variants
+                        .entry(name.to_string())
+                        .or_insert_with(|| lowered_types.clone());
+                    self.struct_variant_bases
+                        .entry(name.to_string())
+                        .or_insert_with(|| name.to_string());
+                    self.structs.insert(name.to_string(), lowering);
+                }
+            }
+        }
+
         let field_names = self
             .structs
             .get(name)

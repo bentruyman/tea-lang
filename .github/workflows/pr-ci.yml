@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tea test harness
         run: cargo run -p tea-cli -- test --fail-fast
+
+      - name: Run LLVM e2e sanity checks
+        run: scripts/e2e.sh

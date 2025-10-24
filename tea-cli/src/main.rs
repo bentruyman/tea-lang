@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read};
@@ -35,7 +36,7 @@ type HmacSha256 = Hmac<Sha256>;
 const RUN_AFTER_HELP: &str = "\
 Subcommands:
   tea build <INPUT>        Compile a tea-lang file to a native executable.
-  tea fmt <PATH>...        Format tea-lang sources in place.
+  tea fmt [PATH]...       Format tea-lang sources in place (defaults to current directory).
   tea test [PATH]...       Discover and run tea-lang test blocks.
 
 See `tea <subcommand> --help` for command-specific options.";
@@ -192,8 +193,8 @@ struct BuildCli {
     about = "Format tea-lang source files in-place."
 )]
 struct FmtCli {
-    /// Paths to format.
-    #[arg(required = true)]
+    /// Paths or directories to format (defaults to current directory).
+    #[arg(value_name = "PATH")]
     inputs: Vec<PathBuf>,
 
     /// Do not write files; exit with an error if changes are needed.
@@ -283,10 +284,16 @@ fn handle_test(raw: Vec<OsString>) -> Result<()> {
 }
 
 fn run_fmt(cli: &FmtCli) -> Result<()> {
+    let inputs = if cli.inputs.is_empty() {
+        vec![env::current_dir().context("failed to determine current directory")?]
+    } else {
+        cli.inputs.clone()
+    };
+
     let mut had_changes = false;
     let mut targets = BTreeSet::new();
 
-    for input in &cli.inputs {
+    for input in &inputs {
         collect_tea_files(input, &mut targets)?;
     }
 

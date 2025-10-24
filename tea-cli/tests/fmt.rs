@@ -105,6 +105,23 @@ fn fmt_formats_directories_recursively() {
 }
 
 #[test]
+fn fmt_defaults_to_current_directory() {
+    let dir = tempdir().expect("tempdir");
+    let file = dir.path().join("sample.tea");
+    fs::write(&file, ASSIGNMENT_SAMPLE).expect("write sample");
+
+    let status = Command::new(tea_cli_binary())
+        .arg("fmt")
+        .current_dir(dir.path())
+        .status()
+        .expect("run fmt without explicit input");
+    assert!(status.success(), "fmt without inputs should succeed");
+
+    let formatted = fs::read_to_string(&file).expect("read formatted");
+    assert_eq!(ASSIGNMENT_FORMATTED, formatted);
+}
+
+#[test]
 fn fmt_check_supports_multiple_inputs() {
     let dir = tempdir().expect("tempdir");
     let file_one = dir.path().join("one.tea");

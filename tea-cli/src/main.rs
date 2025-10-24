@@ -32,6 +32,14 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 #[cfg(feature = "llvm-aot")]
 type HmacSha256 = Hmac<Sha256>;
 
+const RUN_AFTER_HELP: &str = "\
+Subcommands:
+  tea build <INPUT>        Compile a tea-lang file to a native executable.
+  tea fmt <PATH>...        Format tea-lang sources in place.
+  tea test [PATH]...       Discover and run tea-lang test blocks.
+
+See `tea <subcommand> --help` for command-specific options.";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Emit {
     Ast,
@@ -62,7 +70,13 @@ impl Backend {
 }
 
 #[derive(Parser)]
-#[command(name = "tea", version)]
+#[command(
+    name = "tea",
+    version,
+    about = "Execute tea-lang source files.",
+    long_about = "Run a tea-lang script directly. Use subcommands for building, formatting, and testing.",
+    after_help = RUN_AFTER_HELP
+)]
 struct RunCli {
     /// Path to a tea-lang source file.
     input: PathBuf,

@@ -1,79 +1,80 @@
-use super::{StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
+use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
 
 const UTIL_FUNCTIONS: &[StdFunction] = &[
-    StdFunction {
-        name: "len",
-        kind: StdFunctionKind::UtilLen,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Int,
-    },
-    StdFunction {
-        name: "to_string",
-        kind: StdFunctionKind::UtilToString,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::String,
-    },
-    StdFunction {
-        name: "clamp_int",
-        kind: StdFunctionKind::UtilClampInt,
-        arity: StdArity::Exact(3),
-        params: &[StdType::Int, StdType::Int, StdType::Int],
-        return_type: StdType::Int,
-    },
-    StdFunction {
-        name: "is_nil",
-        kind: StdFunctionKind::UtilIsNil,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_bool",
-        kind: StdFunctionKind::UtilIsBool,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_int",
-        kind: StdFunctionKind::UtilIsInt,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_float",
-        kind: StdFunctionKind::UtilIsFloat,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_string",
-        kind: StdFunctionKind::UtilIsString,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_list",
-        kind: StdFunctionKind::UtilIsList,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
-    StdFunction {
-        name: "is_struct",
-        kind: StdFunctionKind::UtilIsStruct,
-        arity: StdArity::Exact(1),
-        params: &[StdType::Any],
-        return_type: StdType::Bool,
-    },
+    std_function(
+        "len",
+        StdFunctionKind::UtilLen,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Int,
+    ),
+    std_function(
+        "to_string",
+        StdFunctionKind::UtilToString,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::String,
+    ),
+    std_function(
+        "clamp_int",
+        StdFunctionKind::UtilClampInt,
+        StdArity::Exact(3),
+        &[StdType::Int, StdType::Int, StdType::Int],
+        StdType::Int,
+    ),
+    std_function(
+        "is_nil",
+        StdFunctionKind::UtilIsNil,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_bool",
+        StdFunctionKind::UtilIsBool,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_int",
+        StdFunctionKind::UtilIsInt,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_float",
+        StdFunctionKind::UtilIsFloat,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_string",
+        StdFunctionKind::UtilIsString,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_list",
+        StdFunctionKind::UtilIsList,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
+    std_function(
+        "is_struct",
+        StdFunctionKind::UtilIsStruct,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
 ];
 
-pub const MODULE: StdModule = StdModule {
-    path: "std.util",
-    functions: UTIL_FUNCTIONS,
-};
+pub const MODULE: StdModule = std_module!(
+    "std.util",
+    "Utility predicates and helpers for runtime type inspection.",
+    UTIL_FUNCTIONS,
+);

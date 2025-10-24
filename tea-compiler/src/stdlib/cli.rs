@@ -1,33 +1,34 @@
-use super::{StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
+use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
 
 const CLI_FUNCTIONS: &[StdFunction] = &[
-    StdFunction {
-        name: "capture",
-        kind: StdFunctionKind::CliCapture,
-        arity: StdArity::Exact(1),
-        params: &[StdType::List],
-        return_type: StdType::Struct,
-    },
-    StdFunction {
-        name: "args",
-        kind: StdFunctionKind::CliArgs,
-        arity: StdArity::Exact(0),
-        params: &[],
-        return_type: StdType::List,
-    },
-    StdFunction {
-        name: "parse",
-        kind: StdFunctionKind::CliParse,
-        arity: StdArity::Range {
+    std_function(
+        "capture",
+        StdFunctionKind::CliCapture,
+        StdArity::Exact(1),
+        &[StdType::List],
+        StdType::Struct,
+    ),
+    std_function(
+        "args",
+        StdFunctionKind::CliArgs,
+        StdArity::Exact(0),
+        &[],
+        StdType::List,
+    ),
+    std_function(
+        "parse",
+        StdFunctionKind::CliParse,
+        StdArity::Range {
             min: 1,
             max: Some(2),
         },
-        params: &[StdType::Dict, StdType::List],
-        return_type: StdType::Struct,
-    },
+        &[StdType::Dict, StdType::List],
+        StdType::Struct,
+    ),
 ];
 
-pub const MODULE: StdModule = StdModule {
-    path: "support.cli",
-    functions: CLI_FUNCTIONS,
-};
+pub const MODULE: StdModule = std_module!(
+    "support.cli",
+    "Support routines for building command-line interfaces.",
+    CLI_FUNCTIONS,
+);

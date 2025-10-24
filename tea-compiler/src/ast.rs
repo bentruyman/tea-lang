@@ -101,6 +101,7 @@ pub struct UseAlias {
 pub struct VarStatement {
     pub is_const: bool,
     pub bindings: Vec<VarBinding>,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +131,7 @@ pub struct FunctionStatement {
     pub parameters: Vec<FunctionParameter>,
     pub return_type: Option<TypeExpression>,
     pub body: Block,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +139,7 @@ pub struct TestStatement {
     pub name: String,
     pub name_span: SourceSpan,
     pub body: Block,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +156,7 @@ pub struct StructStatement {
     pub name_span: SourceSpan,
     pub type_parameters: Vec<TypeParameter>,
     pub fields: Vec<StructField>,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,15 @@
+[package]
+name = "tea-lsp"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde_json = "1"
+tea-compiler = { path = "../tea-compiler" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "time"] }
+tower-lsp = { version = "0.20", features = ["tokio"] }
+tokio-util = "0.7"

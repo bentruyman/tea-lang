@@ -70,4 +70,8 @@ impl Diagnostics {
     pub fn entries(&self) -> &[Diagnostic] {
         &self.entries
     }
+
+    pub fn entries_mut(&mut self) -> &mut [Diagnostic] {
+        &mut self.entries
+    }
 }

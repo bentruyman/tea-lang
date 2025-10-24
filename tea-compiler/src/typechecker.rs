@@ -29,7 +29,7 @@ pub(crate) enum Type {
 }
 
 impl Type {
-    fn describe(&self) -> String {
+    pub(crate) fn describe(&self) -> String {
         match self {
             Type::Bool => "Bool".to_string(),
             Type::Int => "Int".to_string(),
@@ -157,6 +157,8 @@ pub struct TypeChecker {
     struct_instances: HashMap<String, Vec<StructInstance>>,
     function_call_metadata: HashMap<SourceSpan, (String, FunctionInstance)>,
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
+    binding_types: HashMap<SourceSpan, Type>,
+    argument_expected_types: HashMap<SourceSpan, Type>,
 }
 
 impl TypeChecker {
@@ -177,6 +179,8 @@ impl TypeChecker {
             struct_instances: HashMap::new(),
             function_call_metadata: HashMap::new(),
             struct_call_metadata: HashMap::new(),
+            binding_types: HashMap::new(),
+            argument_expected_types: HashMap::new(),
         };
         checker.register_builtin_structs();
         checker
@@ -213,6 +217,14 @@ impl TypeChecker {
 
     pub(crate) fn struct_call_metadata(&self) -> &HashMap<SourceSpan, (String, StructInstance)> {
         &self.struct_call_metadata
+    }
+
+    pub(crate) fn binding_types(&self) -> &HashMap<SourceSpan, Type> {
+        &self.binding_types
+    }
+
+    pub(crate) fn argument_expected_types(&self) -> &HashMap<SourceSpan, Type> {
+        &self.argument_expected_types
     }
 
     pub(crate) fn struct_definitions(&self) -> HashMap<String, StructDefinition> {
@@ -485,7 +497,8 @@ impl TypeChecker {
                 inferred.clone()
             };
 
-            self.insert(name.clone(), target_type, !statement.is_const);
+            self.insert(name.clone(), target_type.clone(), !statement.is_const);
+            self.binding_types.insert(binding.span, target_type.clone());
         }
     }
 
@@ -633,13 +646,13 @@ impl TypeChecker {
         };
         self.functions
             .insert(function.name.clone(), signature.clone());
-        self.assign_global(
-            function.name.clone(),
-            Type::Function(
-                signature.params.clone(),
-                Box::new(signature.return_type.clone()),
-            ),
+        let function_type = Type::Function(
+            signature.params.clone(),
+            Box::new(signature.return_type.clone()),
         );
+        self.assign_global(function.name.clone(), function_type.clone());
+        self.binding_types
+            .insert(function.name_span, function_type.clone());
 
         self.push_scope();
         self.contexts.push(FunctionContext {
@@ -651,6 +664,7 @@ impl TypeChecker {
 
         for (param, expected_type) in function.parameters.iter().zip(param_types.iter()) {
             self.insert(param.name.clone(), expected_type.clone(), true);
+            self.binding_types.insert(param.span, expected_type.clone());
             if let Some(default) = &param.default_value {
                 let actual = self.infer_expression(default);
                 self.ensure_compatible(
@@ -2155,6 +2169,10 @@ impl TypeChecker {
                     .get(index)
                     .map(|arg| arg.expression.span)
                     .or(call_span);
+                if let Some(span) = arg_span {
+                    self.argument_expected_types
+                        .insert(span, expected_ty.clone());
+                }
                 self.ensure_compatible(expected_ty, actual_ty, &argument_context, arg_span);
             }
         }
@@ -2183,6 +2201,7 @@ impl TypeChecker {
         self.push_scope();
         for (param, expected_type) in lambda.parameters.iter().zip(param_types.iter()) {
             self.insert(param.name.clone(), expected_type.clone(), true);
+            self.binding_types.insert(param.span, expected_type.clone());
             if let Some(default) = &param.default_value {
                 let actual = self.infer_expression(default);
                 self.ensure_compatible(
@@ -2269,6 +2288,10 @@ impl TypeChecker {
         if let Some(global) = self.scopes.first_mut() {
             global.insert(name, ty);
         }
+    }
+
+    pub(crate) fn global_binding_types(&self) -> HashMap<String, Type> {
+        self.scopes.first().cloned().unwrap_or_else(HashMap::new)
     }
 
     fn lookup(&self, name: &str) -> Option<Type> {

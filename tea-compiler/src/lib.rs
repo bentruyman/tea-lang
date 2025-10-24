@@ -15,16 +15,17 @@ pub use crate::ast::{
     ConditionalStatement, DictEntry, DictLiteral, Expression, ExpressionKind, ExpressionStatement,
     FunctionParameter, FunctionStatement, Identifier, IndexExpression, LambdaBody,
     LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression,
-    Module, RangeExpression, ReturnStatement, Statement, StructField, StructStatement,
+    Module, RangeExpression, ReturnStatement, SourceSpan, Statement, StructField, StructStatement,
     TypeExpression, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 pub use crate::compiler::{Compilation, CompileOptions, Compiler};
 pub use crate::diagnostics::{Diagnostic, DiagnosticLevel, Diagnostics};
 pub use crate::formatter::format_source;
-pub use crate::lexer::{Keyword, Token, TokenKind};
-pub use crate::resolver::Resolver;
+pub use crate::lexer::{Keyword, Lexer, Token, TokenKind};
+pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 pub use crate::runtime::{Program, TestOutcome, TestRunOptions, TestStatus, Vm};
 pub use crate::source::{SourceFile, SourceId};
+pub use crate::stdlib::{find_module as stdlib_find_module, StdFunction, StdModule};
 pub use crate::typechecker::TypeChecker;
 
 #[cfg(feature = "llvm-aot")]

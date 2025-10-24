@@ -1,51 +1,49 @@
-use super::{StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
+use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
 
 const IO_FUNCTIONS: &[StdFunction] = &[
-    StdFunction {
-        name: "read_line",
-        kind: StdFunctionKind::IoReadLine,
-        arity: StdArity::Exact(0),
-        params: &[],
-        return_type: StdType::Any,
-    },
-    StdFunction {
-        name: "read_all",
-        kind: StdFunctionKind::IoReadAll,
-        arity: StdArity::Exact(0),
-        params: &[],
-        return_type: StdType::String,
-    },
-    StdFunction {
-        name: "read_bytes",
-        kind: StdFunctionKind::IoReadBytes,
-        arity: StdArity::Exact(0),
-        params: &[],
-        return_type: StdType::List,
-    },
-    StdFunction {
-        name: "write",
-        kind: StdFunctionKind::IoWrite,
-        arity: StdArity::Exact(1),
-        params: &[StdType::String],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "write_err",
-        kind: StdFunctionKind::IoWriteErr,
-        arity: StdArity::Exact(1),
-        params: &[StdType::String],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "flush",
-        kind: StdFunctionKind::IoFlush,
-        arity: StdArity::Exact(0),
-        params: &[],
-        return_type: StdType::Nil,
-    },
+    std_function(
+        "read_line",
+        StdFunctionKind::IoReadLine,
+        StdArity::Exact(0),
+        &[],
+        StdType::Any,
+    ),
+    std_function(
+        "read_all",
+        StdFunctionKind::IoReadAll,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "read_bytes",
+        StdFunctionKind::IoReadBytes,
+        StdArity::Exact(0),
+        &[],
+        StdType::List,
+    ),
+    std_function(
+        "write",
+        StdFunctionKind::IoWrite,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Nil,
+    ),
+    std_function(
+        "write_err",
+        StdFunctionKind::IoWriteErr,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Nil,
+    ),
+    std_function(
+        "flush",
+        StdFunctionKind::IoFlush,
+        StdArity::Exact(0),
+        &[],
+        StdType::Nil,
+    ),
 ];
 
-pub const MODULE: StdModule = StdModule {
-    path: "std.io",
-    functions: IO_FUNCTIONS,
-};
+pub const MODULE: StdModule =
+    std_module!("std.io", "Standard input/output helpers.", IO_FUNCTIONS,);

@@ -16,9 +16,10 @@ pub struct Resolver {
     diagnostics: Diagnostics,
     lambda_stack: Vec<LambdaContext>,
     lambda_captures: HashMap<usize, Vec<String>>,
+    module_aliases: HashMap<String, ModuleAliasBinding>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Binding {
     kind: BindingKind,
     span: SourceSpan,
@@ -53,6 +54,22 @@ struct LambdaContext {
     scope_index: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct ModuleAliasBinding {
+    pub module_path: String,
+    pub span: SourceSpan,
+    pub exports: Vec<String>,
+    pub export_types: HashMap<String, String>,
+    pub export_docs: HashMap<String, String>,
+    pub docstring: Option<String>,
+}
+
+pub struct ResolverOutput {
+    pub diagnostics: Diagnostics,
+    pub lambda_captures: HashMap<usize, Vec<String>>,
+    pub module_aliases: HashMap<String, ModuleAliasBinding>,
+}
+
 impl Resolver {
     pub fn new() -> Self {
         Self {
@@ -61,6 +78,7 @@ impl Resolver {
             diagnostics: Diagnostics::new(),
             lambda_stack: Vec::new(),
             lambda_captures: HashMap::new(),
+            module_aliases: HashMap::new(),
         }
     }
 
@@ -68,8 +86,12 @@ impl Resolver {
         self.resolve_statements(&module.statements);
     }
 
-    pub fn into_parts(self) -> (Diagnostics, HashMap<usize, Vec<String>>) {
-        (self.diagnostics, self.lambda_captures)
+    pub fn into_parts(self) -> ResolverOutput {
+        ResolverOutput {
+            diagnostics: self.diagnostics,
+            lambda_captures: self.lambda_captures,
+            module_aliases: self.module_aliases,
+        }
     }
 
     fn resolve_statements(&mut self, statements: &[Statement]) {
@@ -96,8 +118,22 @@ impl Resolver {
         let module_path = use_stmt.module_path.as_str();
         let alias = &use_stmt.alias;
         if stdlib::find_module(module_path).is_some() {
+            let module_doc = stdlib::find_module(module_path).and_then(|module| {
+                (!module.docstring.is_empty()).then(|| module.docstring.to_string())
+            });
             self.declare_binding(&alias.name, alias.span, BindingKind::Module, true);
             self.mark_binding_used(&alias.name);
+            self.module_aliases.insert(
+                alias.name.clone(),
+                ModuleAliasBinding {
+                    module_path: module_path.to_string(),
+                    span: alias.span,
+                    exports: Vec::new(),
+                    export_types: HashMap::new(),
+                    export_docs: HashMap::new(),
+                    docstring: module_doc,
+                },
+            );
         } else if module_path.starts_with("std.") || module_path.starts_with("support.") {
             self.diagnostics.push_error_with_span(
                 format!("unknown module '{}'", module_path),
@@ -106,6 +142,17 @@ impl Resolver {
         } else {
             self.declare_binding(&alias.name, alias.span, BindingKind::Module, true);
             self.mark_binding_used(&alias.name);
+            self.module_aliases.insert(
+                alias.name.clone(),
+                ModuleAliasBinding {
+                    module_path: module_path.to_string(),
+                    span: alias.span,
+                    exports: Vec::new(),
+                    export_types: HashMap::new(),
+                    export_docs: HashMap::new(),
+                    docstring: None,
+                },
+            );
         }
     }
 
@@ -331,7 +378,7 @@ impl Resolver {
         if let Some(existing) = self
             .scopes
             .last()
-            .and_then(|scope| scope.get(name).copied())
+            .and_then(|scope| scope.get(name).cloned())
         {
             let new_kind_desc = kind.describe();
             let existing_kind_desc = existing.kind.describe();
@@ -403,7 +450,7 @@ impl Resolver {
             .iter()
             .rev()
             .skip(1)
-            .find_map(|scope| scope.get(name).copied())
+            .find_map(|scope| scope.get(name).cloned())
     }
 
     fn push_scope(&mut self) {

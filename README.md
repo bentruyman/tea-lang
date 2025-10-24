@@ -174,3 +174,9 @@ Under the hood, programs move through a resolver and static type checker before 
 - Execute tests: `cargo test`.
 
 Additional language constructs (pattern matching, richer modules, native code generation) are on the roadmap.
+
+### Further Reading
+
+- [Tea LSP installation & editor setup](docs/tea-lsp-setup.md)
+- [LLVM backend architecture notes](docs/aot-backend.md)
+- [Type checker overview](docs/type-checking.md)

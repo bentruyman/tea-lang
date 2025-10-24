@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "tea-cli",
   "tea-compiler",
+  "tea-lsp",
   "tea-runtime",
   "tea-support"
 ]

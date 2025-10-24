@@ -5,25 +5,62 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{
-    Block, Expression, ExpressionKind, Identifier, LambdaBody, LoopHeader, Module, Statement,
-    TypeExpression,
+    Block, Expression, ExpressionKind, Identifier, LambdaBody, LoopHeader, Module, SourceSpan,
+    Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
-use crate::lexer::{Lexer, TokenKind};
+use crate::lexer::{Lexer, LexerError, TokenKind};
 use crate::parser::Parser;
-use crate::resolver::Resolver;
+use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 use crate::runtime::{CodeGenerator, Program, VmSemanticMetadata};
 use crate::source::{SourceFile, SourceId};
+use crate::stdlib::{self, StdFunction, StdType};
 use crate::typechecker::TypeChecker;
 
 #[derive(Debug, Default)]
 pub struct CompileOptions {
     pub dump_tokens: bool,
+    pub module_overrides: HashMap<PathBuf, String>,
+}
+
+fn describe_std_type(ty: StdType) -> String {
+    match ty {
+        StdType::Any => "Unknown".into(),
+        StdType::Bool => "Bool".into(),
+        StdType::Int => "Int".into(),
+        StdType::Float => "Float".into(),
+        StdType::String => "String".into(),
+        StdType::List => "List[Unknown]".into(),
+        StdType::Dict => "Dict[String, Unknown]".into(),
+        StdType::Struct => "Struct".into(),
+        StdType::Nil | StdType::Void => "Nil".into(),
+    }
+}
+
+fn describe_std_function(function: &StdFunction) -> String {
+    let params = if function.params.is_empty() {
+        "()".to_string()
+    } else {
+        let joined = function
+            .params
+            .iter()
+            .map(|param| describe_std_type(*param))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("({joined})")
+    };
+    format!(
+        "Func{params} -> {}",
+        describe_std_type(function.return_type)
+    )
 }
 
 pub struct Compilation {
     pub module: Module,
     pub program: Program,
+    pub module_aliases: HashMap<String, ModuleAliasBinding>,
+    pub binding_types: HashMap<SourceSpan, String>,
+    pub argument_types: HashMap<SourceSpan, String>,
 }
 
 pub struct Compiler {
@@ -45,7 +82,22 @@ impl Compiler {
 
     pub fn compile(&mut self, source: &SourceFile) -> Result<Compilation> {
         let mut lexer = Lexer::new(source)?;
-        let tokens = lexer.tokenize()?;
+        let tokens = match lexer.tokenize() {
+            Ok(tokens) => tokens,
+            Err(err) => {
+                if let Some(lexer_error) = err.downcast_ref::<LexerError>() {
+                    let line = lexer_error.line();
+                    let column = lexer_error.column();
+                    self.diagnostics.push_error_with_span(
+                        lexer_error.to_string(),
+                        Some(SourceSpan::new(line, column, line, column)),
+                    );
+                } else {
+                    self.diagnostics.push_error_with_span(err.to_string(), None);
+                }
+                bail!("Lexing failed");
+            }
+        };
 
         if self.options.dump_tokens {
             for token in &tokens {
@@ -68,7 +120,8 @@ impl Compiler {
         }?;
 
         let entry_path = source.path.canonicalize().unwrap_or(source.path.clone());
-        let mut expander = ModuleExpander::new(entry_path.clone());
+        let mut expander =
+            ModuleExpander::new(entry_path.clone(), self.options.module_overrides.clone());
         let expanded_module = match expander.expand_module(&module, &entry_path) {
             Ok(module) => module,
             Err(err) => {
@@ -77,11 +130,18 @@ impl Compiler {
                 return Err(err);
             }
         };
+        let alias_exports = expander.alias_exports().clone();
+        let alias_export_renames = expander.alias_export_renames().clone();
+        let alias_export_docstrings = expander.alias_export_docstrings().clone();
         self.diagnostics.extend(expander.into_diagnostics());
 
         let mut resolver = Resolver::new();
         resolver.resolve_module(&expanded_module);
-        let (resolve_diagnostics, lambda_captures) = resolver.into_parts();
+        let ResolverOutput {
+            diagnostics: resolve_diagnostics,
+            lambda_captures,
+            module_aliases,
+        } = resolver.into_parts();
         let resolve_errors = resolve_diagnostics.has_errors();
         self.diagnostics.extend(resolve_diagnostics);
         if resolve_errors {
@@ -93,12 +153,98 @@ impl Compiler {
         let function_instances = type_checker.function_instances().clone();
         let function_call_metadata = type_checker.function_call_metadata().clone();
         let struct_call_metadata = type_checker.struct_call_metadata().clone();
+        let binding_types = type_checker
+            .binding_types()
+            .iter()
+            .map(|(span, ty)| (*span, ty.describe()))
+            .collect::<HashMap<_, _>>();
+        let argument_types = type_checker
+            .argument_expected_types()
+            .iter()
+            .map(|(span, ty)| (*span, ty.describe()))
+            .collect::<HashMap<_, _>>();
+        let global_binding_types = type_checker
+            .global_binding_types()
+            .into_iter()
+            .map(|(name, ty)| (name, ty.describe()))
+            .collect::<HashMap<_, _>>();
         let struct_definitions = type_checker.struct_definitions();
-        let type_diagnostics = type_checker.into_diagnostics();
+        let mut type_diagnostics = type_checker.into_diagnostics();
         let type_errors = type_diagnostics.has_errors();
+        if !alias_export_renames.is_empty() {
+            let mut reverse_names: HashMap<String, String> = HashMap::new();
+            for (alias, renames) in &alias_export_renames {
+                for (original, renamed) in renames {
+                    reverse_names.insert(renamed.clone(), format!("{}.{}", alias, original));
+                }
+            }
+            if !reverse_names.is_empty() {
+                for diagnostic in type_diagnostics.entries_mut() {
+                    let mut message = diagnostic.message.clone();
+                    for (internal, display) in &reverse_names {
+                        if message.contains(internal) {
+                            message = message.replace(internal, display);
+                        }
+                    }
+                    diagnostic.message = message;
+                }
+            }
+        }
         self.diagnostics.extend(type_diagnostics);
         if type_errors {
             bail!("Type checking failed");
+        }
+
+        let mut module_aliases = module_aliases;
+        for (alias, exports) in alias_exports {
+            if let Some(binding) = module_aliases.get_mut(&alias) {
+                binding.exports = exports.clone();
+                binding.export_types.clear();
+                binding.export_docs.clear();
+                if let Some(renames) = alias_export_renames.get(&alias) {
+                    for export in &binding.exports {
+                        if let Some(renamed) = renames.get(export) {
+                            if let Some(ty) = global_binding_types.get(renamed) {
+                                binding.export_types.insert(export.clone(), ty.clone());
+                            }
+                        }
+                    }
+                }
+                if let Some(docs) = alias_export_docstrings.get(&alias) {
+                    for export in &binding.exports {
+                        if let Some(doc) = docs.get(export) {
+                            binding.export_docs.insert(export.clone(), doc.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        for binding in module_aliases.values_mut() {
+            if binding.module_path.starts_with("std.") {
+                if let Some(std_module) = stdlib::find_module(&binding.module_path) {
+                    if binding.exports.is_empty() {
+                        binding.exports = std_module
+                            .functions
+                            .iter()
+                            .map(|func| func.name.to_string())
+                            .collect();
+                        binding.export_types = std_module
+                            .functions
+                            .iter()
+                            .map(|func| (func.name.to_string(), describe_std_function(func)))
+                            .collect();
+                        binding.export_docs = std_module
+                            .functions
+                            .iter()
+                            .map(|func| (func.name.to_string(), func.docstring.to_string()))
+                            .collect();
+                    }
+                    if !std_module.docstring.is_empty() && binding.docstring.is_none() {
+                        binding.docstring = Some(std_module.docstring.to_string());
+                    }
+                }
+            }
         }
 
         let metadata = VmSemanticMetadata {
@@ -113,6 +259,9 @@ impl Compiler {
         Ok(Compilation {
             module: expanded_module,
             program,
+            module_aliases,
+            binding_types,
+            argument_types,
         })
     }
 }
@@ -122,16 +271,24 @@ struct ModuleExpander {
     next_source_id: u32,
     diagnostics: Diagnostics,
     module_cache: HashMap<PathBuf, Module>,
+    alias_exports: HashMap<String, Vec<String>>,
+    alias_export_renames: HashMap<String, HashMap<String, String>>,
+    alias_export_docstrings: HashMap<String, HashMap<String, String>>,
+    module_overrides: HashMap<PathBuf, String>,
 }
 
 impl ModuleExpander {
-    fn new(_entry_path: PathBuf) -> Self {
+    fn new(_entry_path: PathBuf, module_overrides: HashMap<PathBuf, String>) -> Self {
         let visited = HashSet::new();
         Self {
             visited,
             next_source_id: 1,
             diagnostics: Diagnostics::new(),
             module_cache: HashMap::new(),
+            alias_exports: HashMap::new(),
+            alias_export_renames: HashMap::new(),
+            alias_export_docstrings: HashMap::new(),
+            module_overrides,
         }
     }
 
@@ -159,6 +316,18 @@ impl ModuleExpander {
 
     fn into_diagnostics(self) -> Diagnostics {
         self.diagnostics
+    }
+
+    fn alias_exports(&self) -> &HashMap<String, Vec<String>> {
+        &self.alias_exports
+    }
+
+    fn alias_export_renames(&self) -> &HashMap<String, HashMap<String, String>> {
+        &self.alias_export_renames
+    }
+
+    fn alias_export_docstrings(&self) -> &HashMap<String, HashMap<String, String>> {
+        &self.alias_export_docstrings
     }
 
     fn expand_statements(
@@ -218,8 +387,17 @@ impl ModuleExpander {
                         }
                     };
 
-                    let (mut renamed, rename_map) =
+                    let (mut renamed, rename_map, docstrings) =
                         self.rename_module_statements(module, &use_stmt.alias.name);
+                    let exports = rename_map.keys().cloned().collect();
+                    self.alias_exports
+                        .insert(use_stmt.alias.name.clone(), exports);
+                    self.alias_export_renames
+                        .insert(use_stmt.alias.name.clone(), rename_map.clone());
+                    if !docstrings.is_empty() {
+                        self.alias_export_docstrings
+                            .insert(use_stmt.alias.name.clone(), docstrings);
+                    }
                     alias_maps.insert(use_stmt.alias.name.clone(), rename_map);
                     result.append(&mut renamed);
                 }
@@ -236,8 +414,13 @@ impl ModuleExpander {
         &self,
         module: Module,
         alias: &str,
-    ) -> (Vec<Statement>, HashMap<String, String>) {
+    ) -> (
+        Vec<Statement>,
+        HashMap<String, String>,
+        HashMap<String, String>,
+    ) {
         let mut rename_map: HashMap<String, String> = HashMap::new();
+        let mut docstrings: HashMap<String, String> = HashMap::new();
         for statement in &module.statements {
             match statement {
                 Statement::Function(function) => {
@@ -245,6 +428,11 @@ impl ModuleExpander {
                         function.name.clone(),
                         format!("__module_{}_{}", alias, function.name),
                     );
+                    if let Some(doc) = function.docstring.clone() {
+                        if !doc.is_empty() {
+                            docstrings.insert(function.name.clone(), doc);
+                        }
+                    }
                 }
                 Statement::Var(var_stmt) => {
                     for binding in &var_stmt.bindings {
@@ -252,6 +440,11 @@ impl ModuleExpander {
                             binding.name.clone(),
                             format!("__module_{}_{}", alias, binding.name),
                         );
+                        if let Some(doc) = var_stmt.docstring.as_ref() {
+                            if !doc.is_empty() {
+                                docstrings.insert(binding.name.clone(), doc.clone());
+                            }
+                        }
                     }
                 }
                 Statement::Struct(struct_stmt) => {
@@ -259,6 +452,11 @@ impl ModuleExpander {
                         struct_stmt.name.clone(),
                         format!("__module_{}_{}", alias, struct_stmt.name),
                     );
+                    if let Some(doc) = struct_stmt.docstring.clone() {
+                        if !doc.is_empty() {
+                            docstrings.insert(struct_stmt.name.clone(), doc);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -291,11 +489,11 @@ impl ModuleExpander {
             renamed.push(statement);
         }
 
-        (renamed, rename_map)
+        (renamed, rename_map, docstrings)
     }
 
     fn rewrite_alias_access(
-        &self,
+        &mut self,
         statements: &mut [Statement],
         alias_maps: &HashMap<String, HashMap<String, String>>,
     ) {
@@ -498,7 +696,7 @@ impl ModuleExpander {
     }
 
     fn rewrite_statement_alias(
-        &self,
+        &mut self,
         statement: &mut Statement,
         alias_maps: &HashMap<String, HashMap<String, String>>,
     ) {
@@ -567,7 +765,7 @@ impl ModuleExpander {
     }
 
     fn rewrite_block_alias(
-        &self,
+        &mut self,
         block: &mut Block,
         alias_maps: &HashMap<String, HashMap<String, String>>,
     ) {
@@ -577,7 +775,7 @@ impl ModuleExpander {
     }
 
     fn rewrite_expression_alias(
-        &self,
+        &mut self,
         expression: &mut Expression,
         alias_maps: &HashMap<String, HashMap<String, String>>,
     ) {
@@ -586,12 +784,23 @@ impl ModuleExpander {
                 self.rewrite_expression_alias(&mut member.object, alias_maps);
                 if let ExpressionKind::Identifier(identifier) = &member.object.kind {
                     if let Some(map) = alias_maps.get(&identifier.name) {
-                        if let Some(replacement) = map.get(&member.property) {
-                            expression.kind = ExpressionKind::Identifier(Identifier {
-                                name: replacement.clone(),
-                                span: member.property_span,
-                            });
-                            return;
+                        match map.get(&member.property) {
+                            Some(replacement) => {
+                                expression.kind = ExpressionKind::Identifier(Identifier {
+                                    name: replacement.clone(),
+                                    span: member.property_span,
+                                });
+                                return;
+                            }
+                            None => {
+                                self.diagnostics.push_error_with_span(
+                                    format!(
+                                        "module '{}' has no export named '{}'",
+                                        identifier.name, member.property
+                                    ),
+                                    Some(member.property_span),
+                                );
+                            }
                         }
                     }
                 }
@@ -663,8 +872,16 @@ impl ModuleExpander {
     }
 
     fn load_module(&mut self, path: &Path) -> Result<Module> {
+        if let Some(contents) = self.module_overrides.get(path).cloned() {
+            return self.load_module_from_contents(path, contents);
+        }
+
         let contents = fs::read_to_string(path)
             .with_context(|| format!("failed to read module at '{}'", path.display()))?;
+        self.load_module_from_contents(path, contents)
+    }
+
+    fn load_module_from_contents(&mut self, path: &Path, contents: String) -> Result<Module> {
         let source = SourceFile::new(SourceId(self.next_source_id), path.to_path_buf(), contents);
         self.next_source_id += 1;
 

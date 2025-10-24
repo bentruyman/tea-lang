@@ -1,14 +1,15 @@
-use super::{StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
+use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
 
-pub(super) const PRINT_FUNCTIONS: &[StdFunction] = &[StdFunction {
-    name: "print",
-    kind: StdFunctionKind::Print,
-    arity: StdArity::Exact(1),
-    params: &[StdType::Any],
-    return_type: StdType::Nil,
-}];
+pub(super) const PRINT_FUNCTIONS: &[StdFunction] = &[std_function(
+    "print",
+    StdFunctionKind::Print,
+    StdArity::Exact(1),
+    &[StdType::Any],
+    StdType::Nil,
+)];
 
-pub const MODULE: StdModule = StdModule {
-    path: "std.debug",
-    functions: PRINT_FUNCTIONS,
-};
+pub const MODULE: StdModule = std_module!(
+    "std.debug",
+    "Debug utilities such as printing.",
+    PRINT_FUNCTIONS,
+);

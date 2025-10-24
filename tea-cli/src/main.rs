@@ -508,6 +508,7 @@ fn run_program(cli: RunCli) -> Result<()> {
     let line_cache: Vec<&str> = source.contents.lines().collect();
     let mut compiler = Compiler::new(CompileOptions {
         dump_tokens: cli.dump_tokens,
+        ..CompileOptions::default()
     });
 
     let compilation = match compiler.compile(&source) {

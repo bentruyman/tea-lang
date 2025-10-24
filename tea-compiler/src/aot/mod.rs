@@ -26,7 +26,7 @@ use crate::ast::{
     LoopHeader, LoopKind, LoopStatement, Module as AstModule, ReturnStatement, SourceSpan,
     Statement, TypeExpression, UseStatement, VarStatement,
 };
-use crate::resolver::Resolver;
+use crate::resolver::{Resolver, ResolverOutput};
 use crate::stdlib::{self, StdFunctionKind};
 use crate::typechecker::{
     FunctionInstance, StructDefinition, StructInstance, StructType, Type, TypeChecker,
@@ -141,7 +141,11 @@ struct SemanticMetadata {
 fn collect_semantic_metadata(module_ast: &AstModule) -> Result<SemanticMetadata> {
     let mut resolver = Resolver::new();
     resolver.resolve_module(module_ast);
-    let (resolve_diagnostics, lambda_captures) = resolver.into_parts();
+    let ResolverOutput {
+        diagnostics: resolve_diagnostics,
+        lambda_captures,
+        ..
+    } = resolver.into_parts();
     if resolve_diagnostics.has_errors() {
         bail!("Name resolution failed for LLVM lowering");
     }

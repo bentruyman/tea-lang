@@ -101,13 +101,16 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_statement(&mut self) -> Result<Statement> {
+        let docstring = self.consume_doc_comments();
         match self.peek_kind() {
             TokenKind::Keyword(Keyword::Use) => self.parse_use(),
-            TokenKind::Keyword(Keyword::Var) => self.parse_binding(Keyword::Var),
-            TokenKind::Keyword(Keyword::Const) => self.parse_binding(Keyword::Const),
-            TokenKind::Keyword(Keyword::Def) => self.parse_function(),
-            TokenKind::Keyword(Keyword::Test) => self.parse_test(),
-            TokenKind::Keyword(Keyword::Struct) => self.parse_struct(),
+            TokenKind::Keyword(Keyword::Var) => self.parse_binding(Keyword::Var, docstring.clone()),
+            TokenKind::Keyword(Keyword::Const) => {
+                self.parse_binding(Keyword::Const, docstring.clone())
+            }
+            TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring.clone()),
+            TokenKind::Keyword(Keyword::Test) => self.parse_test(docstring.clone()),
+            TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
             TokenKind::Keyword(Keyword::Unless) => self.parse_conditional(ConditionalKind::Unless),
             TokenKind::Keyword(Keyword::For) => self.parse_for_loop(),
@@ -169,12 +172,12 @@ impl<'a> Parser<'a> {
                 value.clone()
             }
             other => {
-                bail!(
-                    "expected module path string after 'use' at line {}, column {} (found {:?})",
-                    module_token.line,
-                    module_token.column,
-                    other
-                )
+                let span = Self::span_from_token(&module_token);
+                self.diagnostics.push_error_with_span(
+                    format!("expected module path string after 'use', found {:?}", other),
+                    Some(span),
+                );
+                bail!("unexpected token after 'use'");
             }
         };
 
@@ -190,7 +193,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_binding(&mut self, keyword: Keyword) -> Result<Statement> {
+    fn parse_binding(&mut self, keyword: Keyword, docstring: Option<String>) -> Result<Statement> {
         let is_const = matches!(keyword, Keyword::Const);
         self.advance(); // consume keyword
         let mut bindings = Vec::new();
@@ -208,17 +211,28 @@ impl<'a> Parser<'a> {
                     self.advance();
                     name_token.lexeme
                 }
-                _ => bail!(
-                    "expected identifier after '{}' at line {}, column {}",
-                    keyword_lexeme,
-                    name_token.line,
-                    name_token.column
-                ),
+                _ => {
+                    let span = Self::span_from_token(&name_token);
+                    self.diagnostics.push_error_with_span(
+                        format!("expected identifier after '{}'", keyword_lexeme),
+                        Some(span),
+                    );
+                    bail!("invalid binding name");
+                }
             };
 
             let type_annotation = if matches!(self.peek_kind(), TokenKind::Colon) {
+                let colon_token = self.peek().clone();
                 self.advance(); // consume ':'
                 let tokens = self.collect_type_tokens();
+                if tokens.is_empty() {
+                    let colon_span = Self::span_from_token(&colon_token);
+                    self.diagnostics.push_error_with_span(
+                        "expected type annotation after ':'",
+                        Some(colon_span),
+                    );
+                    bail!("missing type annotation");
+                }
                 Some(TypeExpression { tokens })
             } else {
                 None
@@ -250,10 +264,14 @@ impl<'a> Parser<'a> {
 
         self.expect_newline("expected newline after variable declaration")?;
 
-        Ok(Statement::Var(VarStatement { is_const, bindings }))
+        Ok(Statement::Var(VarStatement {
+            is_const,
+            bindings,
+            docstring,
+        }))
     }
 
-    fn parse_function(&mut self) -> Result<Statement> {
+    fn parse_function(&mut self, docstring: Option<String>) -> Result<Statement> {
         self.advance(); // consume 'def'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -277,13 +295,15 @@ impl<'a> Parser<'a> {
             Vec::new()
         };
 
-        let parameters = if matches!(self.peek_kind(), TokenKind::LParen) {
-            self.advance(); // consume '('
-            let params = self.parse_parameters()?;
-            params
-        } else {
-            Vec::new()
-        };
+        let lparen_token = self.peek().clone();
+        if !matches!(lparen_token.kind, TokenKind::LParen) {
+            let span = Self::span_from_token(&lparen_token);
+            self.diagnostics
+                .push_error_with_span("expected '(' after function name", Some(span));
+            bail!("missing function parameter list");
+        }
+        self.advance(); // consume '('
+        let parameters = self.parse_parameters()?;
 
         let return_type = if matches!(self.peek_kind(), TokenKind::Arrow) {
             self.advance();
@@ -306,10 +326,11 @@ impl<'a> Parser<'a> {
             parameters,
             return_type,
             body,
+            docstring,
         }))
     }
 
-    fn parse_test(&mut self) -> Result<Statement> {
+    fn parse_test(&mut self, docstring: Option<String>) -> Result<Statement> {
         self.advance(); // consume 'test'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -334,6 +355,7 @@ impl<'a> Parser<'a> {
             name,
             name_span,
             body,
+            docstring,
         }))
     }
 
@@ -392,7 +414,17 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 other => {
-                    bail!("expected ',' or ')' in parameter list, found {:?}", other);
+                    let fallback_span = span;
+                    let span = if self.is_at_end() {
+                        fallback_span
+                    } else {
+                        Self::span_from_token(&self.peek().clone())
+                    };
+                    self.diagnostics.push_error_with_span(
+                        format!("expected ',' or ')' in parameter list, found {:?}", other),
+                        Some(span),
+                    );
+                    bail!("invalid parameter separator");
                 }
             }
         }
@@ -425,13 +457,15 @@ impl<'a> Parser<'a> {
                     token.lexeme
                 }
                 _ => {
-                    bail!(
-                        "expected type parameter name in {} '{}' at line {}, column {}",
-                        owner_kind,
-                        owner_name,
-                        token.line,
-                        token.column
-                    )
+                    let span = Self::span_from_token(&token);
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected type parameter name in {} '{}'",
+                            owner_kind, owner_name
+                        ),
+                        Some(span),
+                    );
+                    bail!("invalid type parameter name");
                 }
             };
 
@@ -439,12 +473,14 @@ impl<'a> Parser<'a> {
                 .iter()
                 .any(|param: &TypeParameter| param.name == name)
             {
-                bail!(
-                    "duplicate type parameter '{}' in {} '{}'",
-                    name,
-                    owner_kind,
-                    owner_name
+                self.diagnostics.push_error_with_span(
+                    format!(
+                        "duplicate type parameter '{}' in {} '{}'",
+                        name, owner_kind, owner_name
+                    ),
+                    Some(span),
                 );
+                bail!("duplicate type parameter");
             }
 
             params.push(TypeParameter { name, span });
@@ -459,12 +495,19 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 other => {
-                    bail!(
-                        "expected ',' or ']' in {} '{}' type parameter list, found {:?}",
-                        owner_kind,
-                        owner_name,
-                        other
+                    let span = if self.is_at_end() {
+                        span
+                    } else {
+                        Self::span_from_token(&self.peek().clone())
+                    };
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected ',' or ']' in {} '{}' type parameter list, found {:?}",
+                            owner_kind, owner_name, other
+                        ),
+                        Some(span),
                     );
+                    bail!("invalid type parameter separator");
                 }
             }
         }
@@ -472,7 +515,7 @@ impl<'a> Parser<'a> {
         Ok(params)
     }
 
-    fn parse_struct(&mut self) -> Result<Statement> {
+    fn parse_struct(&mut self, docstring: Option<String>) -> Result<Statement> {
         self.advance(); // consume 'struct'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -505,7 +548,11 @@ impl<'a> Parser<'a> {
                 break;
             }
             if self.is_at_end() {
-                bail!("unterminated struct '{}'", name);
+                self.diagnostics.push_error_with_span(
+                    format!("unterminated struct '{}', missing 'end'", name),
+                    Some(name_span),
+                );
+                bail!("unterminated struct");
             }
 
             let field_name_token = self.peek().clone();
@@ -525,6 +572,13 @@ impl<'a> Parser<'a> {
 
             self.expect_token(TokenKind::Colon, "expected ':' after struct field name")?;
             let type_tokens = self.collect_type_tokens();
+            if type_tokens.is_empty() {
+                self.diagnostics.push_error_with_span(
+                    format!("missing type annotation for field '{}'", field_name),
+                    Some(field_span),
+                );
+                bail!("missing field type");
+            }
             fields.push(StructField {
                 name: field_name,
                 span: field_span,
@@ -543,7 +597,37 @@ impl<'a> Parser<'a> {
             name_span,
             type_parameters,
             fields,
+            docstring,
         }))
+    }
+
+    fn consume_doc_comments(&mut self) -> Option<String> {
+        let mut parts = Vec::new();
+        let mut consumed_any = false;
+        loop {
+            match self.peek_kind() {
+                TokenKind::DocComment(_) => {
+                    if let TokenKind::DocComment(text) = self.advance().kind.clone() {
+                        parts.push(text);
+                        consumed_any = true;
+                    }
+                }
+                TokenKind::Newline if consumed_any => {
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+
+        if consumed_any {
+            self.skip_newlines();
+        }
+
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("\n"))
+        }
     }
 
     fn parse_conditional(&mut self, kind: ConditionalKind) -> Result<Statement> {
@@ -638,7 +722,12 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Result<Statement> {
         let expression = self.parse_expression_with(default_expression_terminator)?;
-        self.expect_newline("expected newline after expression")?;
+        if let Err(err) = self.expect_newline("expected newline after expression") {
+            let span = expression.span;
+            self.diagnostics
+                .push_error_with_span(err.to_string(), Some(span));
+            return Err(err);
+        }
         Ok(Statement::Expression(ExpressionStatement { expression }))
     }
 
@@ -969,10 +1058,19 @@ impl<'a> Parser<'a> {
                         break;
                     }
                     other => {
-                        bail!(
-                            "expected ',' or '|' in lambda parameters, found {:?}",
-                            other
+                        let span = if self.is_at_end() {
+                            span
+                        } else {
+                            Self::span_from_token(&self.peek().clone())
+                        };
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "expected ',' or '|' in lambda parameters, found {:?}",
+                                other
+                            ),
+                            Some(span),
                         );
+                        bail!("invalid lambda parameter separator");
                     }
                 }
             }
@@ -1167,13 +1265,12 @@ impl<'a> Parser<'a> {
                 Ok(())
             }
             TokenKind::Eof | TokenKind::RBrace => Ok(()),
-            other => bail!(
-                "{} at line {}, column {} (found '{:?}')",
-                message,
-                self.peek().line,
-                self.peek().column,
-                other
-            ),
+            other => {
+                let span = Self::span_from_token(&self.peek().clone());
+                self.diagnostics
+                    .push_error_with_span(format!("{} (found '{:?}')", message, other), Some(span));
+                bail!("unexpected token");
+            }
         }
     }
 
@@ -1369,6 +1466,7 @@ impl<'a> Parser<'a> {
 
             let expression =
                 self.parse_expression_prec(Precedence::Lowest, terminator_comma_or_rparen)?;
+            let expr_span = expression.span;
             arguments.push(CallArgument {
                 name,
                 name_span,
@@ -1396,7 +1494,16 @@ impl<'a> Parser<'a> {
                     ));
                 }
                 other => {
-                    bail!("expected ',' or ')' in argument list, found {:?}", other);
+                    let span = if self.is_at_end() {
+                        expr_span
+                    } else {
+                        Self::span_from_token(&self.peek().clone())
+                    };
+                    self.diagnostics.push_error_with_span(
+                        format!("expected ',' or ')' in argument list, found {:?}", other),
+                        Some(span),
+                    );
+                    bail!("invalid argument separator");
                 }
             }
         }

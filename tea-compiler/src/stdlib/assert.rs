@@ -1,57 +1,58 @@
-use super::{StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
+use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, StdModule, StdType};
 
 const ASSERT_FUNCTIONS: &[StdFunction] = &[
-    StdFunction {
-        name: "assert",
-        kind: StdFunctionKind::Assert,
-        arity: StdArity::Range {
+    std_function(
+        "assert",
+        StdFunctionKind::Assert,
+        StdArity::Range {
             min: 1,
             max: Some(2),
         },
-        params: &[StdType::Bool, StdType::String],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "assert_eq",
-        kind: StdFunctionKind::AssertEq,
-        arity: StdArity::Exact(2),
-        params: &[StdType::Any, StdType::Any],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "assert_ne",
-        kind: StdFunctionKind::AssertNe,
-        arity: StdArity::Exact(2),
-        params: &[StdType::Any, StdType::Any],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "fail",
-        kind: StdFunctionKind::AssertFail,
-        arity: StdArity::Exact(1),
-        params: &[StdType::String],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "assert_snapshot",
-        kind: StdFunctionKind::AssertSnapshot,
-        arity: StdArity::Range {
+        &[StdType::Bool, StdType::String],
+        StdType::Nil,
+    ),
+    std_function(
+        "assert_eq",
+        StdFunctionKind::AssertEq,
+        StdArity::Exact(2),
+        &[StdType::Any, StdType::Any],
+        StdType::Nil,
+    ),
+    std_function(
+        "assert_ne",
+        StdFunctionKind::AssertNe,
+        StdArity::Exact(2),
+        &[StdType::Any, StdType::Any],
+        StdType::Nil,
+    ),
+    std_function(
+        "fail",
+        StdFunctionKind::AssertFail,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Nil,
+    ),
+    std_function(
+        "assert_snapshot",
+        StdFunctionKind::AssertSnapshot,
+        StdArity::Range {
             min: 2,
             max: Some(3),
         },
-        params: &[StdType::String, StdType::String, StdType::String],
-        return_type: StdType::Nil,
-    },
-    StdFunction {
-        name: "assert_empty",
-        kind: StdFunctionKind::AssertEmpty,
-        arity: StdArity::Exact(1),
-        params: &[StdType::String],
-        return_type: StdType::Nil,
-    },
+        &[StdType::String, StdType::String, StdType::String],
+        StdType::Nil,
+    ),
+    std_function(
+        "assert_empty",
+        StdFunctionKind::AssertEmpty,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Nil,
+    ),
 ];
 
-pub const MODULE: StdModule = StdModule {
-    path: "std.assert",
-    functions: ASSERT_FUNCTIONS,
-};
+pub const MODULE: StdModule = std_module!(
+    "std.assert",
+    "Assertion helpers for tests and runtime checks.",
+    ASSERT_FUNCTIONS,
+);

@@ -1,4 +1,7 @@
-use anyhow::{bail, Context, Result};
+use std::num::{ParseFloatError, ParseIntError};
+
+use anyhow::Result;
+use thiserror::Error;
 
 use crate::source::SourceFile;
 
@@ -27,6 +30,7 @@ pub enum TokenKind {
     IntegerLiteral(i64),
     FloatLiteral(f64),
     StringLiteral(String),
+    DocComment(String),
     BooleanLiteral(bool),
     Keyword(Keyword),
     Newline,
@@ -98,6 +102,60 @@ pub struct Lexer<'a> {
     column: usize,
 }
 
+#[derive(Debug, Error)]
+pub enum LexerError {
+    #[error("Unexpected character '{ch}' at line {line}, column {column}")]
+    UnexpectedCharacter {
+        ch: char,
+        line: usize,
+        column: usize,
+    },
+    #[error("Unterminated string literal starting at line {line}, column {column}")]
+    UnterminatedStringLiteral { line: usize, column: usize },
+    #[error("Unterminated escape sequence in string literal at line {line}, column {column}")]
+    UnterminatedEscapeSequence { line: usize, column: usize },
+    #[error(
+        "Failed to parse integer literal '{lexeme}' at line {line}, column {column}: {source}"
+    )]
+    IntegerParse {
+        lexeme: String,
+        line: usize,
+        column: usize,
+        #[source]
+        source: ParseIntError,
+    },
+    #[error("Failed to parse float literal '{lexeme}' at line {line}, column {column}: {source}")]
+    FloatParse {
+        lexeme: String,
+        line: usize,
+        column: usize,
+        #[source]
+        source: ParseFloatError,
+    },
+}
+
+impl LexerError {
+    pub fn line(&self) -> usize {
+        match self {
+            LexerError::UnexpectedCharacter { line, .. }
+            | LexerError::UnterminatedStringLiteral { line, .. }
+            | LexerError::UnterminatedEscapeSequence { line, .. }
+            | LexerError::IntegerParse { line, .. }
+            | LexerError::FloatParse { line, .. } => *line,
+        }
+    }
+
+    pub fn column(&self) -> usize {
+        match self {
+            LexerError::UnexpectedCharacter { column, .. }
+            | LexerError::UnterminatedStringLiteral { column, .. }
+            | LexerError::UnterminatedEscapeSequence { column, .. }
+            | LexerError::IntegerParse { column, .. }
+            | LexerError::FloatParse { column, .. } => *column,
+        }
+    }
+}
+
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a SourceFile) -> Result<Self> {
         Ok(Self {
@@ -128,7 +186,12 @@ impl<'a> Lexer<'a> {
                     tokens.push(self.make_newline_token());
                 }
                 '#' => {
-                    self.skip_comment();
+                    if matches!(self.peek_next_char(), Some('#')) {
+                        let token = self.lex_doc_comment();
+                        tokens.push(token);
+                    } else {
+                        self.skip_comment();
+                    }
                 }
                 '"' => {
                     let token = self.lex_string()?;
@@ -192,12 +255,12 @@ impl<'a> Lexer<'a> {
                 }
                 '?' => tokens.push(self.simple_token(TokenKind::Question)),
                 other => {
-                    bail!(
-                        "Unexpected character '{}' at line {}, column {}",
-                        other,
-                        self.line,
-                        self.column
-                    );
+                    return Err(LexerError::UnexpectedCharacter {
+                        ch: other,
+                        line: self.line,
+                        column: self.column,
+                    }
+                    .into());
                 }
             }
         }
@@ -230,6 +293,44 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn lex_doc_comment(&mut self) -> Token {
+        let start = self.position;
+        let start_line = self.line;
+        let start_column = self.column;
+
+        // consume the leading ##
+        self.advance_char();
+        self.advance_char();
+
+        if let Some(peeked) = self.peek_char() {
+            if peeked == ' ' || peeked == '\t' {
+                self.advance_char();
+            }
+        }
+
+        let content_start = self.position;
+
+        while let Some(ch) = self.peek_char() {
+            if ch == '\n' || ch == '\r' {
+                break;
+            }
+            self.advance_char();
+        }
+
+        let raw_lexeme = self.slice(start, self.position).to_string();
+        let content = self
+            .slice(content_start, self.position)
+            .trim_end()
+            .to_string();
+
+        Token::new(
+            TokenKind::DocComment(content),
+            raw_lexeme,
+            start_line,
+            start_column,
+        )
+    }
+
     fn lex_string(&mut self) -> Result<Token> {
         let start = self.position;
         let start_line = self.line;
@@ -250,10 +351,19 @@ impl<'a> Lexer<'a> {
                     ));
                 }
                 '\\' => {
+                    let escape_line = self.line;
+                    let escape_column = self.column;
                     self.advance_char();
-                    let escaped = self
-                        .peek_char()
-                        .context("Unterminated escape sequence in string literal")?;
+                    let escaped = match self.peek_char() {
+                        Some(ch) => ch,
+                        None => {
+                            return Err(LexerError::UnterminatedEscapeSequence {
+                                line: escape_line,
+                                column: escape_column,
+                            }
+                            .into());
+                        }
+                    };
                     let escaped_char = match escaped {
                         '"' => '"',
                         '\\' => '\\',
@@ -266,11 +376,11 @@ impl<'a> Lexer<'a> {
                     self.advance_char();
                 }
                 '\n' => {
-                    bail!(
-                        "Unterminated string literal starting at line {}, column {}",
-                        start_line,
-                        start_column
-                    );
+                    return Err(LexerError::UnterminatedStringLiteral {
+                        line: start_line,
+                        column: start_column,
+                    }
+                    .into());
                 }
                 _ => {
                     value.push(ch);
@@ -279,11 +389,11 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        bail!(
-            "Unterminated string literal starting at line {}, column {}",
-            start_line,
-            start_column
-        );
+        Err(LexerError::UnterminatedStringLiteral {
+            line: start_line,
+            column: start_column,
+        }
+        .into())
     }
 
     fn lex_number(&mut self) -> Result<Token> {
@@ -316,30 +426,35 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let lexeme = self.slice(start, self.position).replace('_', "");
+        let raw_lexeme = self.slice(start, self.position).to_string();
+        let lexeme = raw_lexeme.replace('_', "");
         if is_float {
-            let value = lexeme.parse::<f64>().with_context(|| {
-                format!(
-                    "Failed to parse float literal '{}' at line {}, column {}",
-                    lexeme, start_line, start_column
-                )
-            })?;
+            let value = lexeme
+                .parse::<f64>()
+                .map_err(|source| LexerError::FloatParse {
+                    lexeme: raw_lexeme.clone(),
+                    line: start_line,
+                    column: start_column,
+                    source,
+                })?;
             Ok(Token::new(
                 TokenKind::FloatLiteral(value),
-                self.slice(start, self.position).to_string(),
+                raw_lexeme,
                 start_line,
                 start_column,
             ))
         } else {
-            let value = lexeme.parse::<i64>().with_context(|| {
-                format!(
-                    "Failed to parse integer literal '{}' at line {}, column {}",
-                    lexeme, start_line, start_column
-                )
-            })?;
+            let value = lexeme
+                .parse::<i64>()
+                .map_err(|source| LexerError::IntegerParse {
+                    lexeme: raw_lexeme.clone(),
+                    line: start_line,
+                    column: start_column,
+                    source,
+                })?;
             Ok(Token::new(
                 TokenKind::IntegerLiteral(value),
-                self.slice(start, self.position).to_string(),
+                raw_lexeme,
                 start_line,
                 start_column,
             ))

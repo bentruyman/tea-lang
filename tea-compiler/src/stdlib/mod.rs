@@ -1,6 +1,7 @@
 mod assert;
 mod cli;
 mod debug;
+mod docs;
 mod env;
 mod fs;
 mod io;
@@ -10,6 +11,8 @@ mod print;
 mod process;
 mod util;
 mod yaml;
+
+use docs::function_doc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StdFunctionKind {
@@ -149,12 +152,42 @@ pub struct StdFunction {
     pub arity: StdArity,
     pub params: &'static [StdType],
     pub return_type: StdType,
+    pub docstring: &'static str,
 }
 
 pub struct StdModule {
     pub path: &'static str,
     pub functions: &'static [StdFunction],
+    pub docstring: &'static str,
 }
+
+const fn std_function(
+    name: &'static str,
+    kind: StdFunctionKind,
+    arity: StdArity,
+    params: &'static [StdType],
+    return_type: StdType,
+) -> StdFunction {
+    StdFunction {
+        name,
+        kind,
+        arity,
+        params,
+        return_type,
+        docstring: function_doc(kind),
+    }
+}
+
+macro_rules! std_module {
+    ($path:literal, $doc:literal, $functions:expr $(,)?) => {
+        StdModule {
+            path: $path,
+            functions: $functions,
+            docstring: $doc,
+        }
+    };
+}
+pub(crate) use std_module;
 
 pub static MODULES: &[StdModule] = &[
     debug::MODULE,
@@ -183,4 +216,17 @@ pub fn module_for_function(name: &str) -> Option<&'static str> {
             .find(|function| function.name == name)
             .map(|_| module.path)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::debug;
+
+    #[test]
+    fn std_debug_module_has_docstring() {
+        assert!(
+            !debug::MODULE.docstring.is_empty(),
+            "std.debug docstring should not be empty"
+        );
+    }
 }

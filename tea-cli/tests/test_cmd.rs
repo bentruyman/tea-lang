@@ -18,6 +18,8 @@ fn workspace_root() -> PathBuf {
 #[test]
 fn test_lists_discovered_tests() {
     let tmp = tempdir().expect("tempdir");
+    let target_root = tmp.path().join("target");
+    fs::create_dir_all(&target_root).expect("create target dir");
     let test_path = tmp.path().join("sample.tea");
     fs::write(
         &test_path,
@@ -37,6 +39,7 @@ end
 
     let output = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
         .arg("test")
         .arg("--list")
         .arg(&test_path)
@@ -59,6 +62,8 @@ end
 #[test]
 fn test_runs_tests_and_reports_failures() {
     let tmp = tempdir().expect("tempdir");
+    let target_root = tmp.path().join("target");
+    fs::create_dir_all(&target_root).expect("create target dir");
     let pass_path = tmp.path().join("passing.tea");
     fs::write(
         &pass_path,
@@ -74,6 +79,7 @@ end
 
     let output = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
         .arg("test")
         .arg(&pass_path)
         .output()
@@ -105,6 +111,7 @@ end
 
     let status = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
         .arg("test")
         .arg(&fail_path)
         .status()
@@ -120,6 +127,8 @@ end
 #[test]
 fn build_creates_bundle_and_checksum() {
     let tmp = tempdir().expect("tempdir");
+    let target_root = tmp.path().join("target");
+    fs::create_dir_all(&target_root).expect("create target dir for build");
     let source_path = tmp.path().join("app.tea");
     fs::write(
         &source_path,
@@ -142,6 +151,7 @@ main()
 
     let status = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
         .arg("build")
         .arg(&source_path)
         .arg("--backend")

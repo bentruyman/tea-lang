@@ -899,37 +899,68 @@ fn workspace_root() -> PathBuf {
 }
 
 #[cfg(feature = "llvm-aot")]
-fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
+fn runtime_target_dir() -> PathBuf {
+    std::env::var("TEA_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace_root().join("target"))
+}
+
+fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>> {
     if let Ok(path) = std::env::var("TEA_RUNTIME_RLIB") {
         let candidate = PathBuf::from(path);
         if candidate.exists() {
-            return Ok(candidate);
+            return Ok(Some(candidate));
         }
     }
 
-    let target_dir = std::env::var("TEA_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace_root().join("target"));
+    let deps_dir = target_dir.join(profile).join("deps");
+    if !deps_dir.exists() {
+        return Ok(None);
+    }
 
-    let mut search_dirs = Vec::new();
-    search_dirs.push(target_dir.join(profile).join("deps"));
-
-    for dir in search_dirs {
-        if !dir.exists() {
-            continue;
-        }
-        for entry in
-            fs::read_dir(&dir).with_context(|| format!("failed to read {}", dir.display()))?
-        {
-            let path = entry?.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("rlib") {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.contains("tea_runtime") {
-                        return Ok(path);
-                    }
+    for entry in
+        fs::read_dir(&deps_dir).with_context(|| format!("failed to read {}", deps_dir.display()))?
+    {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("rlib") {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.contains("tea_runtime") {
+                    return Ok(Some(path));
                 }
             }
         }
+    }
+
+    Ok(None)
+}
+
+fn build_runtime_archive(target_dir: &Path) -> Result<()> {
+    let mut cmd = Command::new("cargo");
+    cmd.current_dir(workspace_root());
+    cmd.arg("build").arg("-p").arg("tea-runtime");
+    if std::env::var("TEA_TARGET_DIR").is_ok() {
+        cmd.env("CARGO_TARGET_DIR", target_dir);
+    }
+
+    let status = cmd
+        .status()
+        .context("failed to invoke cargo to build tea-runtime")?;
+    if !status.success() {
+        bail!("cargo build -p tea-runtime failed with status {}", status);
+    }
+    Ok(())
+}
+
+fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
+    let target_dir = runtime_target_dir();
+    if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
+        return Ok(path);
+    }
+
+    build_runtime_archive(&target_dir)?;
+
+    if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
+        return Ok(path);
     }
 
     bail!(

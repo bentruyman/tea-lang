@@ -19,6 +19,7 @@ tea-lang evolves toward a statically typed language that pairs compiled speed wi
 ## Issue Tracker
 - `bd init` is run once per repo to create `.beads/`; skip it after the first bootstrap.
 - Day-to-day commands: `bd list`, `bd ready`, `bd create "task description"`, `bd close issue-id`.
+- When you start work on an issue (`bd update issue-id --status in_progress`), create a fresh git branch named after the ticket (`git checkout -b tee-lang-123`) so the work stays isolated.
 - Run `bd quickstart` for the full command overview when you need a refresher.
 
 ## Coding Style & Naming Conventions

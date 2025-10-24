@@ -31,7 +31,7 @@ debug.print(point.x)
 
 ## Quickstart
 
-Build the CLI once with `make build` (or `cargo build`) so `./bin/tea` is available, then create `examples/basics.tea`:
+Build the CLI once with `make build` (or `cargo build`) so `./bin/tea` is available, then create `examples/language/basics/basics.tea` (the directory structure keeps fundamentals grouped together):
 
 ```tea
 use debug = "std.debug"
@@ -53,7 +53,7 @@ by the module should be accessed through that alias (`fs.create_dir`, `assert.as
 Run it with:
 
 ```
-cargo run -p tea-cli -- examples/basics.tea
+cargo run -p tea-cli -- examples/language/basics/basics.tea
 ```
 
 Output:
@@ -68,14 +68,14 @@ Hello from tea-lang
 Violations are reported before execution:
 
 ```
-$ cargo run -p tea-cli -- examples/bad.tea
+$ cargo run -p tea-cli -- examples/language/basics/bad.tea
 Diagnostics:
   - error: argument 1 to 'inc': expected Int, found Bool
-     --> examples/bad.tea:5:8
+     --> examples/language/basics/bad.tea:5:8
       inc(true)
           ^^^^
   - error: list element 2: expected Int, found String
-     --> examples/bad.tea:9:15
+     --> examples/language/basics/bad.tea:9:15
       numbers = [1, "oops", 3]
                   ^^^^^^
 Error: Compilation failed
@@ -83,7 +83,7 @@ Error: Compilation failed
 
 The CLI prints the exact source line with a caret underline so you can zero in on mistakes immediately.
 
-Once compiled, you can also execute scripts via the binary: `./bin/tea examples/basics.tea`. Lean on these diagnostics as your primary feedback loop when iterating on programs.
+Once compiled, you can also execute scripts via the binary: `./bin/tea examples/language/basics/basics.tea`. Lean on these diagnostics as your primary feedback loop when iterating on programs.
 
 ### Snapshots & CLI Capture
 
@@ -110,24 +110,24 @@ The `support.cli` module now includes helpers tailored for command-line tools:
 - `args()` returns the current process arguments as a `List[String]`.
 - `parse(spec, argv?)` consumes a command specification (dictionary of options, positionals, and metadata) and returns a `CliParseResult` struct with fields such as `ok`, `exit`, `command`, `path`, `options`, `positionals`, `scopes`, `rest`, `message`, and `help`.
 
-See `examples/cli/parse.tea` for a complete walkthrough that falls back to a demo argument list when no parameters are supplied.
+See `examples/stdlib/cli/parse.tea` for a complete walkthrough that falls back to a demo argument list when no parameters are supplied.
 
 ## LLVM Backend
 
 The CLI defaults to the LLVM ahead-of-time backend when you run `tea build`:
 
 ```
-cargo run -p tea-cli -- build examples/fib.tea
+cargo run -p tea-cli -- build examples/language/basics/fib.tea
 ```
 
-The command lowers `examples/fib.tea` to LLVM IR, produces an object file, links it with the runtime, and writes the resulting executable to `bin/fib`. You can inspect intermediate artefacts without producing a binary:
+The command lowers `examples/language/basics/fib.tea` to LLVM IR, produces an object file, links it with the runtime, and writes the resulting executable to `bin/fib`. You can inspect intermediate artefacts without producing a binary:
 
 ```
 # Dump IR only
-cargo run -p tea-cli -- --emit llvm-ir --no-run examples/fib.tea
+cargo run -p tea-cli -- --emit llvm-ir --no-run examples/language/basics/fib.tea
 
 # Keep the object file alongside the IR
-cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/fib.tea
+cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/basics/fib.tea
 ```
 
 Both the VM and LLVM pipelines cover integers/floats (with Int→Float promotion), comparisons, control flow (`if`, `while`, `until`), recursion, `var` locals, list/dict literals, structs, lambda literals, and generic functions/structs (including those imported from modules). See [docs/aot-backend.md](docs/aot-backend.md) for the latest capabilities and limitations.
@@ -164,13 +164,13 @@ Under the hood, programs move through a resolver and static type checker before 
 ### Tooling
 
 - Build the workspace with `cargo build`.
-- Run a program: `cargo run -p tea-cli -- examples/basics.tea`.
+- Run a program: `cargo run -p tea-cli -- examples/language/basics/basics.tea`.
 - Format sources (files or directories) in place: `cargo run -p tea-cli -- fmt examples`.
 - Run project suites via the harness: `cargo run -p tea-cli -- test` (use `--list`, `--filter`, or `--fail-fast` for finer control).
 - Inspect lexer and parser output:
-  - Tokens: `cargo run -p tea-cli -- --dump-tokens --no-run examples/basics.tea`
-  - AST: `cargo run -p tea-cli -- --emit ast --no-run examples/basics.tea`
-  - Bytecode: `cargo run -p tea-cli -- --emit bytecode --no-run examples/basics.tea`
+  - Tokens: `cargo run -p tea-cli -- --dump-tokens --no-run examples/language/basics/basics.tea`
+  - AST: `cargo run -p tea-cli -- --emit ast --no-run examples/language/basics/basics.tea`
+  - Bytecode: `cargo run -p tea-cli -- --emit bytecode --no-run examples/language/basics/basics.tea`
 - Execute tests: `cargo test`.
 
 Additional language constructs (pattern matching, richer modules, native code generation) are on the roadmap.

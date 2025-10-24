@@ -5,16 +5,16 @@ tea-lang evolves toward a statically typed language that pairs compiled speed wi
 - `tea-cli/` hosts the end-user binary; keep CLI parsing in `src/main.rs` and surface-only utilities in `src/support/`.
 - `tea-compiler/` contains the compilation pipeline. Stage code under `src/lexer`, `src/parser`, `src/runtime`, and `src/aot`; favor one module per phase to keep ownership clear.
 - `tea-runtime/` implements the VM and standard runtime helpers shared across compiled programs.
-- `examples/` holds executable `.tea` samples; group by topic (`examples/control_flow/fib.tea`) and note expected output in comments.
+- `examples/` holds executable `.tea` samples; group by topic (`examples/language/control_flow/fib.tea`) and note expected output in comments.
 - `docs/` is the home for RFCs, diagrams, and architectural notes; reference new proposals there so readers can trace design intent.
 
 ## Build, Test, and Development Commands
 - `cargo build -p tea-cli` produces the CLI and refreshes `target/debug/tea`; symlink or copy it into `bin/` if you need a stable path.
-- `cargo run -p tea-cli -- examples/basics.tea` executes a script directly and is the fastest loop for language experiments.
+- `cargo run -p tea-cli -- examples/language/basics/basics.tea` executes a script directly and is the fastest loop for language experiments.
 - `cargo run -p tea-cli -- fmt path/or/file` reformats sources in place (directories recurse); add `--check` to gate CI or pre-commit hooks.
 - `cargo run -p tea-cli -- test` drives the harness (use `--list`, `--filter`, or `--fail-fast` while iterating).
 - `cargo test --workspace` runs the Rust unit suites; scope to a crate (`-p tea-compiler`) when iterating on a single stage.
-- `scripts/e2e.sh` performs an LLVM build sanity check by compiling `examples/fib.tea` and asserting the emitted binary in `bin/fib` prints `832040`.
+- `scripts/e2e.sh` performs an LLVM build sanity check by compiling `examples/language/basics/fib.tea` and asserting the emitted binary in `bin/fib` prints `832040`.
 
 ## Issue Tracker
 - `bd init` is run once per repo to create `.beads/`; skip it after the first bootstrap.

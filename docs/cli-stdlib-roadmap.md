@@ -63,7 +63,7 @@ Objective: close the must-have gaps for typical command-line tools.
 
 Deliverables:
 - Runtime implementations with VM & LLVM parity.
-- Examples under `examples/cli/` (e.g., dir walker, process runner).
+- Examples under `examples/stdlib/cli/` (e.g., dir walker, process runner).
 - Tests covering success/failure paths, including snapshot-driven CLI checks.
 
 ### Milestone B – Streaming & Pipelining Primitives (tea-runtime)
@@ -80,7 +80,7 @@ Objective: embrace CLI composability and pipelines.
   working directory/env overrides.
 
 Deliverables:
-- End-to-end pipeline example (`examples/cli/pipeline.tea`) built via VM & LLVM.
+- End-to-end pipeline example (`examples/stdlib/cli/pipeline.tea`) built via VM & LLVM.
 - Snapshot tests validating stdout/stderr streaming.
 
 ### Milestone C – Configuration & Secrets (tea-runtime + packages)

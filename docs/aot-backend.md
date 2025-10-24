@@ -7,17 +7,17 @@ This document describes the ahead-of-time (AOT) code generation pipeline that lo
 `tea build` invokes the LLVM path directly:
 
 ```bash
-cargo run -p tea-cli -- build examples/fib.tea
+cargo run -p tea-cli -- build examples/language/basics/fib.tea
 ```
 
-The command lowers `examples/fib.tea` to LLVM IR, emits an object file, links it against the shared runtime with `rustc`, and writes the resulting binary to `bin/fib`. Pass `--target <triple>` if you need to override the detected host triple (useful when LLVM was built without support for your platform). You can still emit intermediate artefacts without producing an executable:
+The command lowers `examples/language/basics/fib.tea` to LLVM IR, emits an object file, links it against the shared runtime with `rustc`, and writes the resulting binary to `bin/fib`. Pass `--target <triple>` if you need to override the detected host triple (useful when LLVM was built without support for your platform). You can still emit intermediate artefacts without producing an executable:
 
 ```bash
 # Dump IR only
-cargo run -p tea-cli -- --emit llvm-ir --no-run examples/fib.tea
+cargo run -p tea-cli -- --emit llvm-ir --no-run examples/language/basics/fib.tea
 
 # Keep the object file alongside the IR
-cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/fib.tea
+cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/basics/fib.tea
 ```
 
 ## Current Capabilities

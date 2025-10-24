@@ -5,8 +5,8 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${root_dir}"
 
-echo "Building examples/fib.tea..."
-cargo run -p tea-cli -- build examples/fib.tea >/tmp/tea-e2e-build.log
+echo "Building examples/language/basics/fib.tea..."
+cargo run -p tea-cli -- build examples/language/basics/fib.tea >/tmp/tea-e2e-build.log
 
 binary_path="${root_dir}/bin/fib"
 if [[ ! -x "${binary_path}" ]]; then
@@ -25,8 +25,8 @@ fi
 
 echo "✅ fib build produced expected output (${program_output})"
 
-echo "Building examples/structs.tea..."
-cargo run -p tea-cli -- build examples/structs.tea >/tmp/tea-e2e-structs-build.log
+echo "Building examples/language/types/structs.tea..."
+cargo run -p tea-cli -- build examples/language/types/structs.tea >/tmp/tea-e2e-structs-build.log
 
 structs_binary="${root_dir}/bin/structs"
 if [[ ! -x "${structs_binary}" ]]; then
@@ -45,8 +45,8 @@ fi
 
 echo "✅ structs build produced expected output"
 
-echo "Building examples/lambdas.tea..."
-cargo run -p tea-cli -- build examples/lambdas.tea >/tmp/tea-e2e-lambdas-build.log
+echo "Building examples/language/functions/lambdas.tea..."
+cargo run -p tea-cli -- build examples/language/functions/lambdas.tea >/tmp/tea-e2e-lambdas-build.log
 
 lambdas_binary="${root_dir}/bin/lambdas"
 if [[ ! -x "${lambdas_binary}" ]]; then
@@ -65,8 +65,8 @@ fi
 
 echo "✅ lambdas build produced expected output"
 
-echo "Building examples/io/pipeline.tea..."
-cargo run -p tea-cli -- build examples/io/pipeline.tea >/tmp/tea-e2e-pipeline-build.log
+echo "Building examples/stdlib/io/pipeline.tea..."
+cargo run -p tea-cli -- build examples/stdlib/io/pipeline.tea >/tmp/tea-e2e-pipeline-build.log
 
 pipeline_binary="${root_dir}/bin/pipeline"
 if [[ ! -x "${pipeline_binary}" ]]; then
@@ -85,8 +85,8 @@ fi
 
 echo "✅ pipeline build produced expected output"
 
-echo "Building examples/cli/process.tea..."
-cargo run -p tea-cli -- build examples/cli/process.tea >/tmp/tea-e2e-process-build.log
+echo "Building examples/stdlib/cli/process.tea..."
+cargo run -p tea-cli -- build examples/stdlib/cli/process.tea >/tmp/tea-e2e-process-build.log
 
 process_binary="${root_dir}/bin/process"
 if [[ ! -x "${process_binary}" ]]; then
@@ -105,8 +105,8 @@ fi
 
 echo "✅ process build produced expected output"
 
-echo "Building examples/cli/path_utils.tea..."
-cargo run -p tea-cli -- build examples/cli/path_utils.tea >/tmp/tea-e2e-path-build.log
+echo "Building examples/stdlib/cli/path_utils.tea..."
+cargo run -p tea-cli -- build examples/stdlib/cli/path_utils.tea >/tmp/tea-e2e-path-build.log
 
 path_binary="${root_dir}/bin/path_utils"
 if [[ ! -x "${path_binary}" ]]; then
@@ -129,8 +129,8 @@ fi
 
 echo "✅ path_utils build ran successfully"
 
-echo "Building examples/cli/env.tea..."
-cargo run -p tea-cli -- build examples/cli/env.tea >/tmp/tea-e2e-env-build.log
+echo "Building examples/stdlib/cli/env.tea..."
+cargo run -p tea-cli -- build examples/stdlib/cli/env.tea >/tmp/tea-e2e-env-build.log
 
 env_binary="${root_dir}/bin/env"
 if [[ ! -x "${env_binary}" ]]; then

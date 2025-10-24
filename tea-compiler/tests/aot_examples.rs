@@ -10,11 +10,11 @@ fn llvm_backend_compiles_core_examples() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.parent().expect("workspace root");
     let examples = [
-        "examples/basics.tea",
-        "examples/lists.tea",
-        "examples/loops.tea",
-        "examples/control_flow/logical.tea",
-        "examples/assertions.tea",
+        "examples/language/basics/basics.tea",
+        "examples/language/collections/lists.tea",
+        "examples/language/control_flow/loops.tea",
+        "examples/language/control_flow/logical.tea",
+        "examples/stdlib/testing/assertions.tea",
     ];
 
     for example in examples {

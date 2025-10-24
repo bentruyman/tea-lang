@@ -1,2 +1,8 @@
 target/
 bin/
+
+.beads/tea-lang.db
+.beads/tea-lang.sock
+.beads/daemon.lock
+.beads/daemon.log
+.beads/daemon.pid

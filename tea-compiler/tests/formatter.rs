@@ -529,7 +529,7 @@ end
 fn enforces_comparison_spacing() {
     let input = r#"
 while count<max
-if count>=1 and count<=10
+if count>=1 && count<=10
 unless value!=expected
 if name=="tea"
 debug.print(count)
@@ -541,7 +541,7 @@ end
 
     let expected = [
         "while count < max",
-        "  if count >= 1 and count <= 10",
+        "  if count >= 1 && count <= 10",
         "    unless value != expected",
         "      if name == \"tea\"",
         "        debug.print(count)",

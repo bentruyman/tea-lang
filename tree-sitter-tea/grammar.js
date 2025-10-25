@@ -214,8 +214,8 @@ module.exports = grammar({
 
     binary_expression: $ => choice(
       ...[
-        ["or", PREC.or],
-        ["and", PREC.and],
+        ["||", PREC.or],
+        ["&&", PREC.and],
         ["==", PREC.equality],
         ["!=", PREC.equality],
         ["<", PREC.comparative],

@@ -4,12 +4,12 @@ This document captures the first working cut of tea-lang. It is the contract for
 
 ## Source Form
 - Files use UTF-8 and `.tea` suffix.
-- Line breaks terminate statements. A newline is significant unless the parser is inside `()`, `[]`, `{}`, a `| |` lambda header, or the line ends with a trailing operator (`+`, `-`, `*`, `/`, `.`).
+- Line breaks terminate statements. A newline is significant unless the parser is inside `()`, `[]`, `{}`, a `| |` lambda header, or the line ends with a trailing operator (`+`, `-`, `*`, `/`, `.`, `&&`, `||`).
 - Comments start with `#` and extend to the end of the line.
 
 ## Lexical Elements
 - Identifiers: `[A-Za-z_][A-Za-z0-9_]*`. Snake_case for variables/functions, PascalCase for types.
-- Reserved keywords: `var`, `const`, `def`, `struct`, `if`, `unless`, `else`, `end`, `for`, `of`, `while`, `until`, `return`, `use`, `and`, `or`, `not`, `in`, `nil`.
+- Reserved keywords: `var`, `const`, `def`, `struct`, `if`, `unless`, `else`, `end`, `for`, `of`, `while`, `until`, `return`, `use`, `not`, `in`, `nil`.
 - Literals: integers (`42`), floats (`3.14`, `1_000.0`), strings (`"Hello"` and `` `Hello, ${name}` ``), booleans (`true`, `false`), lists (`[1, 2, 3]`), dictionaries (`{ "name": "tea" }`), ranges (`0..10`, `0...10`).
 
 ## Types
@@ -37,8 +37,8 @@ This document captures the first working cut of tea-lang. It is the contract for
   3. `*`, `/`, `%`.
   4. `+`, `-`.
   5. comparisons: `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`.
-  6. `and`.
-  7. `or`.
+  6. `&&`.
+  7. `||`.
 - Assignment uses `=`. Desugaring for `+=`, `++`, etc. is a future addition.
 - Function calls currently require parentheses: `alias.function(args)` (e.g. `debug.print(message)`). A shorthand without parentheses may be added later.
 - List literals evaluate their elements left-to-right (`[expr, ...]`) and produce a boxed list value. Indexing (`list[index]`) evaluates the receiver followed by the index expression; indices must be `Int` at runtime.

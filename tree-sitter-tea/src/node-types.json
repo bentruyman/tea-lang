@@ -262,6 +262,10 @@
             "named": false
           },
           {
+            "type": "&&",
+            "named": false
+          },
+          {
             "type": "*",
             "named": false
           },
@@ -298,11 +302,7 @@
             "named": false
           },
           {
-            "type": "and",
-            "named": false
-          },
-          {
-            "type": "or",
+            "type": "||",
             "named": false
           }
         ]
@@ -2395,6 +2395,10 @@
     "named": false
   },
   {
+    "type": "&&",
+    "named": false
+  },
+  {
     "type": "(",
     "named": false
   },
@@ -2487,10 +2491,6 @@
     "named": false
   },
   {
-    "type": "and",
-    "named": false
-  },
-  {
     "type": "comment",
     "named": true,
     "extra": true
@@ -2534,10 +2534,6 @@
   {
     "type": "number",
     "named": true
-  },
-  {
-    "type": "or",
-    "named": false
   },
   {
     "type": "pub",

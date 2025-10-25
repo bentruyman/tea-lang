@@ -1629,6 +1629,10 @@ fn line_continues_expression(code: &str) -> bool {
         return true;
     }
 
+    if trimmed.ends_with("&&") || trimmed.ends_with("||") {
+        return true;
+    }
+
     let mut chars = trimmed.chars().rev();
     let last = chars.find(|ch| !ch.is_whitespace());
     match last {
@@ -1646,19 +1650,6 @@ fn hanging_operator_indent(code: &str) -> usize {
     const LEADING_OPS: &[&str] = &["+", "-", "*", "/", "%", "&&", "||"];
     for op in LEADING_OPS {
         if trimmed.starts_with(op) {
-            return 1;
-        }
-    }
-
-    const LEADING_KW: &[&str] = &["and", "or"];
-    for kw in LEADING_KW {
-        if trimmed.starts_with(kw)
-            && trimmed
-                .chars()
-                .nth(kw.len())
-                .map(|ch| ch.is_whitespace())
-                .unwrap_or(true)
-        {
             return 1;
         }
     }

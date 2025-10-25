@@ -1153,7 +1153,7 @@
                 "name": "operator",
                 "content": {
                   "type": "STRING",
-                  "value": "or"
+                  "value": "||"
                 }
               },
               {
@@ -1186,7 +1186,7 @@
                 "name": "operator",
                 "content": {
                   "type": "STRING",
-                  "value": "and"
+                  "value": "&&"
                 }
               },
               {

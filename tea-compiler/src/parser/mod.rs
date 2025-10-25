@@ -25,8 +25,8 @@ impl Precedence {
         match kind {
             TokenKind::Equal => Some(Precedence::Assignment),
             TokenKind::QuestionQuestion => Some(Precedence::Coalesce),
-            TokenKind::Keyword(Keyword::Or) => Some(Precedence::Or),
-            TokenKind::Keyword(Keyword::And) => Some(Precedence::And),
+            TokenKind::PipePipe => Some(Precedence::Or),
+            TokenKind::AmpersandAmpersand => Some(Precedence::And),
             TokenKind::DoubleEqual | TokenKind::BangEqual => Some(Precedence::Equality),
             TokenKind::Greater
             | TokenKind::GreaterEqual
@@ -1528,8 +1528,8 @@ impl<'a> Parser<'a> {
             | TokenKind::Star
             | TokenKind::Slash
             | TokenKind::Percent
-            | TokenKind::Keyword(Keyword::And)
-            | TokenKind::Keyword(Keyword::Or)
+            | TokenKind::AmpersandAmpersand
+            | TokenKind::PipePipe
             | TokenKind::QuestionQuestion => {
                 let operator = binary_operator_from_token(&operator_token.kind)?;
                 let right = self.parse_expression_prec(precedence, terminator)?;
@@ -2015,8 +2015,8 @@ fn binary_operator_from_token(kind: &TokenKind) -> Result<BinaryOperator> {
         TokenKind::GreaterEqual => BinaryOperator::GreaterEqual,
         TokenKind::Less => BinaryOperator::Less,
         TokenKind::LessEqual => BinaryOperator::LessEqual,
-        TokenKind::Keyword(Keyword::And) => BinaryOperator::And,
-        TokenKind::Keyword(Keyword::Or) => BinaryOperator::Or,
+        TokenKind::AmpersandAmpersand => BinaryOperator::And,
+        TokenKind::PipePipe => BinaryOperator::Or,
         TokenKind::QuestionQuestion => BinaryOperator::Coalesce,
         other => bail!("unsupported binary operator {:?}", other),
     };

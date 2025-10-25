@@ -738,6 +738,9 @@ impl ModuleExpander {
                     self.rewrite_expression_identifiers(&mut arm.expression, rename_map);
                 }
             }
+            ExpressionKind::Unwrap(inner) => {
+                self.rewrite_expression_identifiers(inner, rename_map);
+            }
             ExpressionKind::Grouping(expr) => {
                 self.rewrite_expression_identifiers(expr, rename_map);
             }
@@ -919,6 +922,9 @@ impl ModuleExpander {
             ExpressionKind::Index(index) => {
                 self.rewrite_expression_alias(&mut index.object, alias_maps);
                 self.rewrite_expression_alias(&mut index.index, alias_maps);
+            }
+            ExpressionKind::Unwrap(inner) => {
+                self.rewrite_expression_alias(inner, alias_maps);
             }
         }
     }

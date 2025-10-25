@@ -274,6 +274,7 @@ pub enum BinaryOperator {
     LessEqual,
     And,
     Or,
+    Coalesce,
 }
 
 #[derive(Debug, Clone)]
@@ -298,6 +299,7 @@ pub enum ExpressionKind {
     Lambda(LambdaExpression),
     Assignment(AssignmentExpression),
     Match(MatchExpression),
+    Unwrap(Box<Expression>),
     Grouping(Box<Expression>),
 }
 

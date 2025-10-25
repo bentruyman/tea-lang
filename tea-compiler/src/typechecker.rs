@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, CallArgument, CallExpression, ConditionalStatement,
-    DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
-    InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
-    LoopKind, LoopStatement, MatchExpression, MatchPattern, Module, ReturnStatement, SourceSpan,
-    Statement, StructStatement, TestStatement, TypeExpression, TypeParameter, UnaryExpression,
-    UnaryOperator, VarStatement,
+    BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, ConditionalKind,
+    ConditionalStatement, DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier,
+    IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal,
+    LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern, Module, ReturnStatement,
+    SourceSpan, Statement, StructStatement, TestStatement, TypeExpression, TypeParameter,
+    UnaryExpression, UnaryOperator, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Keyword, Token, TokenKind};
@@ -21,6 +21,7 @@ pub(crate) enum Type {
     Float,
     String,
     Nil,
+    Optional(Box<Type>),
     List(Box<Type>),
     Dict(Box<Type>),
     Function(Vec<Type>, Box<Type>),
@@ -38,6 +39,7 @@ impl Type {
             Type::Float => "Float".to_string(),
             Type::String => "String".to_string(),
             Type::Nil => "Nil".to_string(),
+            Type::Optional(inner) => format!("{}?", inner.describe()),
             Type::List(element) => format!("List[{}]", element.describe()),
             Type::Dict(value) => format!("Dict[String, {}]", value.describe()),
             Type::Function(params, return_type) => {
@@ -165,6 +167,32 @@ pub(crate) struct StructFieldType {
     pub span: SourceSpan,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OptionalGuardState {
+    IsNil,
+    IsNonNil,
+}
+
+struct OptionalGuard {
+    name: String,
+    when_true: Option<OptionalGuardState>,
+    when_false: Option<OptionalGuardState>,
+}
+
+impl OptionalGuard {
+    fn new(
+        name: String,
+        when_true: Option<OptionalGuardState>,
+        when_false: Option<OptionalGuardState>,
+    ) -> Self {
+        Self {
+            name,
+            when_true,
+            when_false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct FunctionContext {
     return_type: Type,
@@ -176,6 +204,7 @@ struct FunctionContext {
 pub struct TypeChecker {
     scopes: Vec<HashMap<String, Type>>,
     const_scopes: Vec<HashSet<String>>,
+    non_nil_scopes: Vec<HashSet<String>>,
     functions: HashMap<String, FunctionSignature>,
     structs: HashMap<String, StructDefinition>,
     enums: HashMap<String, EnumDefinition>,
@@ -201,6 +230,7 @@ impl TypeChecker {
         let mut checker = Self {
             scopes: vec![HashMap::new()],
             const_scopes: vec![HashSet::new()],
+            non_nil_scopes: vec![HashSet::new()],
             functions: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
@@ -602,6 +632,7 @@ impl TypeChecker {
 
             self.insert(name.clone(), target_type.clone(), !statement.is_const);
             self.binding_types.insert(binding.span, target_type.clone());
+            self.update_non_nil_fact(name, &inferred);
         }
     }
 
@@ -614,9 +645,103 @@ impl TypeChecker {
             "conditional expression",
             Some(statement.condition.span),
         );
-        self.check_statements(&statement.consequent.statements);
-        if let Some(alt) = &statement.alternative {
-            self.check_statements(&alt.statements);
+
+        let guard = self.extract_optional_guard(&statement.condition);
+        let guard_name = guard.as_ref().map(|g| g.name.clone());
+
+        let (consequent_state, alternative_state) = match statement.kind {
+            ConditionalKind::If => (
+                guard.as_ref().and_then(|g| g.when_true),
+                guard.as_ref().and_then(|g| g.when_false),
+            ),
+            ConditionalKind::Unless => (
+                guard.as_ref().and_then(|g| g.when_false),
+                guard.as_ref().and_then(|g| g.when_true),
+            ),
+        };
+
+        let base_scope = self.non_nil_scopes.last().cloned().unwrap_or_default();
+
+        let consequent_scope = if let Some(ref name) = guard_name {
+            if let Some(state) = consequent_state {
+                self.with_branch_guard(name.as_str(), state, |checker| {
+                    checker.check_statements(&statement.consequent.statements);
+                })
+            } else {
+                self.run_branch(|checker| {
+                    checker.check_statements(&statement.consequent.statements);
+                })
+            }
+        } else {
+            self.run_branch(|checker| {
+                checker.check_statements(&statement.consequent.statements);
+            })
+        };
+
+        let alternative_scope = if let Some(alt) = &statement.alternative {
+            Some(if let Some(ref name) = guard_name {
+                if let Some(state) = alternative_state {
+                    self.with_branch_guard(name.as_str(), state, |checker| {
+                        checker.check_statements(&alt.statements);
+                    })
+                } else {
+                    self.run_branch(|checker| {
+                        checker.check_statements(&alt.statements);
+                    })
+                }
+            } else {
+                self.run_branch(|checker| {
+                    checker.check_statements(&alt.statements);
+                })
+            })
+        } else {
+            None
+        };
+
+        if let Some(ref guard) = guard {
+            self.clear_non_nil_fact(&guard.name);
+
+            let (true_continues, false_continues) = match statement.kind {
+                ConditionalKind::If => {
+                    let true_continues = !self.block_guarantees_exit(&statement.consequent);
+                    let false_continues = if let Some(alt) = &statement.alternative {
+                        !self.block_guarantees_exit(alt)
+                    } else {
+                        true
+                    };
+                    (true_continues, false_continues)
+                }
+                ConditionalKind::Unless => {
+                    let false_continues = !self.block_guarantees_exit(&statement.consequent);
+                    let true_continues = if let Some(alt) = &statement.alternative {
+                        !self.block_guarantees_exit(alt)
+                    } else {
+                        true
+                    };
+                    (true_continues, false_continues)
+                }
+            };
+
+            let true_scope_has = consequent_scope.contains(&guard.name);
+            let false_scope_has = if let Some(ref scope) = alternative_scope {
+                scope.contains(&guard.name)
+            } else {
+                base_scope.contains(&guard.name)
+            };
+
+            let true_non_nil =
+                true_scope_has || matches!(guard.when_true, Some(OptionalGuardState::IsNonNil));
+            let false_non_nil =
+                false_scope_has || matches!(guard.when_false, Some(OptionalGuardState::IsNonNil));
+
+            if self.paths_imply_non_nil(
+                true_continues,
+                false_continues,
+                true_non_nil,
+                false_non_nil,
+            ) {
+                self.mark_non_nil_fact(&guard.name);
+            }
         }
     }
 
@@ -703,6 +828,142 @@ impl TypeChecker {
                 }
             }
         }
+    }
+
+    fn with_branch_guard<F>(
+        &mut self,
+        name: &str,
+        state: OptionalGuardState,
+        mut body: F,
+    ) -> HashSet<String>
+    where
+        F: FnMut(&mut Self),
+    {
+        let saved_scope = self.non_nil_scopes.last().cloned();
+        if let Some(scope) = self.non_nil_scopes.last_mut() {
+            match state {
+                OptionalGuardState::IsNonNil => {
+                    scope.insert(name.to_string());
+                }
+                OptionalGuardState::IsNil => {
+                    scope.remove(name);
+                }
+            }
+        }
+
+        body(self);
+
+        let branch_scope = self.non_nil_scopes.last().cloned().unwrap_or_default();
+
+        if let (Some(saved), Some(scope)) = (saved_scope, self.non_nil_scopes.last_mut()) {
+            *scope = saved;
+        }
+
+        branch_scope
+    }
+
+    fn run_branch<F>(&mut self, mut body: F) -> HashSet<String>
+    where
+        F: FnMut(&mut Self),
+    {
+        let saved_scope = self.non_nil_scopes.last().cloned();
+        body(self);
+        let branch_scope = self.non_nil_scopes.last().cloned().unwrap_or_default();
+        if let (Some(saved), Some(scope)) = (saved_scope, self.non_nil_scopes.last_mut()) {
+            *scope = saved;
+        }
+        branch_scope
+    }
+
+    fn paths_imply_non_nil(
+        &self,
+        true_continues: bool,
+        false_continues: bool,
+        true_non_nil: bool,
+        false_non_nil: bool,
+    ) -> bool {
+        match (true_continues, false_continues) {
+            (true, true) => true_non_nil && false_non_nil,
+            (true, false) => true_non_nil,
+            (false, true) => false_non_nil,
+            (false, false) => false,
+        }
+    }
+
+    fn block_guarantees_exit(&self, block: &Block) -> bool {
+        block
+            .statements
+            .last()
+            .map(|statement| matches!(statement, Statement::Return(_)))
+            .unwrap_or(false)
+    }
+
+    fn extract_optional_guard(&self, expression: &Expression) -> Option<OptionalGuard> {
+        let ExpressionKind::Binary(binary) = &expression.kind else {
+            return None;
+        };
+
+        match binary.operator {
+            BinaryOperator::Equal => {
+                self.optional_guard_from_comparison(&binary.left, &binary.right, true)
+            }
+            BinaryOperator::NotEqual => {
+                self.optional_guard_from_comparison(&binary.left, &binary.right, false)
+            }
+            _ => None,
+        }
+    }
+
+    fn optional_guard_from_comparison(
+        &self,
+        left: &Expression,
+        right: &Expression,
+        is_equality: bool,
+    ) -> Option<OptionalGuard> {
+        if let Some(name) = self.identifier_name_if_optional(left) {
+            if Self::is_nil_literal(right) {
+                return Some(Self::guard_from_comparison(name, is_equality));
+            }
+        }
+        if let Some(name) = self.identifier_name_if_optional(right) {
+            if Self::is_nil_literal(left) {
+                return Some(Self::guard_from_comparison(name, is_equality));
+            }
+        }
+        None
+    }
+
+    fn guard_from_comparison(name: String, is_equality: bool) -> OptionalGuard {
+        if is_equality {
+            OptionalGuard::new(
+                name,
+                Some(OptionalGuardState::IsNil),
+                Some(OptionalGuardState::IsNonNil),
+            )
+        } else {
+            OptionalGuard::new(
+                name,
+                Some(OptionalGuardState::IsNonNil),
+                Some(OptionalGuardState::IsNil),
+            )
+        }
+    }
+
+    fn identifier_name_if_optional(&self, expression: &Expression) -> Option<String> {
+        match &expression.kind {
+            ExpressionKind::Identifier(identifier) => {
+                if self.binding_is_optional(&identifier.name) {
+                    Some(identifier.name.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn is_nil_literal(expression: &Expression) -> bool {
+        matches!(expression.kind, ExpressionKind::Literal(Literal::Nil))
     }
 
     fn check_function(&mut self, function: &FunctionStatement) {
@@ -832,6 +1093,13 @@ impl TypeChecker {
         }
 
         match (expected, actual) {
+            (Type::Optional(_), Type::Nil) => true,
+            (Type::Optional(expected_inner), Type::Optional(actual_inner)) => {
+                self.ensure_compatible(expected_inner, actual_inner, context, span)
+            }
+            (Type::Optional(expected_inner), other) => {
+                self.ensure_compatible(expected_inner, other, context, span)
+            }
             (Type::List(expected_inner), Type::List(actual_inner)) => {
                 self.ensure_compatible(expected_inner, actual_inner, context, span)
             }
@@ -888,12 +1156,51 @@ impl TypeChecker {
         }
     }
 
+    fn clear_non_nil_fact(&mut self, name: &str) {
+        for scope in self.non_nil_scopes.iter_mut().rev() {
+            if scope.remove(name) {
+                break;
+            }
+        }
+    }
+
+    fn mark_non_nil_fact(&mut self, name: &str) {
+        if let Some(scope) = self.non_nil_scopes.last_mut() {
+            scope.insert(name.to_string());
+        }
+    }
+
+    fn is_non_nil_fact(&self, name: &str) -> bool {
+        self.non_nil_scopes
+            .iter()
+            .rev()
+            .any(|scope| scope.contains(name))
+    }
+
+    fn binding_is_optional(&self, name: &str) -> bool {
+        self.lookup(name)
+            .map(|ty| matches!(ty, Type::Optional(_)))
+            .unwrap_or(false)
+    }
+
+    fn type_is_definitely_non_nil(&self, ty: &Type) -> bool {
+        !matches!(ty, Type::Optional(_) | Type::Unknown | Type::Nil)
+    }
+
+    fn update_non_nil_fact(&mut self, name: &str, value_type: &Type) {
+        self.clear_non_nil_fact(name);
+        if self.binding_is_optional(name) && self.type_is_definitely_non_nil(value_type) {
+            self.mark_non_nil_fact(name);
+        }
+    }
+
     fn substitute_type(&self, ty: &Type, mapping: &HashMap<String, Type>) -> Type {
         match ty {
             Type::GenericParameter(name) => mapping
                 .get(name)
                 .cloned()
                 .unwrap_or_else(|| Type::GenericParameter(name.clone())),
+            Type::Optional(inner) => Type::Optional(Box::new(self.substitute_type(inner, mapping))),
             Type::List(inner) => Type::List(Box::new(self.substitute_type(inner, mapping))),
             Type::Dict(inner) => Type::Dict(Box::new(self.substitute_type(inner, mapping))),
             Type::Function(params, return_type) => {
@@ -933,6 +1240,12 @@ impl TypeChecker {
                     true
                 }
             }
+            Type::Optional(expected_inner) => match actual {
+                Type::Optional(actual_inner) => {
+                    self.unify_types(expected_inner, actual_inner, mapping, context, span)
+                }
+                _ => self.ensure_compatible(expected, actual, context, span),
+            },
             Type::List(expected_inner) => {
                 if let Type::List(actual_inner) = actual {
                     self.unify_types(expected_inner, actual_inner, mapping, context, span)
@@ -1035,6 +1348,15 @@ impl TypeChecker {
         match (existing, new_type) {
             (Type::Unknown, ty) => ty,
             (ty, Type::Unknown) => ty,
+            (Type::Optional(existing_inner), Type::Optional(new_inner)) => {
+                let merged = self.merge_binding_type(*existing_inner, *new_inner, context, span);
+                Type::Optional(Box::new(merged))
+            }
+            (Type::Optional(existing_inner), Type::Nil) => Type::Optional(existing_inner),
+            (Type::Optional(existing_inner), other) => {
+                let merged = self.merge_binding_type(*existing_inner, other, context, span);
+                Type::Optional(Box::new(merged))
+            }
             (Type::List(existing_inner), Type::List(new_inner)) => {
                 let merged = self.merge_binding_type(*existing_inner, *new_inner, context, span);
                 Type::List(Box::new(merged))
@@ -1388,6 +1710,7 @@ impl TypeChecker {
             ExpressionKind::Member(member) => self.type_from_member(member, expression.span),
             ExpressionKind::Match(match_expr) => self.type_from_match(match_expr, expression.span),
             ExpressionKind::Index(index) => self.type_from_index(index, expression.span),
+            ExpressionKind::Unwrap(inner) => self.type_from_unwrap(inner, expression.span),
             ExpressionKind::Range(_) => Type::Unknown,
         }
     }
@@ -1702,6 +2025,45 @@ impl TypeChecker {
         }
     }
 
+    fn type_from_unwrap(&mut self, expression: &Expression, span: SourceSpan) -> Type {
+        let operand_type = self.infer_expression(expression);
+        match operand_type {
+            Type::Optional(inner) => {
+                match &expression.kind {
+                    ExpressionKind::Identifier(identifier) => {
+                        if !self.is_non_nil_fact(&identifier.name) {
+                            self.report_error(
+                                format!(
+                                    "cannot unwrap optional '{}': value may be nil here",
+                                    identifier.name
+                                ),
+                                Some(span),
+                            );
+                        }
+                    }
+                    _ => {
+                        self.report_error(
+                            "cannot unwrap optional value; value may be nil here",
+                            Some(span),
+                        );
+                    }
+                }
+                *inner
+            }
+            Type::Unknown => Type::Unknown,
+            other => {
+                self.report_error(
+                    format!(
+                        "unwrap operator '!' requires an optional value, found {}",
+                        other.describe()
+                    ),
+                    Some(span),
+                );
+                Type::Unknown
+            }
+        }
+    }
+
     fn type_from_member(
         &mut self,
         member: &crate::ast::MemberExpression,
@@ -1910,6 +2272,28 @@ impl TypeChecker {
                     Type::Unknown
                 }
             }
+            BinaryOperator::Coalesce => match left {
+                Type::Optional(inner) => {
+                    self.ensure_compatible(
+                        inner.as_ref(),
+                        &right,
+                        "coalesce right operand",
+                        Some(binary.right.span),
+                    );
+                    *inner
+                }
+                Type::Unknown => Type::Unknown,
+                other => {
+                    self.report_error(
+                        format!(
+                            "coalesce left operand must be optional, found {}",
+                            other.describe()
+                        ),
+                        Some(binary.left.span),
+                    );
+                    Type::Unknown
+                }
+            },
             BinaryOperator::Equal | BinaryOperator::NotEqual => {
                 self.ensure_compatible(&left, &right, "equality comparison", Some(span));
                 Type::Bool
@@ -2700,9 +3084,10 @@ impl TypeChecker {
             if mutable {
                 scope.remove(&name);
             } else {
-                scope.insert(name);
+                scope.insert(name.clone());
             }
         }
+        self.clear_non_nil_fact(&name);
     }
 
     fn assign(&mut self, name: &str, ty: Type, span: Option<SourceSpan>) {
@@ -2716,6 +3101,7 @@ impl TypeChecker {
                 let context = format!("assignment to '{}'", name);
                 let merged = self.merge_binding_type(existing_type, ty.clone(), &context, span);
                 self.scopes[index].insert(name.to_string(), merged);
+                self.update_non_nil_fact(name, &ty);
                 return;
             }
         }
@@ -2727,8 +3113,9 @@ impl TypeChecker {
             const_scope.remove(&name);
         }
         if let Some(global) = self.scopes.first_mut() {
-            global.insert(name, ty);
+            global.insert(name.clone(), ty.clone());
         }
+        self.update_non_nil_fact(&name, &ty);
     }
 
     pub(crate) fn global_binding_types(&self) -> HashMap<String, Type> {
@@ -2753,11 +3140,13 @@ impl TypeChecker {
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
         self.const_scopes.push(HashSet::new());
+        self.non_nil_scopes.push(HashSet::new());
     }
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
         self.const_scopes.pop();
+        self.non_nil_scopes.pop();
     }
 
     fn push_type_parameters(&mut self, params: &[TypeParameter]) {
@@ -2833,6 +3222,17 @@ impl<'a> TypeAnnotationParser<'a> {
     }
 
     fn parse_type(&mut self) -> Result<Type, TypeError> {
+        let mut ty = self.parse_primary_type()?;
+
+        while matches!(self.peek_kind(), Some(TokenKind::Question)) {
+            self.advance();
+            ty = Type::Optional(Box::new(ty));
+        }
+
+        Ok(ty)
+    }
+
+    fn parse_primary_type(&mut self) -> Result<Type, TypeError> {
         let token = self
             .peek()
             .ok_or_else(|| TypeError::at_eof("expected type annotation"))?;

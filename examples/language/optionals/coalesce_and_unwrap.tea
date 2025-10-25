@@ -1,0 +1,21 @@
+# Demonstrates coalescing and guarded unwraps
+# Expected output:
+# 3
+# tea
+
+use debug = "std.debug"
+
+def add(a: Int, b: Int) -> Int
+  return a + b
+end
+
+var number: Int? = nil
+number = 1
+debug.print(add(number ?? 1, 2))
+
+var maybe_name: String? = nil
+if maybe_name == nil
+  maybe_name = "tea"
+end
+
+debug.print(maybe_name!)

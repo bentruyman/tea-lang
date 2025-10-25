@@ -85,6 +85,7 @@ pub enum Instruction {
     Not,
     Jump(usize),
     JumpIfFalse(usize),
+    JumpIfNil(usize),
     Print,
     BuiltinCall {
         kind: StdFunctionKind,
@@ -102,6 +103,7 @@ pub enum Instruction {
         capture_count: usize,
     },
     ConcatStrings(usize),
+    AssertNonNil,
     Return,
 }
 
@@ -129,6 +131,7 @@ impl fmt::Display for Instruction {
             Instruction::Not => write!(f, "NOT"),
             Instruction::Jump(target) => write!(f, "JUMP {target}"),
             Instruction::JumpIfFalse(target) => write!(f, "JUMP_IF_FALSE {target}"),
+            Instruction::JumpIfNil(target) => write!(f, "JUMP_IF_NIL {target}"),
             Instruction::Print => write!(f, "PRINT"),
             Instruction::BuiltinCall { kind, arg_count } => {
                 write!(f, "BUILTIN {:?} {arg_count}", kind)
@@ -147,6 +150,7 @@ impl fmt::Display for Instruction {
                 capture_count,
             } => write!(f, "MAKE_CLOSURE {function_index} {capture_count}"),
             Instruction::ConcatStrings(count) => write!(f, "CONCAT_STRINGS {count}"),
+            Instruction::AssertNonNil => write!(f, "ASSERT_NON_NIL"),
             Instruction::Return => write!(f, "RETURN"),
         }
     }

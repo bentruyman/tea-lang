@@ -78,6 +78,7 @@ pub enum Statement {
     Function(FunctionStatement),
     Test(TestStatement),
     Struct(StructStatement),
+    Enum(EnumStatement),
     Conditional(ConditionalStatement),
     Loop(LoopStatement),
     Return(ReturnStatement),
@@ -165,6 +166,21 @@ pub struct StructField {
     pub name: String,
     pub span: SourceSpan,
     pub type_annotation: TypeExpression,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumStatement {
+    pub name: String,
+    pub name_span: SourceSpan,
+    pub variants: Vec<EnumVariant>,
+    pub docstring: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumVariant {
+    pub name: String,
+    pub span: SourceSpan,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -56,6 +56,7 @@ fn format_type_name(ty: &Type) -> String {
             format!("Func{param_str} -> {}", format_type_name(return_type))
         }
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
+        Type::Enum(enum_type) => enum_type.name.clone(),
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -94,6 +95,10 @@ fn type_to_value_type(ty: &Type) -> Result<ValueType> {
             ))
         }
         Type::Struct(struct_type) => Ok(ValueType::Struct(format_struct_type_name(struct_type))),
+        Type::Enum(enum_type) => bail!(format!(
+            "LLVM backend does not yet support enums like '{}'",
+            enum_type.name
+        )),
         Type::GenericParameter(name) => {
             bail!(format!(
                 "cannot lower generic parameter '{}' in LLVM backend",
@@ -1443,7 +1448,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let return_type = ValueType::Int;
         for statement in statements {
             match statement {
-                Statement::Use(_) | Statement::Function(_) | Statement::Test(_) => {}
+                Statement::Use(_)
+                | Statement::Function(_)
+                | Statement::Test(_)
+                | Statement::Enum(_) => {}
                 Statement::Return(_) => bail!("return at top level not supported"),
                 _ => {
                     let _ = self.compile_statement(
@@ -1532,6 +1540,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_loop(loop_stmt, function, locals, return_type)
             }
             Statement::Struct(_) => Ok(false),
+            Statement::Enum(_) => Ok(false),
             Statement::Test(_) => Ok(false),
             Statement::Use(_) | Statement::Function(_) => {
                 bail!("unsupported statement in function body")

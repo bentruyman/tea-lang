@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use anyhow::{anyhow, bail, Result};
 
@@ -6,15 +7,18 @@ use crate::ast::{
     BinaryExpression, BinaryOperator, Block, ConditionalKind, ConditionalStatement, DictLiteral,
     Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
-    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, Module, ReturnStatement, SourceSpan,
-    Statement, TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
-    VarStatement,
+    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression, Module,
+    ReturnStatement, SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator,
+    UseStatement, VarBinding, VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase};
-use super::value::{StructTemplate, Value};
+use super::value::{EnumVariantValue, StructTemplate, Value};
 use crate::stdlib::{self, StdFunctionKind};
-use crate::typechecker::{FunctionInstance, StructDefinition, StructInstance, StructType, Type};
+use crate::typechecker::{
+    EnumDefinition, EnumVariantMetadata, FunctionInstance, StructDefinition, StructInstance,
+    StructType, Type,
+};
 
 fn format_type_name(ty: &Type) -> String {
     match ty {
@@ -39,6 +43,7 @@ fn format_type_name(ty: &Type) -> String {
             format!("Func{param_str} -> {}", format_type_name(return_type))
         }
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
+        Type::Enum(enum_type) => enum_type.name.clone(),
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -87,6 +92,8 @@ pub struct VmSemanticMetadata {
     pub function_call_metadata: HashMap<SourceSpan, (String, FunctionInstance)>,
     pub struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     pub struct_definitions: HashMap<String, StructDefinition>,
+    pub enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
+    pub enum_definitions: HashMap<String, EnumDefinition>,
 }
 
 #[derive(Debug)]
@@ -122,6 +129,8 @@ pub struct CodeGenerator {
     base_function_indices: HashMap<String, usize>,
     function_specializations: HashMap<String, HashMap<Vec<Type>, usize>>,
     generic_binding_stack: Vec<HashMap<String, Type>>,
+    enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
+    enum_definitions: HashMap<String, EnumDefinition>,
 }
 
 impl CodeGenerator {
@@ -144,6 +153,8 @@ impl CodeGenerator {
             base_function_indices: HashMap::new(),
             function_specializations: HashMap::new(),
             generic_binding_stack: Vec::new(),
+            enum_variant_metadata: metadata.enum_variant_metadata,
+            enum_definitions: metadata.enum_definitions,
         }
     }
 
@@ -440,6 +451,7 @@ impl CodeGenerator {
             Statement::Use(use_stmt) => self.compile_use(use_stmt, resolver),
             Statement::Loop(loop_stmt) => self.compile_loop(loop_stmt, chunk, resolver),
             Statement::Struct(_) => Ok(()),
+            Statement::Enum(_) => Ok(()),
             Statement::Test(test_stmt) => self.compile_test(test_stmt),
         }
     }
@@ -601,7 +613,15 @@ impl CodeGenerator {
             ExpressionKind::Dict(dict) => self.compile_dict_literal(dict, chunk, resolver),
             ExpressionKind::Index(index) => self.compile_index_expression(index, chunk, resolver),
             ExpressionKind::Member(member) => {
-                self.compile_member_expression(member, chunk, resolver)
+                if let Some(metadata) = self.enum_variant_metadata.get(&expression.span).cloned() {
+                    self.emit_enum_variant(metadata, chunk)
+                } else if let Some(metadata) =
+                    self.enum_variant_metadata_from_ast(member, expression.span)
+                {
+                    self.emit_enum_variant(metadata, chunk)
+                } else {
+                    self.compile_member_expression(member, chunk, resolver)
+                }
             }
             ExpressionKind::Lambda(lambda) => {
                 self.compile_lambda_expression(lambda, chunk, resolver)
@@ -1086,6 +1106,46 @@ impl CodeGenerator {
         chunk.emit(Instruction::Constant(constant));
         chunk.emit(Instruction::GetField);
         Ok(())
+    }
+
+    fn emit_enum_variant(
+        &mut self,
+        metadata: EnumVariantMetadata,
+        chunk: &mut Chunk,
+    ) -> Result<()> {
+        let value = Value::EnumVariant(Rc::new(EnumVariantValue {
+            enum_name: metadata.enum_name.clone(),
+            variant_name: metadata.variant_name.clone(),
+            discriminant: metadata.discriminant,
+        }));
+        let index = chunk.add_constant(value);
+        chunk.emit(Instruction::Constant(index));
+        Ok(())
+    }
+
+    fn enum_variant_metadata_from_ast(
+        &mut self,
+        member: &MemberExpression,
+        span: SourceSpan,
+    ) -> Option<EnumVariantMetadata> {
+        if let ExpressionKind::Identifier(identifier) = &member.object.kind {
+            if let Some(enum_definition) = self.enum_definitions.get(&identifier.name) {
+                if let Some(variant) = enum_definition
+                    .variants
+                    .iter()
+                    .find(|variant| variant.name == member.property)
+                {
+                    let metadata = EnumVariantMetadata {
+                        enum_name: identifier.name.clone(),
+                        variant_name: variant.name.clone(),
+                        discriminant: variant.discriminant,
+                    };
+                    self.enum_variant_metadata.insert(span, metadata.clone());
+                    return Some(metadata);
+                }
+            }
+        }
+        None
     }
 
     fn compile_lambda_expression<R: Resolver>(

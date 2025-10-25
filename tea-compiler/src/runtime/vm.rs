@@ -3205,6 +3205,9 @@ fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
             }
             JsonValue::Object(object)
         }
+        Value::EnumVariant(variant) => {
+            JsonValue::String(format!("{}.{}", variant.enum_name, variant.variant_name))
+        }
         Value::Function(_) | Value::Closure(_) => {
             return Err(VmError::Runtime(
                 "json encode does not support functions or closures".to_string(),

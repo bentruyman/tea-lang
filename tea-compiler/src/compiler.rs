@@ -169,6 +169,8 @@ impl Compiler {
             .map(|(name, ty)| (name, ty.describe()))
             .collect::<HashMap<_, _>>();
         let struct_definitions = type_checker.struct_definitions();
+        let enum_definitions = type_checker.enum_definitions();
+        let enum_variant_metadata = type_checker.enum_variant_metadata().clone();
         let mut type_diagnostics = type_checker.into_diagnostics();
         let type_errors = type_diagnostics.has_errors();
         if !alias_export_renames.is_empty() {
@@ -206,6 +208,14 @@ impl Compiler {
                         if let Some(renamed) = renames.get(export) {
                             if let Some(ty) = global_binding_types.get(renamed) {
                                 binding.export_types.insert(export.clone(), ty.clone());
+                            } else if enum_definitions.contains_key(renamed) {
+                                binding
+                                    .export_types
+                                    .insert(export.clone(), "Enum".to_string());
+                            } else if struct_definitions.contains_key(renamed) {
+                                binding
+                                    .export_types
+                                    .insert(export.clone(), "Struct".to_string());
                             }
                         }
                     }
@@ -252,6 +262,8 @@ impl Compiler {
             function_call_metadata,
             struct_call_metadata,
             struct_definitions,
+            enum_variant_metadata,
+            enum_definitions,
         };
         let generator = CodeGenerator::new(lambda_captures, metadata);
         let program = generator.compile_module(&expanded_module)?;
@@ -458,6 +470,16 @@ impl ModuleExpander {
                         }
                     }
                 }
+                Statement::Enum(enum_stmt) => {
+                    let renamed = format!("__module_{}_{}", alias, enum_stmt.name);
+                    all_renames.insert(enum_stmt.name.clone(), renamed.clone());
+                    export_renames.insert(enum_stmt.name.clone(), renamed);
+                    if let Some(doc) = enum_stmt.docstring.clone() {
+                        if !doc.is_empty() {
+                            docstrings.insert(enum_stmt.name.clone(), doc);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -480,6 +502,11 @@ impl ModuleExpander {
                 Statement::Struct(struct_stmt) => {
                     if let Some(new_name) = all_renames.get(&struct_stmt.name).cloned() {
                         struct_stmt.name = new_name;
+                    }
+                }
+                Statement::Enum(enum_stmt) => {
+                    if let Some(new_name) = all_renames.get(&enum_stmt.name).cloned() {
+                        enum_stmt.name = new_name;
                     }
                 }
                 _ => {}
@@ -601,6 +628,7 @@ impl ModuleExpander {
                     );
                 }
             }
+            Statement::Enum(_) => {}
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_identifiers(&mut cond_stmt.condition, rename_map);
                 self.rewrite_block_identifiers(&mut cond_stmt.consequent, rename_map);
@@ -741,6 +769,7 @@ impl ModuleExpander {
                     self.rewrite_type_expression_alias(&mut field.type_annotation, alias_maps);
                 }
             }
+            Statement::Enum(_) => {}
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_alias(&mut cond_stmt.condition, alias_maps);
                 self.rewrite_block_alias(&mut cond_stmt.consequent, alias_maps);

@@ -112,6 +112,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Pub) => self.parse_public_statement(docstring.clone()),
             TokenKind::Keyword(Keyword::Test) => self.parse_test(docstring.clone()),
             TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
+            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
             TokenKind::Keyword(Keyword::Unless) => self.parse_conditional(ConditionalKind::Unless),
             TokenKind::Keyword(Keyword::For) => self.parse_for_loop(),
@@ -632,6 +633,75 @@ impl<'a> Parser<'a> {
             name_span,
             type_parameters,
             fields,
+            docstring,
+        }))
+    }
+
+    fn parse_enum(&mut self, docstring: Option<String>) -> Result<Statement> {
+        self.advance(); // consume 'enum'
+        let name_token = self.peek().clone();
+        let name_span = Self::span_from_token(&name_token);
+        let name = match &name_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                name_token.lexeme
+            }
+            _ => bail!(
+                "expected enum name at line {}, column {}",
+                name_token.line,
+                name_token.column
+            ),
+        };
+
+        self.expect_newline("expected newline after enum name")?;
+
+        let mut variants = Vec::new();
+        loop {
+            self.skip_newlines();
+            if self.check_keyword(Keyword::End) {
+                self.advance();
+                break;
+            }
+            if self.is_at_end() {
+                self.diagnostics.push_error_with_span(
+                    format!("unterminated enum '{}', missing 'end'", name),
+                    Some(name_span),
+                );
+                bail!("unterminated enum");
+            }
+
+            let variant_doc = self.consume_doc_comments();
+
+            let variant_token = self.peek().clone();
+            let variant_span = Self::span_from_token(&variant_token);
+            let variant_name = match &variant_token.kind {
+                TokenKind::Identifier => {
+                    self.advance();
+                    variant_token.lexeme
+                }
+                _ => bail!(
+                    "expected enum variant name in enum '{}' at line {}, column {}",
+                    name,
+                    variant_token.line,
+                    variant_token.column
+                ),
+            };
+
+            variants.push(EnumVariant {
+                name: variant_name,
+                span: variant_span,
+                docstring: variant_doc,
+            });
+
+            self.expect_newline("expected newline after enum variant")?;
+        }
+
+        self.expect_newline("expected newline after enum declaration")?;
+
+        Ok(Statement::Enum(EnumStatement {
+            name,
+            name_span,
+            variants,
             docstring,
         }))
     }

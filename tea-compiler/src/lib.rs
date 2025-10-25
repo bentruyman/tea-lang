@@ -12,11 +12,11 @@ mod typechecker;
 
 pub use crate::ast::{
     AssignmentExpression, BinaryExpression, BinaryOperator, Block, CallExpression, ConditionalKind,
-    ConditionalStatement, DictEntry, DictLiteral, Expression, ExpressionKind, ExpressionStatement,
-    FunctionParameter, FunctionStatement, Identifier, IndexExpression,
-    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
-    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression, Module,
-    RangeExpression, ReturnStatement, SourceSpan, Statement, StructField, StructStatement,
+    ConditionalStatement, DictEntry, DictLiteral, EnumStatement, EnumVariant, Expression,
+    ExpressionKind, ExpressionStatement, FunctionParameter, FunctionStatement, Identifier,
+    IndexExpression, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
+    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression,
+    Module, RangeExpression, ReturnStatement, SourceSpan, Statement, StructField, StructStatement,
     TypeExpression, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 pub use crate::compiler::{Compilation, CompileOptions, Compiler};

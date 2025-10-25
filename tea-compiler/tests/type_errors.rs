@@ -497,3 +497,34 @@ fn rejects_const_member_assignment() {
         diagnostics.entries()
     );
 }
+
+#[test]
+fn rejects_duplicate_enum_variants() {
+    let source = r#"
+enum Color
+  Red
+  Red
+end
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("duplicate_enum.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(result.is_err(), "expected duplicate enum variants to fail");
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("duplicate variant 'Red' in enum 'Color'")),
+        "expected duplicate variant diagnostic, found {:?}",
+        messages
+    );
+}

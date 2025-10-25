@@ -1,0 +1,24 @@
+use debug = "std.debug"
+
+# Expected output:
+# Current status: Status.Pending
+# Next status: Status.Running
+
+enum Status
+  Pending
+  Running
+  Done
+end
+
+def advance(status: Status) -> Status
+  if status == Status.Pending
+    return Status.Running
+  end
+
+  Status.Done
+end
+
+var current = Status.Pending
+debug.print(`Current status: ${current}`)
+current = advance(current)
+debug.print(`Next status: ${current}`)

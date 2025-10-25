@@ -35,6 +35,13 @@ pub struct ClosureInstance {
 }
 
 #[derive(Debug, Clone)]
+pub struct EnumVariantValue {
+    pub enum_name: String,
+    pub variant_name: String,
+    pub discriminant: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     Int(i64),
@@ -46,6 +53,7 @@ pub enum Value {
     List(Rc<Vec<Value>>),
     Dict(Rc<HashMap<String, Value>>),
     Struct(Rc<StructInstance>),
+    EnumVariant(Rc<EnumVariantValue>),
 }
 
 impl Value {
@@ -104,6 +112,9 @@ impl fmt::Display for Value {
                 }
                 write!(f, ")")
             }
+            Value::EnumVariant(variant) => {
+                write!(f, "{}.{}", variant.enum_name, variant.variant_name)
+            }
         }
     }
 }
@@ -121,6 +132,12 @@ impl PartialEq for Value {
             (Value::List(a), Value::List(b)) => Rc::ptr_eq(a, b),
             (Value::Dict(a), Value::Dict(b)) => Rc::ptr_eq(a, b),
             (Value::Struct(a), Value::Struct(b)) => Rc::ptr_eq(a, b),
+            (Value::EnumVariant(a), Value::EnumVariant(b)) => {
+                Rc::ptr_eq(a, b)
+                    || (a.enum_name == b.enum_name
+                        && a.variant_name == b.variant_name
+                        && a.discriminant == b.discriminant)
+            }
             _ => false,
         }
     }

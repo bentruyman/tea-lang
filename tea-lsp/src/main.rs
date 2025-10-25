@@ -210,11 +210,13 @@ struct BlockingCompileOutput {
 enum SymbolKind {
     ModuleAlias,
     Struct,
+    Enum,
     Function,
     Const,
     Variable,
     Parameter,
     Field,
+    EnumVariant,
 }
 
 impl SymbolKind {
@@ -222,11 +224,13 @@ impl SymbolKind {
         match self {
             SymbolKind::ModuleAlias => "module",
             SymbolKind::Struct => "struct",
+            SymbolKind::Enum => "enum",
             SymbolKind::Function => "function",
             SymbolKind::Const => "const",
             SymbolKind::Variable => "variable",
             SymbolKind::Parameter => "parameter",
             SymbolKind::Field => "field",
+            SymbolKind::EnumVariant => "enum variant",
         }
     }
 
@@ -234,11 +238,13 @@ impl SymbolKind {
         match self {
             SymbolKind::ModuleAlias => CompletionItemKind::MODULE,
             SymbolKind::Struct => CompletionItemKind::STRUCT,
+            SymbolKind::Enum => CompletionItemKind::ENUM,
             SymbolKind::Function => CompletionItemKind::FUNCTION,
             SymbolKind::Const => CompletionItemKind::CONSTANT,
             SymbolKind::Variable => CompletionItemKind::VARIABLE,
             SymbolKind::Parameter => CompletionItemKind::VARIABLE,
             SymbolKind::Field => CompletionItemKind::FIELD,
+            SymbolKind::EnumVariant => CompletionItemKind::ENUM_MEMBER,
         }
     }
 }
@@ -724,6 +730,26 @@ fn collect_symbols(
                             kind: SymbolKind::Field,
                             type_desc: None,
                             docstring: None,
+                        });
+                    }
+                }
+                Statement::Enum(enum_stmt) => {
+                    let range = range_from_span!(&enum_stmt.name_span);
+                    self.symbols.push(SymbolInfo {
+                        name: enum_stmt.name.clone(),
+                        range,
+                        kind: SymbolKind::Enum,
+                        type_desc: None,
+                        docstring: enum_stmt.docstring.clone(),
+                    });
+                    for variant in &enum_stmt.variants {
+                        let range = range_from_span!(&variant.span);
+                        self.symbols.push(SymbolInfo {
+                            name: variant.name.clone(),
+                            range,
+                            kind: SymbolKind::EnumVariant,
+                            type_desc: None,
+                            docstring: variant.docstring.clone(),
                         });
                     }
                 }
@@ -1253,6 +1279,7 @@ impl LanguageServer for TeaLanguageServer {
                         item.kind = Some(match type_detail {
                             Some(ty) if ty.starts_with("Func") => CompletionItemKind::FUNCTION,
                             Some(ty) if ty == "Struct" => CompletionItemKind::STRUCT,
+                            Some(ty) if ty == "Enum" => CompletionItemKind::ENUM,
                             _ => CompletionItemKind::VARIABLE,
                         });
                         if let Some(ty) = type_detail {

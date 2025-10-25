@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
     AssignmentExpression, BinaryExpression, Block, CallExpression, ConditionalStatement,
-    DictLiteral, Expression, ExpressionKind, FunctionParameter, FunctionStatement, Identifier,
-    IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, LoopHeader,
-    LoopKind, LoopStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
-    StructStatement, TestStatement, UnaryExpression, UseStatement, VarStatement,
+    DictLiteral, EnumStatement, Expression, ExpressionKind, FunctionParameter, FunctionStatement,
+    Identifier, IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral,
+    LoopHeader, LoopKind, LoopStatement, MemberExpression, Module, ReturnStatement, SourceSpan,
+    Statement, StructStatement, TestStatement, UnaryExpression, UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -34,6 +34,7 @@ enum BindingKind {
     Parameter,
     Struct,
     Module,
+    Enum,
 }
 
 impl BindingKind {
@@ -45,6 +46,7 @@ impl BindingKind {
             BindingKind::Parameter => "parameter",
             BindingKind::Struct => "struct",
             BindingKind::Module => "module alias",
+            BindingKind::Enum => "enum",
         }
     }
 }
@@ -107,6 +109,7 @@ impl Resolver {
             Statement::Function(function_stmt) => self.resolve_function(function_stmt),
             Statement::Test(test_stmt) => self.resolve_test(test_stmt),
             Statement::Struct(struct_stmt) => self.resolve_struct(struct_stmt),
+            Statement::Enum(enum_stmt) => self.resolve_enum(enum_stmt),
             Statement::Conditional(cond_stmt) => self.resolve_conditional(cond_stmt),
             Statement::Loop(loop_stmt) => self.resolve_loop(loop_stmt),
             Statement::Return(ret_stmt) => self.resolve_return(ret_stmt),
@@ -200,6 +203,15 @@ impl Resolver {
             &struct_stmt.name,
             struct_stmt.name_span,
             BindingKind::Struct,
+            true,
+        );
+    }
+
+    fn resolve_enum(&mut self, enum_stmt: &EnumStatement) {
+        self.declare_binding(
+            &enum_stmt.name,
+            enum_stmt.name_span,
+            BindingKind::Enum,
             true,
         );
     }
@@ -525,7 +537,7 @@ impl Resolver {
                         BindingKind::Variable => format!("unused variable '{}'", name),
                         BindingKind::Const => format!("unused const '{}'", name),
                         BindingKind::Parameter => format!("unused parameter '{}'", name),
-                        BindingKind::Function | BindingKind::Struct => continue,
+                        BindingKind::Function | BindingKind::Struct | BindingKind::Enum => continue,
                         BindingKind::Module => {
                             format!("unused module alias '{}'", name)
                         }

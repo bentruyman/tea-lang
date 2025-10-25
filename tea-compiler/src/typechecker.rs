@@ -24,6 +24,7 @@ pub(crate) enum Type {
     Dict(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Struct(StructType),
+    Enum(EnumType),
     GenericParameter(String),
     Unknown,
 }
@@ -64,6 +65,7 @@ impl Type {
                     format!("{}[{args}]", struct_type.name)
                 }
             }
+            Type::Enum(enum_type) => enum_type.name.clone(),
             Type::GenericParameter(name) => name.clone(),
             Type::Unknown => "Unknown".to_string(),
         }
@@ -77,6 +79,11 @@ impl Type {
 pub(crate) struct StructType {
     pub name: String,
     pub type_arguments: Vec<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct EnumType {
+    pub name: String,
 }
 
 #[cfg_attr(not(feature = "llvm-aot"), allow(dead_code))]
@@ -106,6 +113,30 @@ pub(crate) struct FunctionSignature {
 pub(crate) struct StructDefinition {
     pub type_parameters: Vec<String>,
     pub fields: Vec<StructFieldType>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EnumDefinition {
+    pub variants: Vec<EnumVariantDefinition>,
+}
+
+impl EnumDefinition {
+    fn variant(&self, name: &str) -> Option<&EnumVariantDefinition> {
+        self.variants.iter().find(|variant| variant.name == name)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EnumVariantDefinition {
+    pub name: String,
+    pub discriminant: usize,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EnumVariantMetadata {
+    pub enum_name: String,
+    pub variant_name: String,
+    pub discriminant: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +177,7 @@ pub struct TypeChecker {
     const_scopes: Vec<HashSet<String>>,
     functions: HashMap<String, FunctionSignature>,
     structs: HashMap<String, StructDefinition>,
+    enums: HashMap<String, EnumDefinition>,
     type_parameters: Vec<HashSet<String>>,
     builtins: HashMap<String, StdFunctionKind>,
     module_aliases: HashMap<String, ModuleBinding>,
@@ -159,6 +191,7 @@ pub struct TypeChecker {
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     binding_types: HashMap<SourceSpan, Type>,
     argument_expected_types: HashMap<SourceSpan, Type>,
+    enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
 }
 
 impl TypeChecker {
@@ -168,6 +201,7 @@ impl TypeChecker {
             const_scopes: vec![HashSet::new()],
             functions: HashMap::new(),
             structs: HashMap::new(),
+            enums: HashMap::new(),
             type_parameters: Vec::new(),
             builtins: HashMap::new(),
             module_aliases: HashMap::new(),
@@ -181,12 +215,14 @@ impl TypeChecker {
             struct_call_metadata: HashMap::new(),
             binding_types: HashMap::new(),
             argument_expected_types: HashMap::new(),
+            enum_variant_metadata: HashMap::new(),
         };
         checker.register_builtin_structs();
         checker
     }
 
     pub fn check_module(&mut self, module: &Module) {
+        self.collect_enums(&module.statements);
         self.collect_structs(&module.statements);
         self.check_statements(&module.statements);
     }
@@ -229,6 +265,14 @@ impl TypeChecker {
 
     pub(crate) fn struct_definitions(&self) -> HashMap<String, StructDefinition> {
         self.structs.clone()
+    }
+
+    pub(crate) fn enum_definitions(&self) -> HashMap<String, EnumDefinition> {
+        self.enums.clone()
+    }
+
+    pub(crate) fn enum_variant_metadata(&self) -> &HashMap<SourceSpan, EnumVariantMetadata> {
+        &self.enum_variant_metadata
     }
 
     fn report_error<S: Into<String>>(&mut self, message: S, span: Option<SourceSpan>) {
@@ -356,6 +400,52 @@ impl TypeChecker {
             .insert("ProcessResult".to_string(), process_result);
     }
 
+    fn collect_enums(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            if let Statement::Enum(enum_stmt) = statement {
+                if self.enums.contains_key(&enum_stmt.name) {
+                    self.report_error(
+                        format!("duplicate enum definition '{}'", enum_stmt.name),
+                        Some(enum_stmt.name_span),
+                    );
+                    continue;
+                }
+
+                let mut seen = HashSet::new();
+                let mut variants = Vec::new();
+                for (index, variant) in enum_stmt.variants.iter().enumerate() {
+                    if !seen.insert(variant.name.clone()) {
+                        self.report_error(
+                            format!(
+                                "duplicate variant '{}' in enum '{}'",
+                                variant.name, enum_stmt.name
+                            ),
+                            Some(variant.span),
+                        );
+                        continue;
+                    }
+                    variants.push(EnumVariantDefinition {
+                        name: variant.name.clone(),
+                        discriminant: index,
+                    });
+                }
+
+                if variants.is_empty() {
+                    self.report_error(
+                        format!(
+                            "enum '{}' must declare at least one variant",
+                            enum_stmt.name
+                        ),
+                        Some(enum_stmt.name_span),
+                    );
+                }
+
+                self.enums
+                    .insert(enum_stmt.name.clone(), EnumDefinition { variants });
+            }
+        }
+    }
+
     fn collect_structs(&mut self, statements: &[Statement]) {
         // First pass: register struct names to allow forward references.
         for statement in statements {
@@ -463,6 +553,7 @@ impl TypeChecker {
             Statement::Test(test_stmt) => self.check_test(test_stmt),
             Statement::Use(use_stmt) => self.register_use(use_stmt),
             Statement::Struct(_) => {}
+            Statement::Enum(_) => {}
         }
     }
 
@@ -1183,8 +1274,12 @@ impl TypeChecker {
         }
 
         let type_parameters = self.current_type_parameters();
-        let mut parser =
-            TypeAnnotationParser::new(&type_expr.tokens, &type_parameters, &self.structs);
+        let mut parser = TypeAnnotationParser::new(
+            &type_expr.tokens,
+            &type_parameters,
+            &self.structs,
+            &self.enums,
+        );
         match parser.parse_type() {
             Ok(ty) => {
                 if parser.is_at_end() {
@@ -1245,6 +1340,13 @@ impl TypeChecker {
                     self.builtins
                         .contains_key(&identifier.name)
                         .then_some(Type::Nil)
+                })
+                .or_else(|| {
+                    self.enums.contains_key(&identifier.name).then(|| {
+                        Type::Enum(EnumType {
+                            name: identifier.name.clone(),
+                        })
+                    })
                 })
                 .or_else(|| {
                     self.structs.contains_key(&identifier.name).then(|| {
@@ -1398,6 +1500,58 @@ impl TypeChecker {
                     Type::Unknown
                 }
             }
+            Type::Enum(ref enum_type) => {
+                if let ExpressionKind::Identifier(identifier) = &member.object.kind {
+                    if identifier.name == enum_type.name {
+                        if let Some(definition) = self.enums.get(&enum_type.name) {
+                            if let Some(variant) = definition.variant(&member.property) {
+                                self.enum_variant_metadata.insert(
+                                    member_span,
+                                    EnumVariantMetadata {
+                                        enum_name: enum_type.name.clone(),
+                                        variant_name: variant.name.clone(),
+                                        discriminant: variant.discriminant,
+                                    },
+                                );
+                                return Type::Enum(enum_type.clone());
+                            } else {
+                                self.report_error(
+                                    format!(
+                                        "enum '{}' has no variant named '{}'",
+                                        enum_type.name, member.property
+                                    ),
+                                    Some(member.property_span),
+                                );
+                                return Type::Unknown;
+                            }
+                        } else {
+                            self.report_error(
+                                format!("unknown enum '{}'", enum_type.name),
+                                Some(member.property_span),
+                            );
+                            return Type::Unknown;
+                        }
+                    } else {
+                        self.report_error(
+                            format!(
+                                "enum value '{}' has no fields; reference variants as '{}.{}'",
+                                identifier.name, enum_type.name, member.property
+                            ),
+                            Some(member.property_span),
+                        );
+                        return Type::Unknown;
+                    }
+                } else {
+                    self.report_error(
+                        format!(
+                            "enum '{}' variants must be accessed using '{}.<variant>'",
+                            enum_type.name, enum_type.name
+                        ),
+                        Some(member.property_span),
+                    );
+                    return Type::Unknown;
+                }
+            }
             Type::Unknown => Type::Unknown,
             other => {
                 self.report_error(
@@ -1541,6 +1695,19 @@ impl TypeChecker {
         if let ExpressionKind::Identifier(identifier) = &call.callee.kind {
             if let Some(struct_def) = self.structs.get(&identifier.name).cloned() {
                 return self.type_from_struct_call(identifier, struct_def, call, span);
+            }
+        }
+
+        if let ExpressionKind::Identifier(identifier) = &call.callee.kind {
+            if self.enums.contains_key(&identifier.name) {
+                self.report_error(
+                    format!(
+                        "enum '{}' is not callable; use '{}.<variant>' to construct a value",
+                        identifier.name, identifier.name
+                    ),
+                    Some(identifier.span),
+                );
+                return Type::Unknown;
             }
         }
 
@@ -2356,6 +2523,7 @@ struct TypeAnnotationParser<'a> {
     position: usize,
     type_parameters: &'a HashSet<String>,
     structs: &'a HashMap<String, StructDefinition>,
+    enums: &'a HashMap<String, EnumDefinition>,
 }
 
 struct TypeError {
@@ -2387,12 +2555,14 @@ impl<'a> TypeAnnotationParser<'a> {
         tokens: &'a [Token],
         type_parameters: &'a HashSet<String>,
         structs: &'a HashMap<String, StructDefinition>,
+        enums: &'a HashMap<String, EnumDefinition>,
     ) -> Self {
         Self {
             tokens,
             position: 0,
             type_parameters,
             structs,
+            enums,
         }
     }
 
@@ -2431,13 +2601,29 @@ impl<'a> TypeAnnotationParser<'a> {
                     self.advance();
                     if self.type_parameters.contains(other) {
                         Ok(Type::GenericParameter(other.to_string()))
-                    } else {
+                    } else if self.structs.contains_key(other) {
                         let type_arguments =
                             self.parse_struct_type_arguments(other, &ident_token)?;
                         Ok(Type::Struct(StructType {
                             name: other.to_string(),
                             type_arguments,
                         }))
+                    } else if self.enums.contains_key(other) {
+                        if matches!(self.peek_kind(), Some(TokenKind::LBracket)) {
+                            let bracket = self.advance().cloned().unwrap();
+                            return Err(TypeError::at(
+                                &bracket,
+                                format!("enum '{}' does not accept type arguments", other),
+                            ));
+                        }
+                        Ok(Type::Enum(EnumType {
+                            name: other.to_string(),
+                        }))
+                    } else {
+                        Err(TypeError::at(
+                            &ident_token,
+                            format!("unknown type '{}'", other),
+                        ))
                     }
                 }
             },

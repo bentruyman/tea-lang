@@ -297,6 +297,7 @@ pub enum ExpressionKind {
     Range(RangeExpression),
     Lambda(LambdaExpression),
     Assignment(AssignmentExpression),
+    Match(MatchExpression),
     Grouping(Box<Expression>),
 }
 
@@ -391,4 +392,23 @@ pub enum LambdaBody {
 pub struct AssignmentExpression {
     pub target: Box<Expression>,
     pub value: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchExpression {
+    pub scrutinee: Box<Expression>,
+    pub arms: Vec<MatchArm>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub patterns: Vec<MatchPattern>,
+    pub expression: Expression,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub enum MatchPattern {
+    Wildcard { span: SourceSpan },
+    Expression(Expression),
 }

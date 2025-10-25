@@ -7,9 +7,9 @@ use crate::ast::{
     BinaryExpression, BinaryOperator, Block, ConditionalKind, ConditionalStatement, DictLiteral,
     Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
-    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression, Module,
-    ReturnStatement, SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator,
-    UseStatement, VarBinding, VarStatement,
+    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern,
+    MemberExpression, Module, ReturnStatement, SourceSpan, Statement, TestStatement,
+    UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase};
@@ -131,6 +131,8 @@ pub struct CodeGenerator {
     generic_binding_stack: Vec<HashMap<String, Type>>,
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     enum_definitions: HashMap<String, EnumDefinition>,
+    temp_name_counter: usize,
+    next_global_temp_slot: usize,
 }
 
 impl CodeGenerator {
@@ -155,6 +157,8 @@ impl CodeGenerator {
             generic_binding_stack: Vec::new(),
             enum_variant_metadata: metadata.enum_variant_metadata,
             enum_definitions: metadata.enum_definitions,
+            temp_name_counter: 0,
+            next_global_temp_slot: 0,
         }
     }
 
@@ -626,6 +630,9 @@ impl CodeGenerator {
             ExpressionKind::Lambda(lambda) => {
                 self.compile_lambda_expression(lambda, chunk, resolver)
             }
+            ExpressionKind::Match(match_expr) => {
+                self.compile_match_expression(match_expr, chunk, resolver)
+            }
             ExpressionKind::Range(_) => Err(CodegenError::Unsupported("expression").into()),
         }
     }
@@ -944,6 +951,52 @@ impl CodeGenerator {
         }
     }
 
+    fn allocate_temp_slot<R: Resolver>(&mut self, resolver: &mut R) -> Result<TempSlot> {
+        match resolver.kind() {
+            ResolverKind::Function => {
+                let name = format!("__match_tmp{}", self.temp_name_counter);
+                self.temp_name_counter += 1;
+                let _ = resolver.declare_local(&name, false)?;
+                Ok(TempSlot::ResolverLocal { name })
+            }
+            ResolverKind::Global => {
+                let index = self.next_global_temp_slot;
+                self.next_global_temp_slot += 1;
+                Ok(TempSlot::DirectLocal { index })
+            }
+        }
+    }
+
+    fn store_temp_slot<R: Resolver>(
+        &mut self,
+        slot: &TempSlot,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        match slot {
+            TempSlot::ResolverLocal { name } => resolver.store(self, chunk, name),
+            TempSlot::DirectLocal { index } => {
+                chunk.emit(Instruction::SetLocal(*index));
+                Ok(())
+            }
+        }
+    }
+
+    fn load_temp_slot<R: Resolver>(
+        &mut self,
+        slot: &TempSlot,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        match slot {
+            TempSlot::ResolverLocal { name } => resolver.load(self, chunk, name),
+            TempSlot::DirectLocal { index } => {
+                chunk.emit(Instruction::GetLocal(*index));
+                Ok(())
+            }
+        }
+    }
+
     fn resolve_or_insert_global(&mut self, name: &str) -> usize {
         if let Some(index) = self.globals.get(name) {
             *index
@@ -1108,6 +1161,88 @@ impl CodeGenerator {
         Ok(())
     }
 
+    fn compile_match_expression<R: Resolver>(
+        &mut self,
+        expression: &MatchExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        if expression.arms.is_empty() {
+            let nil_index = chunk.add_constant(Value::Nil);
+            chunk.emit(Instruction::Constant(nil_index));
+            return Ok(());
+        }
+
+        self.compile_expression(&expression.scrutinee, chunk, resolver)?;
+        let temp_slot = self.allocate_temp_slot(resolver)?;
+        self.store_temp_slot(&temp_slot, chunk, resolver)?;
+        chunk.emit(Instruction::Pop);
+
+        let mut end_jumps = Vec::new();
+
+        for arm in &expression.arms {
+            let (matched_jumps, fallthroughs) =
+                self.emit_match_arm_conditions(&temp_slot, &arm.patterns, chunk, resolver)?;
+
+            for jump in matched_jumps {
+                self.patch_jump(chunk, jump)?;
+            }
+
+            self.compile_expression(&arm.expression, chunk, resolver)?;
+            let exit_jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+            end_jumps.push(exit_jump);
+
+            for jump in fallthroughs {
+                self.patch_jump(chunk, jump)?;
+            }
+        }
+
+        let nil_index = chunk.add_constant(Value::Nil);
+        chunk.emit(Instruction::Constant(nil_index));
+
+        for jump in end_jumps {
+            self.patch_jump(chunk, jump)?;
+        }
+
+        Ok(())
+    }
+
+    fn emit_match_arm_conditions<R: Resolver>(
+        &mut self,
+        temp_slot: &TempSlot,
+        patterns: &[MatchPattern],
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<(Vec<usize>, Vec<usize>)> {
+        let mut matched_jumps = Vec::new();
+        let mut fallthrough_jumps = Vec::new();
+
+        for pattern in patterns {
+            for jump in fallthrough_jumps.drain(..) {
+                self.patch_jump(chunk, jump)?;
+            }
+
+            match pattern {
+                MatchPattern::Wildcard { .. } => {
+                    let jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                    matched_jumps.push(jump);
+                    return Ok((matched_jumps, Vec::new()));
+                }
+                MatchPattern::Expression(expr) => {
+                    self.load_temp_slot(temp_slot, chunk, resolver)?;
+                    self.compile_expression(expr, chunk, resolver)?;
+                    chunk.emit(Instruction::Equal);
+                    let skip = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
+                    let matched = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                    matched_jumps.push(matched);
+                    fallthrough_jumps.push(skip);
+                }
+            }
+        }
+
+        Ok((matched_jumps, fallthrough_jumps))
+    }
+
     fn emit_enum_variant(
         &mut self,
         metadata: EnumVariantMetadata,
@@ -1243,6 +1378,11 @@ impl CodeGenerator {
 enum ResolverKind {
     Global,
     Function,
+}
+
+enum TempSlot {
+    ResolverLocal { name: String },
+    DirectLocal { index: usize },
 }
 
 trait Resolver {

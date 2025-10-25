@@ -1,0 +1,42 @@
+use debug = "std.debug"
+
+# Expect: redirect, fallback
+
+var code = 302
+var message = match code
+  case 200 => "ok"
+  case 301 | 302 => "redirect"
+  case _ => "fallback"
+end
+
+debug.print(message)
+
+var token = nil
+var status = match token
+  case nil => "fallback"
+  case _ => "value"
+end
+
+debug.print(status)
+
+# Exhaustive matches are fine
+enum Color
+  Red
+  Green
+  Blue
+end
+var color: Color = Color.Red
+var output = match color
+  case Color.Red => "red"
+  case Color.Green => "green"
+  case Color.Blue => "blue"
+end
+debug.print(output)
+
+# Bools are also fine
+var bool: Bool = true
+output = match bool
+  case true => "true"
+  case false => "false"
+end
+debug.print(output)

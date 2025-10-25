@@ -4,8 +4,9 @@ use crate::ast::{
     BinaryExpression, BinaryOperator, CallArgument, CallExpression, ConditionalStatement,
     DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
     InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
-    LoopKind, LoopStatement, Module, ReturnStatement, SourceSpan, Statement, StructStatement,
-    TestStatement, TypeExpression, TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
+    LoopKind, LoopStatement, MatchExpression, MatchPattern, Module, ReturnStatement, SourceSpan,
+    Statement, StructStatement, TestStatement, TypeExpression, TypeParameter, UnaryExpression,
+    UnaryOperator, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Keyword, Token, TokenKind};
@@ -192,6 +193,7 @@ pub struct TypeChecker {
     binding_types: HashMap<SourceSpan, Type>,
     argument_expected_types: HashMap<SourceSpan, Type>,
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
+    match_exhaustiveness: HashMap<SourceSpan, Vec<String>>,
 }
 
 impl TypeChecker {
@@ -216,6 +218,7 @@ impl TypeChecker {
             binding_types: HashMap::new(),
             argument_expected_types: HashMap::new(),
             enum_variant_metadata: HashMap::new(),
+            match_exhaustiveness: HashMap::new(),
         };
         checker.register_builtin_structs();
         checker
@@ -275,6 +278,10 @@ impl TypeChecker {
         &self.enum_variant_metadata
     }
 
+    pub(crate) fn match_exhaustiveness(&self) -> &HashMap<SourceSpan, Vec<String>> {
+        &self.match_exhaustiveness
+    }
+
     fn report_error<S: Into<String>>(&mut self, message: S, span: Option<SourceSpan>) {
         let message = message.into();
         if let Some(span) = span {
@@ -283,6 +290,11 @@ impl TypeChecker {
         } else {
             self.diagnostics.push(message);
         }
+    }
+
+    fn report_warning<S: Into<String>>(&mut self, message: S, span: Option<SourceSpan>) {
+        self.diagnostics
+            .push_warning_with_span(message.into(), span);
     }
 
     fn register_builtin_structs(&mut self) {
@@ -1374,9 +1386,263 @@ impl TypeChecker {
             ExpressionKind::List(list) => self.type_from_list(list, expression.span),
             ExpressionKind::Dict(dict) => self.type_from_dict(dict, expression.span),
             ExpressionKind::Member(member) => self.type_from_member(member, expression.span),
+            ExpressionKind::Match(match_expr) => self.type_from_match(match_expr, expression.span),
             ExpressionKind::Index(index) => self.type_from_index(index, expression.span),
             ExpressionKind::Range(_) => Type::Unknown,
         }
+    }
+
+    fn type_from_match(&mut self, expression: &MatchExpression, span: SourceSpan) -> Type {
+        let scrutinee_type = self.infer_expression(&expression.scrutinee);
+        let mut result_type: Option<Type> = None;
+
+        let enum_variant_total = if let Type::Enum(enum_type) = &scrutinee_type {
+            self.enums
+                .get(&enum_type.name)
+                .map(|definition| definition.variants.len())
+        } else {
+            None
+        };
+
+        let mut coverage_complete = false;
+        let mut matched_bool_values: HashSet<bool> = HashSet::new();
+        let mut matched_enum_variants: HashSet<String> = HashSet::new();
+        let mut coverage_due_to_wildcard = false;
+
+        for arm in &expression.arms {
+            let arm_reachable = !coverage_complete;
+            let arm_is_wildcard_only = arm
+                .patterns
+                .iter()
+                .all(|pattern| matches!(pattern, MatchPattern::Wildcard { .. }));
+            let suppress_unreachable =
+                !arm_reachable && arm_is_wildcard_only && !coverage_due_to_wildcard;
+
+            if !arm_reachable && !suppress_unreachable {
+                self.report_warning(
+                    "match arm is unreachable; previous patterns cover all values",
+                    Some(arm.span),
+                );
+            }
+
+            let mut arm_adds_coverage = false;
+
+            for pattern in &arm.patterns {
+                match pattern {
+                    MatchPattern::Wildcard { span: pattern_span } => {
+                        if suppress_unreachable {
+                            continue;
+                        }
+
+                        if !arm_reachable {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(*pattern_span),
+                            );
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            if coverage_due_to_wildcard {
+                                self.report_warning(
+                                    "pattern is unreachable; previous patterns cover all values",
+                                    Some(*pattern_span),
+                                );
+                            }
+                        } else {
+                            arm_adds_coverage = true;
+                            coverage_complete = true;
+                            coverage_due_to_wildcard = true;
+                        }
+                    }
+                    MatchPattern::Expression(pattern_expr) => {
+                        let pattern_type = self.infer_expression(pattern_expr);
+                        if scrutinee_type != Type::Unknown
+                            && pattern_type != Type::Unknown
+                            && pattern_type != scrutinee_type
+                        {
+                            self.report_error(
+                                format!(
+                                    "pattern type '{}' is incompatible with scrutinee type '{}'",
+                                    pattern_type.describe(),
+                                    scrutinee_type.describe()
+                                ),
+                                Some(pattern_expr.span),
+                            );
+                        }
+
+                        if suppress_unreachable {
+                            continue;
+                        }
+
+                        if !arm_reachable {
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(pattern_expr.span),
+                            );
+                            continue;
+                        }
+
+                        match (&scrutinee_type, &pattern_expr.kind) {
+                            (Type::Bool, ExpressionKind::Literal(Literal::Boolean(value))) => {
+                                if !matched_bool_values.insert(*value) {
+                                    self.report_warning(
+                                        format!(
+                                            "pattern `{}` is unreachable; value already matched",
+                                            value
+                                        ),
+                                        Some(pattern_expr.span),
+                                    );
+                                } else {
+                                    arm_adds_coverage = true;
+                                    if matched_bool_values.len() == 2 {
+                                        coverage_complete = true;
+                                    }
+                                }
+                            }
+                            (Type::Enum(enum_type), _) => {
+                                let variant_name = if let Some(metadata) =
+                                    self.enum_variant_metadata.get(&pattern_expr.span)
+                                {
+                                    if metadata.enum_name == enum_type.name {
+                                        Some(metadata.variant_name.clone())
+                                    } else {
+                                        None
+                                    }
+                                } else if let ExpressionKind::Member(member) = &pattern_expr.kind {
+                                    if let ExpressionKind::Identifier(identifier) =
+                                        &member.object.kind
+                                    {
+                                        if identifier.name == enum_type.name {
+                                            Some(member.property.clone())
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
+
+                                if let Some(variant) = variant_name {
+                                    if !matched_enum_variants.insert(variant.clone()) {
+                                        self.report_warning(
+                                            format!(
+                                                "pattern `{}.{}` is unreachable; variant already matched",
+                                                enum_type.name, variant
+                                            ),
+                                            Some(pattern_expr.span),
+                                        );
+                                    } else {
+                                        arm_adds_coverage = true;
+                                        if let Some(total) = enum_variant_total {
+                                            if matched_enum_variants.len() == total {
+                                                coverage_complete = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            let coverage_trackable =
+                coverage_due_to_wildcard || matches!(scrutinee_type, Type::Bool | Type::Enum(_));
+            if !arm_adds_coverage && arm_reachable && coverage_trackable {
+                self.report_warning(
+                    "match arm is unreachable; previous patterns cover all values",
+                    Some(arm.span),
+                );
+            }
+
+            let arm_type = self.infer_expression(&arm.expression);
+            match &mut result_type {
+                Some(existing) => {
+                    if *existing == Type::Unknown {
+                        *existing = arm_type.clone();
+                    } else if arm_type != Type::Unknown && arm_type != *existing {
+                        self.report_error(
+                            format!(
+                                "match arm returns '{}', expected '{}'",
+                                arm_type.describe(),
+                                existing.describe()
+                            ),
+                            Some(arm.expression.span),
+                        );
+                    }
+                }
+                None => result_type = Some(arm_type.clone()),
+            }
+        }
+
+        let mut missing_patterns: Vec<String> = Vec::new();
+        if !coverage_complete {
+            match &scrutinee_type {
+                Type::Bool => {
+                    if !matched_bool_values.contains(&true) {
+                        missing_patterns.push("true".to_string());
+                    }
+                    if !matched_bool_values.contains(&false) {
+                        missing_patterns.push("false".to_string());
+                    }
+                }
+                Type::Enum(enum_type) => {
+                    if let Some(definition) = self.enums.get(&enum_type.name) {
+                        for variant in &definition.variants {
+                            if !matched_enum_variants.contains(&variant.name) {
+                                missing_patterns
+                                    .push(format!("{}.{}", enum_type.name, variant.name));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if coverage_complete {
+            self.match_exhaustiveness.remove(&span);
+        } else if !missing_patterns.is_empty() {
+            let preview = missing_patterns
+                .iter()
+                .take(3)
+                .map(|case| format!("`{case}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let message = if missing_patterns.len() <= 3 {
+                format!("match expression is not exhaustive; missing {preview}")
+            } else {
+                format!(
+                    "match expression is not exhaustive; missing {} cases (e.g. {})",
+                    missing_patterns.len(),
+                    preview
+                )
+            };
+            self.report_error(message, Some(span));
+            self.match_exhaustiveness.insert(span, missing_patterns);
+        } else {
+            self.report_error(
+                "match expression is not exhaustive; add `_` arm or cover all values".to_string(),
+                Some(span),
+            );
+            self.match_exhaustiveness.remove(&span);
+        }
+
+        result_type.unwrap_or_else(|| {
+            self.report_error(
+                "match expression without cases has unknown type".to_string(),
+                Some(span),
+            );
+            Type::Unknown
+        })
     }
 
     fn type_from_list(&mut self, list: &ListLiteral, _span: SourceSpan) -> Type {

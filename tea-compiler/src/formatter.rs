@@ -161,7 +161,7 @@ fn is_block_closer(code: &str) -> bool {
 
 fn opens_block(code: &str) -> bool {
     const BLOCK_KEYWORDS: &[&str] = &[
-        "def", "if", "unless", "for", "while", "until", "struct", "else",
+        "def", "if", "unless", "for", "while", "until", "struct", "else", "match",
     ];
     BLOCK_KEYWORDS
         .iter()

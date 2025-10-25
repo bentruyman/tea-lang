@@ -105,6 +105,26 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Variadic functions (future): `def log(*messages)` (not in initial prototype).
 - Modules expose names declared at top-level via the alias you choose (`use fs = "std.fs"` then `fs.read_text("path")`). Relative modules continue to inline their declarations at compile time, but future revisions may surface them under aliases as well.
 
+## Match Expressions
+- `match` evaluates its scrutinee once and dispatches to the first `case` whose pattern succeeds. The expression evaluates to the selected arm's value.
+- Patterns accept literals (`"ok"`, `42`, `true`), identifiers (including constants in scope), enum variants (`Option.Some`), and the `_` wildcard. Multiple patterns can share an arm via `|`.
+- Add a trailing `_` arm to cover the default path. The compiler recognises `Bool` and enum matches as exhaustive when all literals/variants appear; otherwise add `_` to silence the exhaustiveness error.
+- Duplicate patterns or arms that can never be reached (e.g. a wildcard followed by more cases) trigger warnings so you can simplify the expression.
+- Patterns run in expression position, so they can reference previously bound names or module members.
+
+```tea
+match response.status
+  case 200 => "ok"
+  case 301 | 302 => "redirect"
+  case _ => "error"
+end
+
+match maybe_user
+  case Auth.User => "authenticated"
+  case _ => "guest"
+end
+```
+
 ## Runtime & Execution Model
 - Programs execute top-to-bottom. Each file compiles to a module containing a top-level block invoked when loaded.
 - Running the CLI executes the main file's module block, leaving exported bindings in the module namespace.
@@ -121,11 +141,11 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Runtime errors provide stack trace (function names, location).
 
 ## Prototype Scope
-- Implement: integers, booleans, strings, lists; `if/unless`, `for/while/until`, functions, `return`, lambda literals (`|x| => expr`, `|| => expr`).
+- Implement: integers, booleans, strings, lists; `if/unless`, `for/while/until`, `match`, functions, `return`, lambda literals (`|x| => expr`, `|| => expr`).
 - Omit (mark TODO):
   - Dictionaries, modules beyond `use` stub.
   - Keyword args and default params beyond simple expressions.
-  - Pattern matching, HTTP runtime.
+  - HTTP runtime.
 - Ensure CLI supports `tea file.tea`, `--dump-tokens`, `--dump-ast`, `--emit=ir` (stub).
 
 ## Example Execution Flow

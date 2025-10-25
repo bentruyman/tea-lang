@@ -17,11 +17,11 @@ use tokio_util::sync::CancellationToken;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse,
-    Diagnostic as LspDiagnostic, DiagnosticSeverity, DidChangeTextDocumentParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverContents, HoverParams, HoverProviderCapability,
-    InitializeParams, InitializeResult, InitializedParams, Location, MarkupContent, MarkupKind,
-    MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
+    Diagnostic as LspDiagnostic, DiagnosticRelatedInformation, DiagnosticSeverity,
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
+    MarkupContent, MarkupKind, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
     TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkDoneProgressOptions,
 };
 use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
@@ -90,6 +90,7 @@ struct DocumentAnalysis {
     symbols: Vec<SymbolInfo>,
     module_aliases: HashMap<String, tea_compiler::ModuleAliasBinding>,
     argument_expectations: Vec<ArgumentExpectation>,
+    match_exhaustiveness: HashMap<tea_compiler::SourceSpan, Vec<String>>,
 }
 
 #[cfg(test)]
@@ -119,6 +120,7 @@ end
             &compilation.module_aliases,
             &compilation.binding_types,
             &compilation.argument_types,
+            &compilation.match_exhaustiveness,
         );
 
         let debug_binding = analysis
@@ -163,6 +165,7 @@ end
             &compilation.module_aliases,
             &compilation.binding_types,
             &compilation.argument_types,
+            &compilation.match_exhaustiveness,
         );
 
         let flag_symbol = analysis
@@ -425,14 +428,34 @@ impl TeaLanguageServer {
         let BlockingCompileOutput {
             analysis,
             dependencies,
-            diagnostics,
+            diagnostics: compiler_diags,
             compile_error,
         } = output;
 
-        let mut diagnostics = diagnostics
-            .iter()
-            .map(convert_diagnostic)
-            .collect::<Vec<_>>();
+        let mut diagnostics = Vec::with_capacity(compiler_diags.len());
+        for diagnostic in &compiler_diags {
+            let mut converted = convert_diagnostic(diagnostic);
+            if let (Some(span), Some(analysis)) = (diagnostic.span, analysis.as_ref()) {
+                if let Some(missing) = analysis.match_exhaustiveness.get(&span) {
+                    if !missing.is_empty() {
+                        let related = missing
+                            .iter()
+                            .map(|case| DiagnosticRelatedInformation {
+                                location: Location {
+                                    uri: uri.clone(),
+                                    range: converted.range,
+                                },
+                                message: format!("missing case: {case}"),
+                            })
+                            .collect::<Vec<_>>();
+                        if !related.is_empty() {
+                            converted.related_information = Some(related);
+                        }
+                    }
+                }
+            }
+            diagnostics.push(converted);
+        }
 
         let mut dependents_to_recompile: Vec<(Url, i32)> = Vec::new();
         {
@@ -609,6 +632,7 @@ fn collect_symbols(
     module_aliases: &HashMap<String, ModuleAliasBinding>,
     binding_types: &HashMap<tea_compiler::SourceSpan, String>,
     argument_types: &HashMap<tea_compiler::SourceSpan, String>,
+    match_exhaustiveness: &HashMap<tea_compiler::SourceSpan, Vec<String>>,
 ) -> DocumentAnalysis {
     let mut alias_bindings = module_aliases.clone();
     for binding in alias_bindings.values_mut() {
@@ -864,6 +888,17 @@ fn collect_symbols(
                     self.visit_expression(&expr.target);
                     self.visit_expression(&expr.value);
                 }
+                ExpressionKind::Match(expr) => {
+                    self.visit_expression(&expr.scrutinee);
+                    for arm in &expr.arms {
+                        for pattern in &arm.patterns {
+                            if let tea_compiler::MatchPattern::Expression(pattern_expr) = pattern {
+                                self.visit_expression(pattern_expr);
+                            }
+                        }
+                        self.visit_expression(&arm.expression);
+                    }
+                }
                 ExpressionKind::Grouping(inner) => {
                     self.visit_expression(inner);
                 }
@@ -901,6 +936,7 @@ fn collect_symbols(
         symbols,
         module_aliases: alias_bindings,
         argument_expectations,
+        match_exhaustiveness: match_exhaustiveness.clone(),
     }
 }
 
@@ -1444,6 +1480,7 @@ impl TeaLanguageServer {
                     &compilation.module_aliases,
                     &compilation.binding_types,
                     &compilation.argument_types,
+                    &compilation.match_exhaustiveness,
                 );
                 BlockingCompileOutput {
                     analysis: Some(analysis),
@@ -1525,15 +1562,36 @@ impl TeaLanguageServer {
         }
 
         let BlockingCompileOutput {
+            analysis,
             diagnostics: compiler_diags,
             compile_error,
             ..
         } = output;
 
-        let mut diagnostics = compiler_diags
-            .iter()
-            .map(convert_diagnostic)
-            .collect::<Vec<_>>();
+        let mut diagnostics = Vec::with_capacity(compiler_diags.len());
+        for diagnostic in &compiler_diags {
+            let mut converted = convert_diagnostic(diagnostic);
+            if let (Some(span), Some(analysis)) = (diagnostic.span, analysis.as_ref()) {
+                if let Some(missing) = analysis.match_exhaustiveness.get(&span) {
+                    if !missing.is_empty() {
+                        let related = missing
+                            .iter()
+                            .map(|case| DiagnosticRelatedInformation {
+                                location: Location {
+                                    uri: url.clone(),
+                                    range: converted.range,
+                                },
+                                message: format!("missing case: {case}"),
+                            })
+                            .collect::<Vec<_>>();
+                        if !related.is_empty() {
+                            converted.related_information = Some(related);
+                        }
+                    }
+                }
+            }
+            diagnostics.push(converted);
+        }
 
         if let Some(message) = compile_error {
             if diagnostics.is_empty() {

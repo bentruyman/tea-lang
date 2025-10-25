@@ -954,6 +954,7 @@ impl<'a> Parser<'a> {
                 token_span,
                 ExpressionKind::Literal(Literal::Nil),
             )),
+            TokenKind::Keyword(Keyword::Match) => self.parse_match_expression(token_span),
             TokenKind::Minus => {
                 let operand = self.parse_expression_prec(Precedence::Unary, terminator)?;
                 let span = Self::union_spans(&token_span, &operand.span);
@@ -1057,6 +1058,168 @@ impl<'a> Parser<'a> {
                     );
                     bail!("invalid interpolated string");
                 }
+            }
+        }
+    }
+
+    fn parse_match_expression(&mut self, match_span: SourceSpan) -> Result<Expression> {
+        self.skip_newlines();
+        let scrutinee =
+            self.parse_expression_prec(Precedence::Lowest, default_expression_terminator)?;
+        self.expect_newline("expected newline after match scrutinee")?;
+
+        let mut arms = Vec::new();
+        loop {
+            self.skip_newlines();
+            match self.peek_kind() {
+                TokenKind::Keyword(Keyword::Case) => {
+                    let arm = self.parse_match_arm()?;
+                    arms.push(arm);
+                }
+                TokenKind::Keyword(Keyword::End) => break,
+                TokenKind::Eof => {
+                    self.diagnostics
+                        .push_error_with_span("unterminated match expression", Some(match_span));
+                    bail!("unterminated match expression");
+                }
+                other => {
+                    let token = self.peek().clone();
+                    self.diagnostics.push_error_with_span(
+                        format!("unexpected token {:?} inside match expression", other),
+                        Some(Self::span_from_token(&token)),
+                    );
+                    bail!("invalid match expression");
+                }
+            }
+        }
+
+        if arms.is_empty() {
+            self.diagnostics.push_error_with_span(
+                "match expression requires at least one case",
+                Some(match_span),
+            );
+            bail!("match expression requires cases");
+        }
+
+        let end_token = self.peek().clone();
+        self.expect_keyword(Keyword::End, "expected 'end' to close match expression")?;
+        let end_span = Self::span_from_token(&end_token);
+
+        let scrutinee_span = scrutinee.span;
+        let mut span = Self::union_spans(&match_span, &scrutinee_span);
+        if let Some(last_arm) = arms.last() {
+            span = Self::union_spans(&span, &last_arm.span);
+        }
+        span = Self::union_spans(&span, &end_span);
+
+        Ok(Self::make_expression(
+            span,
+            ExpressionKind::Match(MatchExpression {
+                scrutinee: Box::new(scrutinee),
+                arms,
+            }),
+        ))
+    }
+
+    fn parse_match_arm(&mut self) -> Result<MatchArm> {
+        let case_token = self.advance().clone();
+        let case_span = Self::span_from_token(&case_token);
+
+        let mut patterns = Vec::new();
+        loop {
+            let pattern = self.parse_match_pattern()?;
+            patterns.push(pattern);
+
+            self.skip_newlines();
+            if matches!(self.peek_kind(), TokenKind::Pipe) {
+                self.advance();
+                continue;
+            }
+            break;
+        }
+
+        if patterns.is_empty() {
+            self.diagnostics
+                .push_error_with_span("match cases require at least one pattern", Some(case_span));
+            bail!("match case missing pattern");
+        }
+
+        self.expect_token(TokenKind::FatArrow, "expected '=>' after match pattern")?;
+        self.skip_newlines();
+        let expression = self.parse_expression_with(terminator_match_arm_expression)?;
+        let arm_span = Self::union_spans(&case_span, &expression.span);
+
+        match self.peek_kind() {
+            TokenKind::Newline => {
+                self.skip_newlines();
+            }
+            TokenKind::Keyword(Keyword::End) | TokenKind::Eof => {}
+            other => {
+                let span = Self::span_from_token(&self.peek().clone());
+                self.diagnostics.push_error_with_span(
+                    format!(
+                        "expected newline after match arm expression (found '{:?}')",
+                        other
+                    ),
+                    Some(span),
+                );
+                bail!("expected newline after match arm");
+            }
+        }
+
+        Ok(MatchArm {
+            patterns,
+            expression,
+            span: arm_span,
+        })
+    }
+
+    fn parse_match_pattern(&mut self) -> Result<MatchPattern> {
+        self.skip_newlines();
+        if matches!(self.peek_kind(), TokenKind::Pipe | TokenKind::FatArrow) {
+            let token = self.peek().clone();
+            self.diagnostics.push_error_with_span(
+                "expected pattern before '|'",
+                Some(Self::span_from_token(&token)),
+            );
+            bail!("missing pattern");
+        }
+
+        let expression =
+            self.parse_expression_prec(Precedence::Lowest, terminator_match_pattern)?;
+        self.build_match_pattern(expression)
+    }
+
+    fn build_match_pattern(&mut self, expression: Expression) -> Result<MatchPattern> {
+        if let ExpressionKind::Identifier(identifier) = &expression.kind {
+            if identifier.name == "_" {
+                return Ok(MatchPattern::Wildcard {
+                    span: expression.span,
+                });
+            }
+        }
+
+        let span = expression.span;
+        match expression.kind {
+            ExpressionKind::Literal(literal) => Ok(MatchPattern::Expression(Expression {
+                span,
+                kind: ExpressionKind::Literal(literal),
+            })),
+            ExpressionKind::Identifier(identifier) => Ok(MatchPattern::Expression(Expression {
+                span,
+                kind: ExpressionKind::Identifier(identifier),
+            })),
+            ExpressionKind::Member(member) => Ok(MatchPattern::Expression(Expression {
+                span,
+                kind: ExpressionKind::Member(member),
+            })),
+            ExpressionKind::Grouping(inner) => self.build_match_pattern(*inner),
+            _ => {
+                self.diagnostics.push_error_with_span(
+                    "match patterns may only contain literals, identifiers, or enum variants",
+                    Some(span),
+                );
+                bail!("invalid match pattern");
             }
         }
     }
@@ -1796,6 +1959,28 @@ fn terminator_keyword_of(kind: &TokenKind) -> bool {
 
 fn terminator_rparen(kind: &TokenKind) -> bool {
     matches!(kind, TokenKind::RParen)
+}
+
+fn terminator_match_pattern(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Pipe
+            | TokenKind::FatArrow
+            | TokenKind::Newline
+            | TokenKind::Semicolon
+            | TokenKind::Eof
+    )
+}
+
+fn terminator_match_arm_expression(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Newline
+            | TokenKind::Semicolon
+            | TokenKind::Eof
+            | TokenKind::Keyword(Keyword::Case)
+            | TokenKind::Keyword(Keyword::End)
+    )
 }
 
 fn terminator_rbracket(kind: &TokenKind) -> bool {

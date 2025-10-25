@@ -4,8 +4,9 @@ use crate::ast::{
     AssignmentExpression, BinaryExpression, Block, CallExpression, ConditionalStatement,
     DictLiteral, EnumStatement, Expression, ExpressionKind, FunctionParameter, FunctionStatement,
     Identifier, IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral,
-    LoopHeader, LoopKind, LoopStatement, MemberExpression, Module, ReturnStatement, SourceSpan,
-    Statement, StructStatement, TestStatement, UnaryExpression, UseStatement, VarStatement,
+    LoopHeader, LoopKind, LoopStatement, MatchPattern, MemberExpression, Module, ReturnStatement,
+    SourceSpan, Statement, StructStatement, TestStatement, UnaryExpression, UseStatement,
+    VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -289,6 +290,17 @@ impl Resolver {
             }
             ExpressionKind::Lambda(lambda) => self.resolve_lambda(lambda),
             ExpressionKind::Assignment(assignment) => self.resolve_assignment(assignment),
+            ExpressionKind::Match(match_expr) => {
+                self.resolve_expression(&match_expr.scrutinee);
+                for arm in &match_expr.arms {
+                    for pattern in &arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.resolve_expression(pattern_expr);
+                        }
+                    }
+                    self.resolve_expression(&arm.expression);
+                }
+            }
             ExpressionKind::Grouping(inner) => self.resolve_expression(inner),
         }
     }

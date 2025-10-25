@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::ast::{
     Block, Expression, ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody, LoopHeader,
-    Module, SourceSpan, Statement, TypeExpression,
+    MatchPattern, Module, SourceSpan, Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
@@ -61,6 +61,7 @@ pub struct Compilation {
     pub module_aliases: HashMap<String, ModuleAliasBinding>,
     pub binding_types: HashMap<SourceSpan, String>,
     pub argument_types: HashMap<SourceSpan, String>,
+    pub match_exhaustiveness: HashMap<SourceSpan, Vec<String>>,
 }
 
 pub struct Compiler {
@@ -163,6 +164,7 @@ impl Compiler {
             .iter()
             .map(|(span, ty)| (*span, ty.describe()))
             .collect::<HashMap<_, _>>();
+        let match_exhaustiveness = type_checker.match_exhaustiveness().clone();
         let global_binding_types = type_checker
             .global_binding_types()
             .into_iter()
@@ -274,6 +276,7 @@ impl Compiler {
             module_aliases,
             binding_types,
             argument_types,
+            match_exhaustiveness,
         })
     }
 }
@@ -724,6 +727,17 @@ impl ModuleExpander {
                 self.rewrite_expression_identifiers(&mut assignment.target, rename_map);
                 self.rewrite_expression_identifiers(&mut assignment.value, rename_map);
             }
+            ExpressionKind::Match(match_expr) => {
+                self.rewrite_expression_identifiers(&mut match_expr.scrutinee, rename_map);
+                for arm in &mut match_expr.arms {
+                    for pattern in &mut arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                        }
+                    }
+                    self.rewrite_expression_identifiers(&mut arm.expression, rename_map);
+                }
+            }
             ExpressionKind::Grouping(expr) => {
                 self.rewrite_expression_identifiers(expr, rename_map);
             }
@@ -887,6 +901,17 @@ impl ModuleExpander {
                     self.rewrite_block_alias(block, alias_maps);
                 }
             },
+            ExpressionKind::Match(match_expr) => {
+                self.rewrite_expression_alias(&mut match_expr.scrutinee, alias_maps);
+                for arm in &mut match_expr.arms {
+                    for pattern in &mut arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.rewrite_expression_alias(pattern_expr, alias_maps);
+                        }
+                    }
+                    self.rewrite_expression_alias(&mut arm.expression, alias_maps);
+                }
+            }
             ExpressionKind::Grouping(expr) => {
                 self.rewrite_expression_alias(expr, alias_maps);
             }

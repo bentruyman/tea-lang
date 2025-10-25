@@ -2531,6 +2531,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ExpressionKind::Lambda(lambda) => {
                 self.compile_lambda_expression(lambda, function, locals)
             }
+            ExpressionKind::Match(_) => bail!("unsupported expression"),
             ExpressionKind::Range(_) => bail!("unsupported expression"),
         }
     }

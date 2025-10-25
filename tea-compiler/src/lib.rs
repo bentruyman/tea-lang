@@ -15,9 +15,10 @@ pub use crate::ast::{
     ConditionalStatement, DictEntry, DictLiteral, EnumStatement, EnumVariant, Expression,
     ExpressionKind, ExpressionStatement, FunctionParameter, FunctionStatement, Identifier,
     IndexExpression, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
-    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MemberExpression,
-    Module, RangeExpression, ReturnStatement, SourceSpan, Statement, StructField, StructStatement,
-    TypeExpression, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
+    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchArm,
+    MatchExpression, MatchPattern, MemberExpression, Module, RangeExpression, ReturnStatement,
+    SourceSpan, Statement, StructField, StructStatement, TypeExpression, UnaryExpression,
+    UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 pub use crate::compiler::{Compilation, CompileOptions, Compiler};
 pub use crate::diagnostics::{Diagnostic, DiagnosticLevel, Diagnostics};

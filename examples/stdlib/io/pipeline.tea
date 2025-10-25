@@ -4,6 +4,7 @@ use json = "std.json"
 # Reads a JSON object from stdin and echoes a reformatted payload.
 
 var line = io.read_line()
+
 if line == nil
   io.write_err("no input provided\n")
   io.flush()

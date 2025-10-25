@@ -3,12 +3,14 @@ use debug = "std.debug"
 # Expect: 0, 1, 2, true
 
 var count = 0
+
 while count < 2
   debug.print(count)
   count = count + 1
 end
 
 var flag = false
+
 until flag == true
   flag = true
 end

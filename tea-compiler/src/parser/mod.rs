@@ -108,7 +108,8 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Const) => {
                 self.parse_binding(Keyword::Const, docstring.clone())
             }
-            TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring.clone()),
+            TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring.clone(), false),
+            TokenKind::Keyword(Keyword::Pub) => self.parse_public_statement(docstring.clone()),
             TokenKind::Keyword(Keyword::Test) => self.parse_test(docstring.clone()),
             TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
@@ -118,6 +119,27 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Until) => self.parse_loop(LoopKind::Until),
             TokenKind::Keyword(Keyword::Return) => self.parse_return(),
             _ => self.parse_expression_statement(),
+        }
+    }
+
+    fn parse_public_statement(&mut self, docstring: Option<String>) -> Result<Statement> {
+        let pub_token = self.peek().clone();
+        self.advance(); // consume 'pub'
+        self.skip_newlines();
+
+        match self.peek_kind() {
+            TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring, true),
+            other => {
+                let span = Self::span_from_token(&pub_token);
+                self.diagnostics.push_error_with_span(
+                    format!(
+                        "unexpected {:?} after 'pub', only functions can be declared public",
+                        other
+                    ),
+                    Some(span),
+                );
+                bail!("invalid public declaration");
+            }
         }
     }
 
@@ -271,7 +293,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_function(&mut self, docstring: Option<String>) -> Result<Statement> {
+    fn parse_function(&mut self, docstring: Option<String>, is_public: bool) -> Result<Statement> {
         self.advance(); // consume 'def'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -320,6 +342,7 @@ impl<'a> Parser<'a> {
         self.expect_newline("expected newline after function end")?;
 
         Ok(Statement::Function(FunctionStatement {
+            is_public,
             name,
             name_span,
             type_parameters,

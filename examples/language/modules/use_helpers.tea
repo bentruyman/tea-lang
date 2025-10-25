@@ -5,6 +5,7 @@ use another = "./another"
 # Expect:
 # 6
 # 4
+# Attempting to call the private `scale` helper would fail at compile time.
 
 debug.print(helpers.triple(2))
 debug.print(another.triple(2))

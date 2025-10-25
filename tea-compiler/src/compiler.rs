@@ -387,18 +387,18 @@ impl ModuleExpander {
                         }
                     };
 
-                    let (mut renamed, rename_map, docstrings) =
+                    let (mut renamed, export_renames, docstrings) =
                         self.rename_module_statements(module, &use_stmt.alias.name);
-                    let exports = rename_map.keys().cloned().collect();
+                    let exports = export_renames.keys().cloned().collect();
                     self.alias_exports
                         .insert(use_stmt.alias.name.clone(), exports);
                     self.alias_export_renames
-                        .insert(use_stmt.alias.name.clone(), rename_map.clone());
+                        .insert(use_stmt.alias.name.clone(), export_renames.clone());
                     if !docstrings.is_empty() {
                         self.alias_export_docstrings
                             .insert(use_stmt.alias.name.clone(), docstrings);
                     }
-                    alias_maps.insert(use_stmt.alias.name.clone(), rename_map);
+                    alias_maps.insert(use_stmt.alias.name.clone(), export_renames);
                     result.append(&mut renamed);
                 }
                 _ => result.push(statement.clone()),
@@ -419,27 +419,28 @@ impl ModuleExpander {
         HashMap<String, String>,
         HashMap<String, String>,
     ) {
-        let mut rename_map: HashMap<String, String> = HashMap::new();
+        let mut all_renames: HashMap<String, String> = HashMap::new();
+        let mut export_renames: HashMap<String, String> = HashMap::new();
         let mut docstrings: HashMap<String, String> = HashMap::new();
         for statement in &module.statements {
             match statement {
                 Statement::Function(function) => {
-                    rename_map.insert(
-                        function.name.clone(),
-                        format!("__module_{}_{}", alias, function.name),
-                    );
-                    if let Some(doc) = function.docstring.clone() {
-                        if !doc.is_empty() {
-                            docstrings.insert(function.name.clone(), doc);
+                    let renamed = format!("__module_{}_{}", alias, function.name);
+                    all_renames.insert(function.name.clone(), renamed.clone());
+                    if function.is_public {
+                        export_renames.insert(function.name.clone(), renamed);
+                        if let Some(doc) = function.docstring.as_ref() {
+                            if !doc.is_empty() {
+                                docstrings.insert(function.name.clone(), doc.clone());
+                            }
                         }
                     }
                 }
                 Statement::Var(var_stmt) => {
                     for binding in &var_stmt.bindings {
-                        rename_map.insert(
-                            binding.name.clone(),
-                            format!("__module_{}_{}", alias, binding.name),
-                        );
+                        let renamed = format!("__module_{}_{}", alias, binding.name);
+                        all_renames.insert(binding.name.clone(), renamed.clone());
+                        export_renames.insert(binding.name.clone(), renamed);
                         if let Some(doc) = var_stmt.docstring.as_ref() {
                             if !doc.is_empty() {
                                 docstrings.insert(binding.name.clone(), doc.clone());
@@ -448,13 +449,12 @@ impl ModuleExpander {
                     }
                 }
                 Statement::Struct(struct_stmt) => {
-                    rename_map.insert(
-                        struct_stmt.name.clone(),
-                        format!("__module_{}_{}", alias, struct_stmt.name),
-                    );
-                    if let Some(doc) = struct_stmt.docstring.clone() {
+                    let renamed = format!("__module_{}_{}", alias, struct_stmt.name);
+                    all_renames.insert(struct_stmt.name.clone(), renamed.clone());
+                    export_renames.insert(struct_stmt.name.clone(), renamed);
+                    if let Some(doc) = struct_stmt.docstring.as_ref() {
                         if !doc.is_empty() {
-                            docstrings.insert(struct_stmt.name.clone(), doc);
+                            docstrings.insert(struct_stmt.name.clone(), doc.clone());
                         }
                     }
                 }
@@ -466,30 +466,30 @@ impl ModuleExpander {
         for mut statement in module.statements {
             match &mut statement {
                 Statement::Function(function) => {
-                    if let Some(new_name) = rename_map.get(&function.name).cloned() {
+                    if let Some(new_name) = all_renames.get(&function.name).cloned() {
                         function.name = new_name;
                     }
                 }
                 Statement::Var(var_stmt) => {
                     for binding in &mut var_stmt.bindings {
-                        if let Some(new_name) = rename_map.get(&binding.name).cloned() {
+                        if let Some(new_name) = all_renames.get(&binding.name).cloned() {
                             binding.name = new_name;
                         }
                     }
                 }
                 Statement::Struct(struct_stmt) => {
-                    if let Some(new_name) = rename_map.get(&struct_stmt.name).cloned() {
+                    if let Some(new_name) = all_renames.get(&struct_stmt.name).cloned() {
                         struct_stmt.name = new_name;
                     }
                 }
                 _ => {}
             }
 
-            self.rewrite_statement_identifiers(&mut statement, &rename_map);
+            self.rewrite_statement_identifiers(&mut statement, &all_renames);
             renamed.push(statement);
         }
 
-        (renamed, rename_map, docstrings)
+        (renamed, export_renames, docstrings)
     }
 
     fn rewrite_alias_access(

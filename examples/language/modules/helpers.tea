@@ -1,5 +1,10 @@
-# Module defines a helper used by the module import example.
+# Module defines helpers used by the module import example.
+# `triple` is exported; `scale` stays private to this module.
 
-def triple(value: Int) -> Int
-  value * 3
+def scale(value: Int, factor: Int) -> Int
+  value * factor
+end
+
+pub def triple(value: Int) -> Int
+  scale(value, 3)
 end

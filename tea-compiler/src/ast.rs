@@ -125,6 +125,7 @@ pub struct TypeParameter {
 
 #[derive(Debug, Clone)]
 pub struct FunctionStatement {
+    pub is_public: bool,
     pub name: String,
     pub name_span: SourceSpan,
     pub type_parameters: Vec<TypeParameter>,

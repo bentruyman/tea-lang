@@ -48,6 +48,11 @@ fn parse_dicts_example() -> anyhow::Result<()> {
 }
 
 #[test]
+fn parse_string_interpolation_example() -> anyhow::Result<()> {
+    compile_example("examples/language/strings/interpolation.tea")
+}
+
+#[test]
 fn parse_structs_example() -> anyhow::Result<()> {
     compile_example("examples/language/types/structs.tea")
 }

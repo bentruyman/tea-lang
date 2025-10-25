@@ -22,9 +22,10 @@ pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, CallExpression, ConditionalKind, ConditionalStatement,
-    Expression, ExpressionKind, FunctionStatement, LambdaBody, LambdaExpression, Literal,
-    LoopHeader, LoopKind, LoopStatement, Module as AstModule, ReturnStatement, SourceSpan,
-    Statement, TypeExpression, UseStatement, VarStatement,
+    Expression, ExpressionKind, FunctionStatement, InterpolatedStringExpression,
+    InterpolatedStringPart, LambdaBody, LambdaExpression, Literal, LoopHeader, LoopKind,
+    LoopStatement, Module as AstModule, ReturnStatement, SourceSpan, Statement, TypeExpression,
+    UseStatement, VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
 use crate::stdlib::{self, StdFunctionKind};
@@ -434,6 +435,13 @@ impl<'ctx> ExprValue<'ctx> {
             _ => bail!("expected Bool value"),
         }
     }
+
+    fn into_string(self) -> Result<PointerValue<'ctx>> {
+        match self {
+            ExprValue::String(ptr) => Ok(ptr),
+            _ => bail!("expected String value"),
+        }
+    }
 }
 
 struct LlvmCodeGenerator<'ctx> {
@@ -475,6 +483,7 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_fail_fn: Option<FunctionValue<'ctx>>,
     util_len_fn: Option<FunctionValue<'ctx>>,
     util_to_string_fn: Option<FunctionValue<'ctx>>,
+    string_concat_fn: Option<FunctionValue<'ctx>>,
     util_clamp_int_fn: Option<FunctionValue<'ctx>>,
     util_is_nil_fn: Option<FunctionValue<'ctx>>,
     util_is_bool_fn: Option<FunctionValue<'ctx>>,
@@ -664,6 +673,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_fail_fn: None,
             util_len_fn: None,
             util_to_string_fn: None,
+            string_concat_fn: None,
             util_clamp_int_fn: None,
             util_is_nil_fn: None,
             util_is_bool_fn: None,
@@ -2355,6 +2365,40 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
+    fn compile_interpolated_string(
+        &mut self,
+        template: &InterpolatedStringExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if template.parts.is_empty() {
+            return self.compile_string_literal("");
+        }
+
+        let mut current: Option<PointerValue<'ctx>> = None;
+
+        for part in &template.parts {
+            let part_ptr = match part {
+                InterpolatedStringPart::Literal(text) => {
+                    self.compile_string_literal(text)?.into_string()?
+                }
+                InterpolatedStringPart::Expression(expr) => {
+                    let value = self.compile_expression(expr, function, locals)?;
+                    self.expr_to_string_pointer(value)?
+                }
+            };
+
+            current = Some(match current {
+                Some(existing) => self.concat_string_values(existing, part_ptr)?,
+                None => part_ptr,
+            });
+        }
+
+        let pointer =
+            current.ok_or_else(|| anyhow::anyhow!("interpolated string evaluation failed"))?;
+        Ok(ExprValue::String(pointer))
+    }
+
     fn compile_binary(
         &mut self,
         expression: &BinaryExpression,
@@ -2416,6 +2460,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     ) -> Result<ExprValue<'ctx>> {
         match &expression.kind {
             ExpressionKind::Literal(lit) => self.compile_literal(lit),
+            ExpressionKind::InterpolatedString(template) => {
+                self.compile_interpolated_string(template, function, locals)
+            }
             ExpressionKind::Identifier(ident) => {
                 let variable = locals
                     .get(ident.name.as_str())
@@ -6014,6 +6061,38 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
     }
 
+    fn expr_to_string_pointer(&mut self, value: ExprValue<'ctx>) -> Result<PointerValue<'ctx>> {
+        match value {
+            ExprValue::String(ptr) => Ok(ptr),
+            other => {
+                let tea_value = self.expr_to_tea_value(other)?;
+                let func = self.ensure_util_to_string_fn();
+                let call = self
+                    .call_function(func, &[tea_value.into()], "tea_util_to_string")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                    .into_pointer_value();
+                Ok(call)
+            }
+        }
+    }
+
+    fn concat_string_values(
+        &mut self,
+        left: PointerValue<'ctx>,
+        right: PointerValue<'ctx>,
+    ) -> Result<PointerValue<'ctx>> {
+        let func = self.ensure_string_concat_fn();
+        let call = self
+            .call_function(func, &[left.into(), right.into()], "tea_string_concat")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_concat returned no value"))?
+            .into_pointer_value();
+        Ok(call)
+    }
+
     fn tea_value_to_expr(
         &mut self,
         value: StructValue<'ctx>,
@@ -6570,6 +6649,19 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_util_to_string", fn_type, Some(Linkage::External));
         self.util_to_string_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_concat_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_concat_fn {
+            return func;
+        }
+        let ptr_type = self.string_ptr_type();
+        let fn_type = ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
+        let func = self
+            .module
+            .add_function("tea_string_concat", fn_type, Some(Linkage::External));
+        self.string_concat_fn = Some(func);
         func
     }
 

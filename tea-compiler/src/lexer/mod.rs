@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::num::{ParseFloatError, ParseIntError};
 
 use anyhow::Result;
@@ -30,6 +31,11 @@ pub enum TokenKind {
     IntegerLiteral(i64),
     FloatLiteral(f64),
     StringLiteral(String),
+    InterpolatedStringStart,
+    InterpolatedStringSegment(String),
+    InterpolatedStringExprStart,
+    InterpolatedStringExprEnd,
+    InterpolatedStringEnd,
     DocComment(String),
     BooleanLiteral(bool),
     Keyword(Keyword),
@@ -100,6 +106,25 @@ pub struct Lexer<'a> {
     position: usize,
     line: usize,
     column: usize,
+    pending_tokens: VecDeque<Token>,
+    template_stack: Vec<TemplateContext>,
+}
+
+#[derive(Debug, Clone)]
+enum TemplateState {
+    Literal,
+    Expression { brace_depth: usize },
+}
+
+#[derive(Debug, Clone)]
+struct TemplateContext {
+    start_position: usize,
+    start_line: usize,
+    start_column: usize,
+    segment_start_position: usize,
+    segment_start_line: usize,
+    segment_start_column: usize,
+    state: TemplateState,
 }
 
 #[derive(Debug, Error)]
@@ -163,13 +188,39 @@ impl<'a> Lexer<'a> {
             position: 0,
             line: 1,
             column: 1,
+            pending_tokens: VecDeque::new(),
+            template_stack: Vec::new(),
         })
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
 
-        while let Some(ch) = self.peek_char() {
+        while self.peek_char().is_some() || !self.pending_tokens.is_empty() {
+            if let Some(token) = self.pending_tokens.pop_front() {
+                tokens.push(token);
+                continue;
+            }
+
+            if self
+                .template_stack
+                .last()
+                .map(|ctx| matches!(ctx.state, TemplateState::Literal))
+                .unwrap_or(false)
+            {
+                self.lex_interpolated_string_segment()?;
+                continue;
+            }
+
+            let ch = match self.peek_char() {
+                Some(ch) => ch,
+                None => break,
+            };
+
+            if self.try_handle_interpolated_expression_char(ch)? {
+                continue;
+            }
+
             match ch {
                 ' ' | '\t' => {
                     self.advance_char();
@@ -196,6 +247,9 @@ impl<'a> Lexer<'a> {
                 '"' => {
                     let token = self.lex_string()?;
                     tokens.push(token);
+                }
+                '`' => {
+                    self.begin_interpolated_string();
                 }
                 '0'..='9' => {
                     let token = self.lex_number()?;
@@ -265,6 +319,14 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        if let Some(context) = self.template_stack.last() {
+            return Err(LexerError::UnterminatedStringLiteral {
+                line: context.start_line,
+                column: context.start_column,
+            }
+            .into());
+        }
+
         tokens.push(Token::new(
             TokenKind::Eof,
             String::new(),
@@ -329,6 +391,232 @@ impl<'a> Lexer<'a> {
             start_line,
             start_column,
         )
+    }
+
+    fn begin_interpolated_string(&mut self) {
+        let start_position = self.position;
+        let start_line = self.line;
+        let start_column = self.column;
+        self.advance_char();
+        let lexeme = self.slice(start_position, self.position).to_string();
+        self.pending_tokens.push_back(Token::new(
+            TokenKind::InterpolatedStringStart,
+            lexeme,
+            start_line,
+            start_column,
+        ));
+        self.template_stack.push(TemplateContext {
+            start_position,
+            start_line,
+            start_column,
+            segment_start_position: self.position,
+            segment_start_line: self.line,
+            segment_start_column: self.column,
+            state: TemplateState::Literal,
+        });
+    }
+
+    fn lex_interpolated_string_segment(&mut self) -> Result<()> {
+        if self.template_stack.is_empty() {
+            return Ok(());
+        }
+        let idx = self.template_stack.len() - 1;
+        let (
+            _start_position,
+            start_line,
+            start_column,
+            segment_start_position,
+            segment_start_line,
+            segment_start_column,
+        ) = {
+            let ctx = &self.template_stack[idx];
+            (
+                ctx.start_position,
+                ctx.start_line,
+                ctx.start_column,
+                ctx.segment_start_position,
+                ctx.segment_start_line,
+                ctx.segment_start_column,
+            )
+        };
+        let mut value = String::new();
+
+        loop {
+            let ch = match self.peek_char() {
+                Some(ch) => ch,
+                None => {
+                    return Err(LexerError::UnterminatedStringLiteral {
+                        line: start_line,
+                        column: start_column,
+                    }
+                    .into())
+                }
+            };
+
+            match ch {
+                '`' => {
+                    if !value.is_empty() {
+                        let raw_lexeme = self.slice(segment_start_position, self.position);
+                        self.pending_tokens.push_back(Token::new(
+                            TokenKind::InterpolatedStringSegment(std::mem::take(&mut value)),
+                            raw_lexeme.to_string(),
+                            segment_start_line,
+                            segment_start_column,
+                        ));
+                    }
+                    let end_line = self.line;
+                    let end_column = self.column;
+                    let closing_start = self.position;
+                    self.advance_char();
+                    let lexeme = self.slice(closing_start, self.position).to_string();
+                    self.pending_tokens.push_back(Token::new(
+                        TokenKind::InterpolatedStringEnd,
+                        lexeme,
+                        end_line,
+                        end_column,
+                    ));
+                    self.template_stack.pop();
+                    return Ok(());
+                }
+                '$' if matches!(self.peek_next_char(), Some('{')) => {
+                    if !value.is_empty() {
+                        let raw_lexeme = self.slice(segment_start_position, self.position);
+                        self.pending_tokens.push_back(Token::new(
+                            TokenKind::InterpolatedStringSegment(std::mem::take(&mut value)),
+                            raw_lexeme.to_string(),
+                            segment_start_line,
+                            segment_start_column,
+                        ));
+                    }
+                    let expr_start_line = self.line;
+                    let expr_start_column = self.column;
+                    let expr_start_position = self.position;
+                    self.advance_char(); // consume $
+                    self.advance_char(); // consume {
+                    let raw = self.slice(expr_start_position, self.position).to_string();
+                    self.pending_tokens.push_back(Token::new(
+                        TokenKind::InterpolatedStringExprStart,
+                        raw,
+                        expr_start_line,
+                        expr_start_column,
+                    ));
+                    if let Some(ctx) = self.template_stack.get_mut(idx) {
+                        ctx.state = TemplateState::Expression { brace_depth: 0 };
+                        ctx.segment_start_position = self.position;
+                        ctx.segment_start_line = self.line;
+                        ctx.segment_start_column = self.column;
+                    }
+                    return Ok(());
+                }
+                '\\' => {
+                    let escape_line = self.line;
+                    let escape_column = self.column;
+                    self.advance_char();
+                    let escaped = match self.peek_char() {
+                        Some(ch) => ch,
+                        None => {
+                            return Err(LexerError::UnterminatedEscapeSequence {
+                                line: escape_line,
+                                column: escape_column,
+                            }
+                            .into());
+                        }
+                    };
+                    let escaped_char = match escaped {
+                        '`' => '`',
+                        '$' => '$',
+                        '\\' => '\\',
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        other => other,
+                    };
+                    value.push(escaped_char);
+                    self.advance_char();
+                }
+                '\r' => {
+                    self.advance_char();
+                    value.push('\n');
+                }
+                '\n' => {
+                    self.advance_char();
+                    value.push('\n');
+                }
+                _ => {
+                    value.push(ch);
+                    self.advance_char();
+                }
+            }
+        }
+    }
+
+    fn try_handle_interpolated_expression_char(&mut self, ch: char) -> Result<bool> {
+        let len = self.template_stack.len();
+        if len == 0 {
+            return Ok(false);
+        }
+        let idx = len - 1;
+        let is_expression = matches!(
+            self.template_stack[idx].state,
+            TemplateState::Expression { .. }
+        );
+        if !is_expression {
+            return Ok(false);
+        }
+
+        match ch {
+            '{' => {
+                let token = self.simple_token(TokenKind::LBrace);
+                self.pending_tokens.push_back(token);
+                if let TemplateState::Expression {
+                    ref mut brace_depth,
+                } = self.template_stack[idx].state
+                {
+                    *brace_depth += 1;
+                }
+                Ok(true)
+            }
+            '}' => {
+                let brace_depth = match self.template_stack[idx].state {
+                    TemplateState::Expression { brace_depth } => brace_depth,
+                    _ => return Ok(false),
+                };
+
+                if brace_depth == 0 {
+                    let end_line = self.line;
+                    let end_column = self.column;
+                    let start = self.position;
+                    self.advance_char();
+                    let lexeme = self.slice(start, self.position).to_string();
+                    self.pending_tokens.push_back(Token::new(
+                        TokenKind::InterpolatedStringExprEnd,
+                        lexeme,
+                        end_line,
+                        end_column,
+                    ));
+                    if let Some(ctx) = self.template_stack.get_mut(idx) {
+                        ctx.state = TemplateState::Literal;
+                        ctx.segment_start_position = self.position;
+                        ctx.segment_start_line = self.line;
+                        ctx.segment_start_column = self.column;
+                    }
+                    Ok(true)
+                } else {
+                    let token = self.simple_token(TokenKind::RBrace);
+                    self.pending_tokens.push_back(token);
+                    if let Some(ctx) = self.template_stack.get_mut(idx) {
+                        if let TemplateState::Expression {
+                            ref mut brace_depth,
+                        } = ctx.state
+                        {
+                            *brace_depth -= 1;
+                        }
+                    }
+                    Ok(true)
+                }
+            }
+            _ => Ok(false),
+        }
     }
 
     fn lex_string(&mut self) -> Result<Token> {

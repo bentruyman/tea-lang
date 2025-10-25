@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{
-    Block, Expression, ExpressionKind, Identifier, LambdaBody, LoopHeader, Module, SourceSpan,
-    Statement, TypeExpression,
+    Block, Expression, ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody, LoopHeader,
+    Module, SourceSpan, Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
@@ -643,6 +643,13 @@ impl ModuleExpander {
                 }
             }
             ExpressionKind::Literal(_) => {}
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &mut template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.rewrite_expression_identifiers(expr, rename_map);
+                    }
+                }
+            }
             ExpressionKind::List(list) => {
                 for element in &mut list.elements {
                     self.rewrite_expression_identifiers(element, rename_map);
@@ -802,6 +809,13 @@ impl ModuleExpander {
                                 );
                             }
                         }
+                    }
+                }
+            }
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &mut template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.rewrite_expression_alias(expr, alias_maps);
                     }
                 }
             }

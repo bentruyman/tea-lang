@@ -10,7 +10,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 ## Lexical Elements
 - Identifiers: `[A-Za-z_][A-Za-z0-9_]*`. Snake_case for variables/functions, PascalCase for types.
 - Reserved keywords: `var`, `const`, `def`, `struct`, `if`, `unless`, `else`, `end`, `for`, `of`, `while`, `until`, `return`, `use`, `and`, `or`, `not`, `in`, `nil`.
-- Literals: integers (`42`), floats (`3.14`, `1_000.0`), strings (`"Hello #{name}"`), booleans (`true`, `false`), lists (`[1, 2, 3]`), dictionaries (`{ "name": "tea" }`), ranges (`0..10`, `0...10`).
+- Literals: integers (`42`), floats (`3.14`, `1_000.0`), strings (`"Hello"` and `` `Hello, ${name}` ``), booleans (`true`, `false`), lists (`[1, 2, 3]`), dictionaries (`{ "name": "tea" }`), ranges (`0..10`, `0...10`).
 
 ## Types
 - Scalar: `Bool`, `Int`, `Float`, `String`.
@@ -45,7 +45,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Dictionary literals use braces (`{ key: value, ... }`), where keys may be identifiers or string literals. Member access (`record.field`) reads struct fields or dictionary entries (the property is lowered to a string key). Direct indexing (`dict["field"]`) is also supported. Keys must be strings at runtime.
 - Function literals: `|args| => expr` (single-expression) or `|args| => { ... }` (block body). Arguments follow the same annotation/default syntax as `def`.
 - Lambda parameters require explicit type annotations so the compiler can check function literals before execution.
-- String interpolation replaces `#{expr}` with evaluated `expr`.
+- String interpolation uses backtick-delimited strings with `${expr}` placeholders.
 
 ## Statements
 - `use alias = "module"` loads std modules or relative paths (`use helpers = "./math"`). Dot access resolves exported constants/functions/structs under the chosen alias. The builtin library currently ships:

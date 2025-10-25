@@ -4,10 +4,11 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, Block, ConditionalKind, ConditionalStatement, DictLiteral,
-    Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression, LambdaBody,
-    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, Module,
-    ReturnStatement, SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator,
-    UseStatement, VarBinding, VarStatement,
+    Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
+    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
+    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, Module, ReturnStatement, SourceSpan,
+    Statement, TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
+    VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase};
@@ -580,6 +581,9 @@ impl CodeGenerator {
     ) -> Result<()> {
         match &expression.kind {
             ExpressionKind::Literal(literal) => self.compile_literal(literal, chunk),
+            ExpressionKind::InterpolatedString(template) => {
+                self.compile_interpolated_string(template, chunk, resolver)
+            }
             ExpressionKind::Identifier(identifier) => resolver.load(self, chunk, &identifier.name),
             ExpressionKind::Binary(binary) => self.compile_binary(binary, chunk, resolver),
             ExpressionKind::Unary(unary) => self.compile_unary(unary, chunk, resolver),
@@ -617,6 +621,40 @@ impl CodeGenerator {
 
         let index = chunk.add_constant(value);
         chunk.emit(Instruction::Constant(index));
+        Ok(())
+    }
+
+    fn compile_interpolated_string<R: Resolver>(
+        &mut self,
+        template: &InterpolatedStringExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        if template.parts.is_empty() {
+            let constant = chunk.add_constant(Value::String(String::new()));
+            chunk.emit(Instruction::Constant(constant));
+            return Ok(());
+        }
+
+        let mut part_count = 0;
+        for part in &template.parts {
+            match part {
+                InterpolatedStringPart::Literal(text) => {
+                    let constant = chunk.add_constant(Value::String(text.clone()));
+                    chunk.emit(Instruction::Constant(constant));
+                }
+                InterpolatedStringPart::Expression(expr) => {
+                    self.compile_expression(expr, chunk, resolver)?;
+                    chunk.emit(Instruction::BuiltinCall {
+                        kind: StdFunctionKind::UtilToString,
+                        arg_count: 1,
+                    });
+                }
+            }
+            part_count += 1;
+        }
+
+        chunk.emit(Instruction::ConcatStrings(part_count));
         Ok(())
     }
 

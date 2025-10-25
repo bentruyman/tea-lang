@@ -3,9 +3,9 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::{
     BinaryExpression, BinaryOperator, CallArgument, CallExpression, ConditionalStatement,
     DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
-    LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement,
-    Module, ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TypeExpression,
-    TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
+    InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
+    LoopKind, LoopStatement, Module, ReturnStatement, SourceSpan, Statement, StructStatement,
+    TestStatement, TypeExpression, TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Keyword, Token, TokenKind};
@@ -1226,6 +1226,14 @@ impl TypeChecker {
     fn infer_expression(&mut self, expression: &Expression) -> Type {
         match &expression.kind {
             ExpressionKind::Literal(literal) => self.type_from_literal(literal),
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.infer_expression(expr);
+                    }
+                }
+                Type::String
+            }
             ExpressionKind::Identifier(identifier) => self
                 .lookup(&identifier.name)
                 .or_else(|| {

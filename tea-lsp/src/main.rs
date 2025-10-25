@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use tea_compiler::{
-    CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel, Keyword, Lexer,
-    Module, ModuleAliasBinding, SourceFile, SourceId, Statement, TokenKind,
+    CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
+    InterpolatedStringPart, Keyword, Lexer, Module, ModuleAliasBinding, SourceFile, SourceId,
+    Statement, TokenKind,
 };
 use tokio::{
     sync::Mutex,
@@ -761,6 +762,13 @@ fn collect_symbols(
 
             match &expression.kind {
                 ExpressionKind::Identifier(_) | ExpressionKind::Literal(_) => {}
+                ExpressionKind::InterpolatedString(template) => {
+                    for part in &template.parts {
+                        if let InterpolatedStringPart::Expression(expr) = part {
+                            self.visit_expression(expr);
+                        }
+                    }
+                }
                 ExpressionKind::List(expr) => {
                     for element in &expr.elements {
                         self.visit_expression(element);

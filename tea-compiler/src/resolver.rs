@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::{
     AssignmentExpression, BinaryExpression, Block, CallExpression, ConditionalStatement,
     DictLiteral, Expression, ExpressionKind, FunctionParameter, FunctionStatement, Identifier,
-    IndexExpression, LambdaBody, LambdaExpression, ListLiteral, LoopHeader, LoopKind,
-    LoopStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
+    IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, LoopHeader,
+    LoopKind, LoopStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
     StructStatement, TestStatement, UnaryExpression, UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
@@ -257,6 +257,13 @@ impl Resolver {
         match &expression.kind {
             ExpressionKind::Identifier(identifier) => self.resolve_identifier(identifier),
             ExpressionKind::Literal(_) => {}
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.resolve_expression(expr);
+                    }
+                }
+            }
             ExpressionKind::List(list) => self.resolve_list(list),
             ExpressionKind::Dict(dict) => self.resolve_dict(dict),
             ExpressionKind::Unary(unary) => self.resolve_unary(unary),

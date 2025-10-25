@@ -269,6 +269,7 @@ pub struct Expression {
 pub enum ExpressionKind {
     Identifier(Identifier),
     Literal(Literal),
+    InterpolatedString(InterpolatedStringExpression),
     List(ListLiteral),
     Dict(DictLiteral),
     Unary(UnaryExpression),
@@ -280,6 +281,17 @@ pub enum ExpressionKind {
     Lambda(LambdaExpression),
     Assignment(AssignmentExpression),
     Grouping(Box<Expression>),
+}
+
+#[derive(Debug, Clone)]
+pub struct InterpolatedStringExpression {
+    pub parts: Vec<InterpolatedStringPart>,
+}
+
+#[derive(Debug, Clone)]
+pub enum InterpolatedStringPart {
+    Literal(String),
+    Expression(Expression),
 }
 
 #[derive(Debug, Clone)]

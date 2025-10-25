@@ -852,6 +852,7 @@ impl<'a> Parser<'a> {
                 token_span,
                 ExpressionKind::Literal(Literal::String(string.clone())),
             )),
+            TokenKind::InterpolatedStringStart => self.parse_interpolated_string(token_span),
             TokenKind::BooleanLiteral(value) => Ok(Self::make_expression(
                 token_span,
                 ExpressionKind::Literal(Literal::Boolean(value)),
@@ -915,6 +916,55 @@ impl<'a> Parser<'a> {
                 token.line,
                 token.column
             ),
+        }
+    }
+
+    fn parse_interpolated_string(&mut self, start_span: SourceSpan) -> Result<Expression> {
+        let mut parts = Vec::new();
+
+        loop {
+            match self.peek_kind() {
+                TokenKind::InterpolatedStringSegment(_) => {
+                    let segment_token = self.advance().clone();
+                    if let TokenKind::InterpolatedStringSegment(value) = segment_token.kind {
+                        parts.push(InterpolatedStringPart::Literal(value));
+                    }
+                }
+                TokenKind::InterpolatedStringExprStart => {
+                    self.advance();
+                    let expression = self.parse_expression_with(|kind| {
+                        matches!(kind, TokenKind::InterpolatedStringExprEnd)
+                    })?;
+                    self.expect_token(
+                        TokenKind::InterpolatedStringExprEnd,
+                        "expected '}' to close interpolation",
+                    )?;
+                    parts.push(InterpolatedStringPart::Expression(expression));
+                }
+                TokenKind::InterpolatedStringEnd => {
+                    let end_token = self.advance().clone();
+                    let end_span = Self::span_from_token(&end_token);
+                    let span = Self::union_spans(&start_span, &end_span);
+                    return Ok(Self::make_expression(
+                        span,
+                        ExpressionKind::InterpolatedString(InterpolatedStringExpression { parts }),
+                    ));
+                }
+                TokenKind::Eof => {
+                    self.diagnostics
+                        .push_error_with_span("unterminated interpolated string", Some(start_span));
+                    bail!("unterminated interpolated string");
+                }
+                other => {
+                    let token = self.peek().clone();
+                    let span = Self::span_from_token(&token);
+                    self.diagnostics.push_error_with_span(
+                        format!("unexpected token {:?} inside interpolated string", other),
+                        Some(span),
+                    );
+                    bail!("invalid interpolated string");
+                }
+            }
         }
     }
 

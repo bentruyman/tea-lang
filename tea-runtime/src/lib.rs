@@ -232,6 +232,19 @@ pub extern "C" fn tea_print_string(value: *const TeaString) {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_string_concat(
+    left: *const TeaString,
+    right: *const TeaString,
+) -> *mut TeaString {
+    let left_text = tea_string_to_rust(left).unwrap_or_default();
+    let right_text = tea_string_to_rust(right).unwrap_or_default();
+    let mut combined = String::with_capacity(left_text.len() + right_text.len());
+    combined.push_str(&left_text);
+    combined.push_str(&right_text);
+    alloc_tea_string(&combined)
+}
+
+#[no_mangle]
 pub extern "C" fn tea_print_list(list: *const TeaList) {
     unsafe {
         if list.is_null() {

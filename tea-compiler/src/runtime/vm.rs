@@ -697,6 +697,23 @@ impl Vm {
                     };
                     self.stack.push(Value::Closure(Rc::new(closure)));
                 }
+                Instruction::ConcatStrings(count) => {
+                    let mut parts = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        let value = self.pop()?;
+                        let text = match value {
+                            Value::String(text) => text,
+                            other => other.to_string(),
+                        };
+                        parts.push(text);
+                    }
+                    parts.reverse();
+                    let mut result = String::new();
+                    for part in parts {
+                        result.push_str(&part);
+                    }
+                    self.stack.push(Value::String(result));
+                }
                 Instruction::Return => {
                     let value = self.pop().unwrap_or(Value::Nil);
                     let frame = self.frames.pop().unwrap();

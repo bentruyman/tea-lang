@@ -101,6 +101,7 @@ pub enum Instruction {
         function_index: usize,
         capture_count: usize,
     },
+    ConcatStrings(usize),
     Return,
 }
 
@@ -145,6 +146,7 @@ impl fmt::Display for Instruction {
                 function_index,
                 capture_count,
             } => write!(f, "MAKE_CLOSURE {function_index} {capture_count}"),
+            Instruction::ConcatStrings(count) => write!(f, "CONCAT_STRINGS {count}"),
             Instruction::Return => write!(f, "RETURN"),
         }
     }

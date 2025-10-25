@@ -2500,7 +2500,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_lambda_expression(lambda, function, locals)
             }
             ExpressionKind::Match(_) => bail!("unsupported expression"),
-            ExpressionKind::Match(_) => bail!("unsupported expression"),
             ExpressionKind::Unwrap(inner) => {
                 let value = self.compile_expression(inner, function, locals)?;
                 match value {

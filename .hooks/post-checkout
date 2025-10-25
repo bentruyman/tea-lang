@@ -12,6 +12,8 @@ fi
 
 echo "🔗 Importing beads issues from JSONL..."
 
+bd init -p tea -q
+
 if bd import -i .beads/issues.jsonl 2>/dev/null; then
   echo "✓ Beads issues imported successfully"
 else

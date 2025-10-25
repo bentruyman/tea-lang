@@ -8,6 +8,11 @@ tea-lang evolves toward a statically typed language that pairs compiled speed wi
 - `examples/` holds executable `.tea` samples; group by topic (`examples/language/control_flow/fib.tea`) and note expected output in comments.
 - `docs/` is the home for RFCs, diagrams, and architectural notes; reference new proposals there so readers can trace design intent.
 
+## Language Updates
+- When changing language syntax or semantics:
+  - Add or update relevant `.tea` programs in `./examples` to demonstrate the new behavior.
+  - Update the Tree-sitter grammar in `tree-sitter-tea/` so tooling stays in sync.
+
 ## Build, Test, and Development Commands
 - `cargo build -p tea-cli` produces the CLI and refreshes `target/debug/tea`; symlink or copy it into `bin/` if you need a stable path.
 - `cargo run -p tea-cli -- examples/language/basics/basics.tea` executes a script directly and is the fastest loop for language experiments.

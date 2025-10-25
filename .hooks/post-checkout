@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Only run on branch checkouts
+if [[ "$3" != "1" ]]; then
+  exit 0
+fi
+
+set -e
+
+if ! command -v bd &>/dev/null; then
+  exit 0
+fi
+
+echo "🔗 Importing beads issues from JSONL..."
+
+if bd import -i .beads/issues.jsonl 2>/dev/null; then
+  echo "✓ Beads issues imported successfully"
+else
+  echo "Warning: bd import failed"
+fi
+
+exit 0

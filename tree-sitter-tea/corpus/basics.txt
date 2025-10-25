@@ -1,0 +1,29 @@
+================================================================================
+Basics
+================================================================================
+
+use debug = "std.debug"
+
+var count = 0
+if count == 0
+  count = 1
+end
+--------------------------------------------------------------------------------
+(source_file
+  (use_statement
+    alias: (identifier)
+    module: (string))
+  (var_declaration
+    name: (identifier)
+    value: (number))
+  (if_statement
+    condition: (binary_expression
+      left: (identifier)
+      operator: "=="
+      right: (number))
+    consequence: (block
+      (expression_statement
+        (assignment
+          left: (identifier)
+          right: (number)))) 
+    "end"))

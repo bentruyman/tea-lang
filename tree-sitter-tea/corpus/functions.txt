@@ -1,0 +1,64 @@
+================================================================================
+Functions
+================================================================================
+
+pub def add(a: Int, b: Int) -> Int
+  return a + b
+end
+
+def identity[T](value: T) -> T
+  value
+end
+
+test "calls functions"
+  var result = add(1, 2)
+  identity(result)
+end
+--------------------------------------------------------------------------------
+(source_file
+  (function_definition
+    "pub"
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type_annotation (identifier)))
+      (parameter
+        name: (identifier)
+        type: (type_annotation (identifier))))
+    return_type: (type_annotation (identifier))
+    body: (block
+      (return_statement
+        value: (binary_expression
+          left: (identifier)
+          operator: "+"
+          right: (identifier)))))
+  "end"
+  (function_definition
+    name: (identifier)
+    type_parameters: (type_parameters (identifier))
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type_annotation (identifier))))
+    return_type: (type_annotation (identifier))
+    body: (block
+      (expression_statement
+        (identifier))))
+  "end"
+  (test_block
+    name: (string)
+    body: (block
+      (var_declaration
+        name: (identifier)
+        value: (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (argument (number))
+            (argument (number)))))
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (argument (identifier)))))))
+  "end")

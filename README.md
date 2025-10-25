@@ -172,6 +172,7 @@ Under the hood, programs move through a resolver and static type checker before 
   - AST: `cargo run -p tea-cli -- --emit ast --no-run examples/language/basics/basics.tea`
   - Bytecode: `cargo run -p tea-cli -- --emit bytecode --no-run examples/language/basics/basics.tea`
 - Execute tests: `cargo test`.
+- Tree-sitter grammar lives in `tree-sitter-tea/`; regenerate the parser with `tree-sitter generate` after editing `grammar.js` and run `tree-sitter test` to validate the corpus. Rust bindings are available under `tree-sitter-tea/bindings/rust`.
 
 Additional language constructs (pattern matching, richer modules, native code generation) are on the roadmap.
 

@@ -1,0 +1,18 @@
+{
+  "name": "tree-sitter-tea",
+  "description": "Tree-sitter grammar for the Tea programming language.",
+  "repository": "https://github.com/bentruyman/tea-lang",
+  "grammars": [
+    {
+      "name": "tea",
+      "scope": "source.tea",
+      "file": "grammar.js",
+      "highlights": "queries/highlights.scm",
+      "corpusDir": "corpus"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT"
+  }
+}

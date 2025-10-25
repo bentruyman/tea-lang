@@ -1,0 +1,13 @@
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+daemon.log
+daemon.pid
+bd.sock
+
+db.sqlite
+bd.db
+
+!*.jsonl

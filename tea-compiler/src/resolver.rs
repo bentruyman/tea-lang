@@ -372,6 +372,38 @@ impl Resolver {
                 }
             }
         }
+        match &assignment.target.kind {
+            ExpressionKind::Identifier(_) => {}
+            ExpressionKind::Member(_) | ExpressionKind::Index(_) => {
+                if let Some(name) = Self::root_identifier_name(&assignment.target) {
+                    if matches!(self.binding_kind(name), Some(BindingKind::Const)) {
+                        self.diagnostics.push_error_with_span(
+                            format!("cannot mutate const '{name}'"),
+                            Some(assignment.target.span),
+                        );
+                    } else {
+                        self.diagnostics.push_error_with_span(
+                            "assignment targets other than simple identifiers are not supported yet"
+                                .to_string(),
+                            Some(assignment.target.span),
+                        );
+                    }
+                } else {
+                    self.diagnostics.push_error_with_span(
+                        "assignment targets other than simple identifiers are not supported yet"
+                            .to_string(),
+                        Some(assignment.target.span),
+                    );
+                }
+            }
+            _ => {
+                self.diagnostics.push_error_with_span(
+                    "assignment targets other than simple identifiers are not supported yet"
+                        .to_string(),
+                    Some(assignment.target.span),
+                );
+            }
+        }
         self.resolve_expression(&assignment.value);
     }
 
@@ -458,6 +490,24 @@ impl Resolver {
             .rev()
             .skip(1)
             .find_map(|scope| scope.get(name).cloned())
+    }
+
+    fn binding_kind(&self, name: &str) -> Option<BindingKind> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(binding) = scope.get(name) {
+                return Some(binding.kind);
+            }
+        }
+        None
+    }
+
+    fn root_identifier_name<'a>(expr: &'a Expression) -> Option<&'a str> {
+        match &expr.kind {
+            ExpressionKind::Identifier(identifier) => Some(identifier.name.as_str()),
+            ExpressionKind::Member(member) => Self::root_identifier_name(&member.object),
+            ExpressionKind::Index(index) => Self::root_identifier_name(&index.object),
+            _ => None,
+        }
     }
 
     fn push_scope(&mut self) {

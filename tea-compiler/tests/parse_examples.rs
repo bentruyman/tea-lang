@@ -28,6 +28,11 @@ fn parse_basics_example() -> anyhow::Result<()> {
 }
 
 #[test]
+fn parse_const_example() -> anyhow::Result<()> {
+    compile_example("examples/language/basics/const.tea")
+}
+
+#[test]
 fn parse_fib_example() -> anyhow::Result<()> {
     compile_example("examples/language/basics/fib.tea")
 }

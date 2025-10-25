@@ -60,7 +60,11 @@ This document captures the first working cut of tea-lang. It is the contract for
     - When the argument to `decode` is a string literal, the compiler parses it at compile time and infers the resulting list/dict element types so downstream indexing gets stricter checking. Dynamic inputs still fall back to a generic dictionary value.
 - Relative modules are expanded in place during compilation, so generic functions/structs defined in `./helpers.tea` can be specialised from the importer just like local definitions. Built-in std modules continue to provide their helpers through the resolver without textual expansion.
 - Variable declaration: `var name = expr`. Multiple bindings share one line: `var x = 1, y = 2`.
-- Const declaration: `const name = expr`. Every const requires an initializer and may not be reassigned after creation.
+- Const declaration: `const name = expr`. Every const requires an initializer and may not be reassigned after creation, e.g.
+  ```
+  const retries = 3
+  # retries = 1  # error: cannot reassign const 'retries'
+  ```
 - Functions:
   ```
   def fib(n: Int) -> Int

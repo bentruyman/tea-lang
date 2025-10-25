@@ -337,6 +337,7 @@ struct FunctionSignature<'ctx> {
 struct LocalVariable<'ctx> {
     pointer: PointerValue<'ctx>,
     ty: ValueType,
+    mutable: bool,
 }
 
 struct StructLowering<'ctx> {
@@ -1352,6 +1353,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 LocalVariable {
                     pointer: alloca,
                     ty: param_type,
+                    mutable: true,
                 },
             );
         }
@@ -1547,10 +1549,15 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             if locals.contains_key(&binding.name) {
                 bail!("variable '{}' already exists", binding.name);
             }
-            let initializer = binding
-                .initializer
-                .as_ref()
-                .ok_or_else(|| anyhow!("variable '{}' requires initializer", binding.name))?;
+            let initializer = match binding.initializer.as_ref() {
+                Some(expr) => expr,
+                None if statement.is_const => {
+                    bail!("const '{}' requires an initializer", binding.name);
+                }
+                None => {
+                    bail!("variable '{}' requires an initializer", binding.name);
+                }
+            };
             let value = self.compile_expression(initializer, function, locals)?;
             let init_type = value.ty();
             let ty = if let Some(type_expr) = &binding.type_annotation {
@@ -1578,6 +1585,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 LocalVariable {
                     pointer: alloca,
                     ty,
+                    mutable: !statement.is_const,
                 },
             );
         }
@@ -1813,6 +1821,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         anyhow!("assignment to undefined variable '{}'", identifier.name)
                     })?
                     .clone();
+                if !variable.mutable {
+                    bail!(format!("cannot assign to const '{}'", identifier.name));
+                }
                 let value = self.compile_expression(&assignment.value, function, locals)?;
                 if value.ty() != variable.ty {
                     bail!(
@@ -2245,6 +2256,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 LocalVariable {
                     pointer: alloca,
                     ty: capture_type.clone(),
+                    mutable: true,
                 },
             );
         }
@@ -2267,6 +2279,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 LocalVariable {
                     pointer: alloca,
                     ty: param_type.clone(),
+                    mutable: true,
                 },
             );
         }

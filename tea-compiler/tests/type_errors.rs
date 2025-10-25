@@ -472,3 +472,28 @@ fn rejects_const_without_initializer() {
         "expected const without initializer to be rejected"
     );
 }
+
+#[test]
+fn rejects_const_member_assignment() {
+    let source = "const foo = { x: 0 }\nfoo.x = 1\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("const_member.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected const member assignment to be rejected"
+    );
+    let diagnostics = compiler.diagnostics();
+    assert!(
+        diagnostics
+            .entries()
+            .iter()
+            .any(|diag| diag.message.contains("cannot mutate const 'foo'")),
+        "expected const mutation diagnostic, found {:?}",
+        diagnostics.entries()
+    );
+}

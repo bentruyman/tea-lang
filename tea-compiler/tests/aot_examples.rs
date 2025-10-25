@@ -11,6 +11,7 @@ fn llvm_backend_compiles_core_examples() {
     let workspace_root = manifest_dir.parent().expect("workspace root");
     let examples = [
         "examples/language/basics/basics.tea",
+        "examples/language/basics/const.tea",
         "examples/language/collections/lists.tea",
         "examples/language/control_flow/loops.tea",
         "examples/language/control_flow/logical.tea",

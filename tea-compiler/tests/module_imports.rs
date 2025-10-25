@@ -13,9 +13,9 @@ fn relative_module_exports_require_qualified_access() -> Result<()> {
         r#"
 const SCALE: Int = 3
 
-struct Box
+struct Box {
   value: Int
-end
+}
 
 pub def wrap(value: Int) -> Box
   Box(value: value * SCALE)

@@ -25,10 +25,10 @@ fn parse_constant_index(instruction: &str) -> Option<usize> {
 fn vm_emits_struct_constructor_and_field_access() {
     let program = compile_program(
         r#"
-struct User
+struct User {
   name: String
   age: Int
-end
+}
 
 var user = User("Ada", 37)
 var name = user.name
@@ -71,10 +71,10 @@ var name = user.name
 fn vm_emits_named_struct_constructor_operands() {
     let program = compile_program(
         r#"
-struct User
+struct User {
   name: String
   age: Int
-end
+}
 
 var user = User(name: "Ada", age: 37)
 "#,

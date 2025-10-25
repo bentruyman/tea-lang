@@ -576,18 +576,23 @@ impl<'a> Parser<'a> {
             Vec::new()
         };
 
-        self.expect_newline("expected newline after struct name")?;
+        self.skip_newlines();
+        self.expect_token(
+            TokenKind::LBrace,
+            "expected '{' to start struct body after struct name",
+        )?;
+        self.expect_newline("expected newline after '{' in struct declaration")?;
 
         let mut fields = Vec::new();
         loop {
             self.skip_newlines();
-            if self.check_keyword(Keyword::End) {
+            if matches!(self.peek_kind(), TokenKind::RBrace) {
                 self.advance();
                 break;
             }
             if self.is_at_end() {
                 self.diagnostics.push_error_with_span(
-                    format!("unterminated struct '{}', missing 'end'", name),
+                    format!("unterminated struct '{}', missing '}}'", name),
                     Some(name_span),
                 );
                 bail!("unterminated struct");

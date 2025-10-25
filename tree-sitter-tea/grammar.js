@@ -87,8 +87,9 @@ module.exports = grammar({
       "struct",
       field("name", $.identifier),
       optional(field("type_parameters", $.type_parameters)),
+      "{",
       field("body", repeat1($.struct_field)),
-      "end"
+      "}"
     ),
 
     struct_field: $ => seq(

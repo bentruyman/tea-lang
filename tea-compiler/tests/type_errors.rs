@@ -142,8 +142,8 @@ pair[Int](1, 2)
 #[test]
 fn reports_generic_struct_inference_hint() {
     let source = r#"
-struct Phantom[T]
-end
+struct Phantom[T] {
+}
 
 var phantom = Phantom()
 "#;
@@ -172,7 +172,7 @@ var phantom = Phantom()
 
 #[test]
 fn rejects_struct_generics_closing_on_newline() {
-    let source = "struct Box[T\n]\nend\n";
+    let source = "struct Box[T\n]\n{\n}\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
         SourceId(0),

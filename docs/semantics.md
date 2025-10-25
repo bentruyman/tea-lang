@@ -20,10 +20,10 @@ This document captures the first working cut of tea-lang. It is the contract for
 - **Generics:** functions and structs can be parameterised with square-bracket type parameters (e.g. `def identity[T](value: T) -> T`). Call sites may pass explicit type arguments (`identity[Int](42)`), and both the VM and LLVM backends monomorphise the concrete instantiations that the type checker discovers—even when the generic is defined in a separate module that is pulled in via `use`.
 - Structs introduce nominal record types:
   ```
-  struct User
+  struct User {
     name: String
     age: Int
-  end
+  }
   ```
   Instances require all declared fields and can be created with positional or named arguments (`User("Ada", 37)` or `User(name: "Ada", age: 37)`). Fields are immutable; use helper functions for updates.
 - The compiler currently validates annotated variables against `Bool`, `Int`, `Float`, `String`, and `Nil` literals, and infers element types for list/dict literals so mixed containers surface diagnostics.
@@ -76,10 +76,10 @@ This document captures the first working cut of tea-lang. It is the contract for
   ```
 - Structs:
   ```
-  struct User
+  struct User {
     name: String
     age: Int
-  end
+  }
   ```
   Field order matters for positional construction; named arguments (`User(name: "Ada", age: 37)`) are also accepted.
 - Conditionals: `if`, `unless`; optional `else`. No implicit `else if`; chain with `elsif`? (future) or nested `if`.

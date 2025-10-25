@@ -359,6 +359,10 @@
           ]
         },
         {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
           "type": "FIELD",
           "name": "body",
           "content": {
@@ -371,7 +375,7 @@
         },
         {
           "type": "STRING",
-          "value": "end"
+          "value": "}"
         }
       ]
     },

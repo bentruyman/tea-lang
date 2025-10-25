@@ -492,14 +492,14 @@ end
 #[test]
 fn indents_enum_variants() {
     let input = r#"
-enum Status
+enum Status{
 Pending
 Running
 Done
-end
+}
 "#;
 
-    let expected = ["enum Status", "  Pending", "  Running", "  Done", "end"];
+    let expected = ["enum Status {", "  Pending", "  Running", "  Done", "}"];
 
     assert_lines(&format_source(input), &expected);
 }

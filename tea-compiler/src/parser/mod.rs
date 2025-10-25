@@ -660,18 +660,30 @@ impl<'a> Parser<'a> {
             ),
         };
 
-        self.expect_newline("expected newline after enum name")?;
+        let _type_parameters = if matches!(self.peek_kind(), TokenKind::LBracket) {
+            self.advance(); // consume '['
+            self.parse_type_parameters("enum", &name, name_span.line)?
+        } else {
+            Vec::new()
+        };
+
+        self.skip_newlines();
+        self.expect_token(
+            TokenKind::LBrace,
+            "expected '{' to start enum body after enum name",
+        )?;
+        self.expect_newline("expected newline after '{' in enum declaration")?;
 
         let mut variants = Vec::new();
         loop {
             self.skip_newlines();
-            if self.check_keyword(Keyword::End) {
+            if matches!(self.peek_kind(), TokenKind::RBrace) {
                 self.advance();
                 break;
             }
             if self.is_at_end() {
                 self.diagnostics.push_error_with_span(
-                    format!("unterminated enum '{}', missing 'end'", name),
+                    format!("unterminated enum '{}', missing '}}'", name),
                     Some(name_span),
                 );
                 bail!("unterminated enum");

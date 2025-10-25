@@ -19,10 +19,10 @@ fn match_expression_runtime_behaviour() -> anyhow::Result<()> {
     let source = r#"
 use assert = "std.assert"
 
-enum Status
+enum Status {
   Ready
   Pending
-end
+}
 
 var status = Status.Pending
 var label = match status
@@ -61,11 +61,11 @@ var bool_result = match flag
 end
 assert.assert_eq(bool_result, "ok")
 
-enum Color
+enum Color {
   Red
   Green
   Blue
-end
+}
 
 var color = Color.Red
 var output = match color

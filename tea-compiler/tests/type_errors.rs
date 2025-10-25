@@ -501,10 +501,10 @@ fn rejects_const_member_assignment() {
 #[test]
 fn rejects_duplicate_enum_variants() {
     let source = r#"
-enum Color
+enum Color {
   Red
   Red
-end
+}
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(

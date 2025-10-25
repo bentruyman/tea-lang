@@ -15,10 +15,10 @@ fn compile_program(source: &str) -> tea_compiler::Program {
 fn vm_emits_enum_variant_constants() {
     let program = compile_program(
         r#"
-enum Color
+enum Color {
   Red
   Green
-end
+}
 
 var first = Color.Red
 var second = Color.Green

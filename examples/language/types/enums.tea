@@ -4,11 +4,11 @@ use debug = "std.debug"
 # Current status: Status.Pending
 # Next status: Status.Running
 
-enum Status
+enum Status {
   Pending
   Running
   Done
-end
+}
 
 def advance(status: Status) -> Status
   if status == Status.Pending

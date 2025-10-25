@@ -20,11 +20,11 @@ end
 debug.print(status)
 
 # Exhaustive matches are fine
-enum Color
+enum Color {
   Red
   Green
   Blue
-end
+}
 var color: Color = Color.Red
 var output = match color
   case Color.Red => "red"

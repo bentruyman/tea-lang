@@ -103,8 +103,9 @@ module.exports = grammar({
       "enum",
       field("name", $.identifier),
       optional(field("type_parameters", $.type_parameters)),
+      "{",
       field("variants", repeat1($.enum_variant)),
-      "end"
+      "}"
     ),
 
     enum_variant: $ => seq(

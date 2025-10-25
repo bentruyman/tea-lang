@@ -228,6 +228,7 @@ fn normalize_line(line: &str) -> Cow<'_, str> {
     apply_normalizer!(normalize_expression_spacing);
     apply_normalizer!(normalize_case_arrow_spacing);
     apply_normalizer!(normalize_struct_declaration_spacing);
+    apply_normalizer!(normalize_enum_declaration_spacing);
     apply_normalizer!(normalize_comparison_operator_spacing);
 
     let mut result = String::with_capacity(line.len());
@@ -1290,6 +1291,84 @@ fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
     }
 }
 
+fn normalize_enum_declaration_spacing(line: &str) -> Cow<'_, str> {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("enum") {
+        return Cow::Borrowed(line);
+    }
+
+    let leading_len = line.len() - trimmed.len();
+    let leading_ws = &line[..leading_len];
+
+    let mut rest = &trimmed["enum".len()..];
+    if !rest
+        .chars()
+        .next()
+        .map(|c| c.is_whitespace())
+        .unwrap_or(false)
+    {
+        return Cow::Borrowed(line);
+    }
+    rest = rest.trim_start();
+    if rest.is_empty() {
+        return Cow::Borrowed(line);
+    }
+
+    let mut name_end = rest.len();
+    for (idx, ch) in rest.char_indices() {
+        if ch.is_whitespace() || ch == '{' {
+            name_end = idx;
+            break;
+        }
+    }
+    let name = &rest[..name_end];
+    if name.is_empty() {
+        return Cow::Borrowed(line);
+    }
+    let mut idx = name_end;
+    while idx < rest.len() {
+        let ch = rest[idx..].chars().next().unwrap();
+        if ch.is_whitespace() {
+            idx += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    let mut normalized = String::with_capacity(line.len());
+    normalized.push_str(leading_ws);
+    normalized.push_str("enum ");
+    normalized.push_str(name);
+
+    let remainder = &rest[idx..];
+    let mut did_change = false;
+
+    if let Some(after_brace) = remainder.strip_prefix('{') {
+        normalized.push_str(" {");
+        let trimmed_after = after_brace.trim_start_matches([' ', '\t']);
+        if trimmed_after.len() != after_brace.len() {
+            did_change = true;
+        }
+        if !trimmed_after.is_empty()
+            && !matches!(trimmed_after.chars().next(), Some('\n' | '\r' | '}'))
+        {
+            normalized.push(' ');
+        }
+        normalized.push_str(trimmed_after);
+    } else if !remainder.is_empty() {
+        if !matches!(remainder.chars().next(), Some('\n' | '\r')) {
+            normalized.push(' ');
+        }
+        normalized.push_str(remainder);
+    }
+
+    if did_change || normalized != line {
+        Cow::Owned(normalized)
+    } else {
+        Cow::Borrowed(line)
+    }
+}
+
 fn finalize_comparison_operator(
     ch: char,
     buffer: &mut String,
@@ -1447,7 +1526,7 @@ fn is_block_closer(code: &str) -> bool {
 
 fn opens_block(code: &str) -> bool {
     const BLOCK_KEYWORDS: &[&str] = &[
-        "def", "if", "unless", "for", "while", "until", "enum", "test", "else", "match",
+        "def", "if", "unless", "for", "while", "until", "test", "else", "match",
     ];
 
     if BLOCK_KEYWORDS
@@ -1459,7 +1538,7 @@ fn opens_block(code: &str) -> bool {
 
     if line_starts_with_keyword(code, "pub") {
         let rest = code["pub".len()..].trim_start();
-        const PUB_KEYWORDS: &[&str] = &["def", "struct", "enum"];
+        const PUB_KEYWORDS: &[&str] = &["def", "struct"];
         return PUB_KEYWORDS
             .iter()
             .any(|kw| line_starts_with_keyword(rest, kw));

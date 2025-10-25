@@ -902,6 +902,9 @@ fn collect_symbols(
                 ExpressionKind::Grouping(inner) => {
                     self.visit_expression(inner);
                 }
+                ExpressionKind::Unwrap(inner) => {
+                    self.visit_expression(inner);
+                }
             }
         }
 

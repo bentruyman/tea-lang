@@ -27,6 +27,7 @@ fn format_type_name(ty: &Type) -> String {
         Type::Float => "Float".to_string(),
         Type::String => "String".to_string(),
         Type::Nil => "Nil".to_string(),
+        Type::Optional(inner) => format!("{}?", format_type_name(inner)),
         Type::List(inner) => format!("List[{}]", format_type_name(inner)),
         Type::Dict(inner) => format!("Dict[String, {}]", format_type_name(inner)),
         Type::Function(params, return_type) => {
@@ -633,6 +634,11 @@ impl CodeGenerator {
             ExpressionKind::Match(match_expr) => {
                 self.compile_match_expression(match_expr, chunk, resolver)
             }
+            ExpressionKind::Unwrap(inner) => {
+                self.compile_expression(inner, chunk, resolver)?;
+                chunk.emit(Instruction::AssertNonNil);
+                Ok(())
+            }
             ExpressionKind::Range(_) => Err(CodegenError::Unsupported("expression").into()),
         }
     }
@@ -692,6 +698,16 @@ impl CodeGenerator {
         resolver: &mut R,
     ) -> Result<()> {
         match expression.operator {
+            BinaryOperator::Coalesce => {
+                self.compile_expression(&expression.left, chunk, resolver)?;
+                let evaluate_right = self.emit_jump(chunk, Instruction::JumpIfNil(usize::MAX));
+                let end = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                self.patch_jump(chunk, evaluate_right)?;
+                chunk.emit(Instruction::Pop);
+                self.compile_expression(&expression.right, chunk, resolver)?;
+                self.patch_jump(chunk, end)?;
+                Ok(())
+            }
             BinaryOperator::And => {
                 self.compile_expression(&expression.left, chunk, resolver)?;
                 let short_circuit = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
@@ -943,7 +959,9 @@ impl CodeGenerator {
     fn patch_jump(&mut self, chunk: &mut Chunk, index: usize) -> Result<()> {
         let target = chunk.len();
         match chunk.instructions.get_mut(index) {
-            Some(Instruction::Jump(slot)) | Some(Instruction::JumpIfFalse(slot)) => {
+            Some(Instruction::Jump(slot))
+            | Some(Instruction::JumpIfFalse(slot))
+            | Some(Instruction::JumpIfNil(slot)) => {
                 *slot = target;
                 Ok(())
             }

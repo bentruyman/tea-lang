@@ -9,6 +9,7 @@ use crate::source::SourceFile;
 enum Precedence {
     Lowest = 0,
     Assignment,
+    Coalesce,
     Or,
     And,
     Equality,
@@ -23,6 +24,7 @@ impl Precedence {
     fn of(kind: &TokenKind) -> Option<Self> {
         match kind {
             TokenKind::Equal => Some(Precedence::Assignment),
+            TokenKind::QuestionQuestion => Some(Precedence::Coalesce),
             TokenKind::Keyword(Keyword::Or) => Some(Precedence::Or),
             TokenKind::Keyword(Keyword::And) => Some(Precedence::And),
             TokenKind::DoubleEqual | TokenKind::BangEqual => Some(Precedence::Equality),
@@ -892,6 +894,13 @@ impl<'a> Parser<'a> {
                     expr = self.finish_member(expr)?;
                     continue;
                 }
+                TokenKind::Bang => {
+                    let bang_token = self.advance().clone();
+                    let bang_span = Self::span_from_token(&bang_token);
+                    let span = Self::union_spans(&expr.span, &bang_span);
+                    expr = Self::make_expression(span, ExpressionKind::Unwrap(Box::new(expr)));
+                    continue;
+                }
                 TokenKind::Newline => {
                     // Newlines act as terminators unless explicitly allowed by the caller.
                     if terminator(&TokenKind::Newline) {
@@ -1515,7 +1524,8 @@ impl<'a> Parser<'a> {
             | TokenKind::Slash
             | TokenKind::Percent
             | TokenKind::Keyword(Keyword::And)
-            | TokenKind::Keyword(Keyword::Or) => {
+            | TokenKind::Keyword(Keyword::Or)
+            | TokenKind::QuestionQuestion => {
                 let operator = binary_operator_from_token(&operator_token.kind)?;
                 let right = self.parse_expression_prec(precedence, terminator)?;
                 let span =
@@ -2002,6 +2012,7 @@ fn binary_operator_from_token(kind: &TokenKind) -> Result<BinaryOperator> {
         TokenKind::LessEqual => BinaryOperator::LessEqual,
         TokenKind::Keyword(Keyword::And) => BinaryOperator::And,
         TokenKind::Keyword(Keyword::Or) => BinaryOperator::Or,
+        TokenKind::QuestionQuestion => BinaryOperator::Coalesce,
         other => bail!("unsupported binary operator {:?}", other),
     };
     Ok(operator)

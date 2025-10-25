@@ -74,6 +74,7 @@ pub enum TokenKind {
     Ampersand,
     AmpersandAmpersand,
     Question,
+    QuestionQuestion,
     Eof,
 }
 
@@ -311,7 +312,10 @@ impl<'a> Lexer<'a> {
                     let token = self.lex_ampersand_variants();
                     tokens.push(token);
                 }
-                '?' => tokens.push(self.simple_token(TokenKind::Question)),
+                '?' => {
+                    let token = self.lex_question_variants();
+                    tokens.push(token);
+                }
                 other => {
                     return Err(LexerError::UnexpectedCharacter {
                         ch: other,
@@ -986,6 +990,30 @@ impl<'a> Lexer<'a> {
         } else {
             Token::new(
                 TokenKind::Minus,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
+        }
+    }
+
+    fn lex_question_variants(&mut self) -> Token {
+        let start_line = self.line;
+        let start_column = self.column;
+        let start = self.position;
+        self.advance_char(); // consume '?'
+
+        if self.peek_char() == Some('?') {
+            self.advance_char();
+            Token::new(
+                TokenKind::QuestionQuestion,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
+        } else {
+            Token::new(
+                TokenKind::Question,
                 self.slice(start, self.position).to_string(),
                 start_line,
                 start_column,

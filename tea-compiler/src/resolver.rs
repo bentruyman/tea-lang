@@ -302,6 +302,7 @@ impl Resolver {
                 }
             }
             ExpressionKind::Grouping(inner) => self.resolve_expression(inner),
+            ExpressionKind::Unwrap(inner) => self.resolve_expression(inner),
         }
     }
 

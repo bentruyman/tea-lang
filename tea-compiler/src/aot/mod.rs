@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::str::Chars;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module as LlvmModule};
@@ -42,6 +42,7 @@ fn format_type_name(ty: &Type) -> String {
         Type::Nil => "Nil".to_string(),
         Type::List(inner) => format!("List[{}]", format_type_name(inner)),
         Type::Dict(inner) => format!("Dict[String, {}]", format_type_name(inner)),
+        Type::Optional(inner) => format!("{}?", format_type_name(inner)),
         Type::Function(params, return_type) => {
             let param_str = if params.is_empty() {
                 "()".to_string()
@@ -106,6 +107,7 @@ fn type_to_value_type(ty: &Type) -> Result<ValueType> {
             ))
         }
         Type::Dict(inner) => Ok(ValueType::Dict(Box::new(type_to_value_type(inner)?))),
+        Type::Optional(inner) => Ok(ValueType::Optional(Box::new(type_to_value_type(inner)?))),
         Type::Unknown => bail!("cannot lower Unknown type in LLVM backend"),
     }
 }
@@ -322,6 +324,7 @@ enum ValueType {
     Dict(Box<ValueType>),
     Function(Vec<ValueType>, Box<ValueType>),
     Struct(String),
+    Optional(Box<ValueType>),
     Void,
 }
 
@@ -392,6 +395,10 @@ enum ExprValue<'ctx> {
         param_types: Vec<ValueType>,
         return_type: Box<ValueType>,
     },
+    Optional {
+        value: StructValue<'ctx>,
+        inner: Box<ValueType>,
+    },
     Void,
 }
 
@@ -410,6 +417,7 @@ impl<'ctx> ExprValue<'ctx> {
                 return_type,
                 ..
             } => ValueType::Function(param_types.clone(), return_type.clone()),
+            ExprValue::Optional { inner, .. } => ValueType::Optional(inner.clone()),
             ExprValue::Void => ValueType::Void,
         }
     }
@@ -424,6 +432,7 @@ impl<'ctx> ExprValue<'ctx> {
             ExprValue::Dict { pointer, .. } => Some(pointer.into()),
             ExprValue::Struct { pointer, .. } => Some(pointer.into()),
             ExprValue::Closure { pointer, .. } => Some(pointer.into()),
+            ExprValue::Optional { value, .. } => Some(value.into()),
             ExprValue::Void => None,
         }
     }
@@ -1425,6 +1434,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             function.name
                         )
                     }
+                    ValueType::Optional(_) => {
+                        bail!(
+                            "function '{}' may exit without returning Optional value",
+                            function.name
+                        )
+                    }
                 }
             }
 
@@ -1568,27 +1583,29 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
             };
             let value = self.compile_expression(initializer, function, locals)?;
-            let init_type = value.ty();
-            let ty = if let Some(type_expr) = &binding.type_annotation {
-                let expected = self.parse_type(type_expr)?;
-                if expected != init_type {
-                    bail!(
-                        "initializer for '{}' has mismatched type (expected {:?}, found {:?})",
-                        binding.name,
-                        expected,
-                        init_type
-                    );
+            let (ty, initial_value) = match binding.type_annotation.as_ref() {
+                Some(type_expr) => {
+                    let expected = self.parse_type(type_expr)?;
+                    let init_type = value.ty();
+                    let converted = self
+                        .convert_expr_to_type(value, &expected)
+                        .with_context(|| {
+                            format!(
+                                "initializer for '{}' has mismatched type (expected {:?}, found {:?})",
+                                binding.name, expected, init_type
+                            )
+                        })?;
+                    (expected, converted)
                 }
-                expected
-            } else {
-                init_type
+                None => {
+                    let ty = value.ty();
+                    (ty, value)
+                }
             };
 
             let alloca =
                 self.create_entry_alloca(function, &binding.name, self.basic_type(&ty)?)?;
-            if let Some(basic) = value.into_basic_value() {
-                map_builder_error(self.builder.build_store(alloca, basic))?;
-            }
+            self.store_expr_in_pointer(alloca, &ty, initial_value, &binding.name)?;
             locals.insert(
                 binding.name.clone(),
                 LocalVariable {
@@ -1612,12 +1629,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             (Some(_), ValueType::Void) => bail!("return with value in void function"),
             (None, ValueType::Void) => {
                 map_builder_error(self.builder.build_return(None))?;
+                return Ok(());
             }
-            (Some(expr), ValueType::Int) => {
-                let value = self
-                    .compile_expression(expr, function, locals)?
-                    .into_int()?;
-                map_builder_error(self.builder.build_return(Some(&value)))?;
+            (Some(expr), ty) => {
+                let value = self.compile_expression(expr, function, locals)?;
+                let converted = self.convert_expr_to_type(value, ty)?;
+                self.emit_return_value(converted, ty)
             }
             (None, ValueType::Int) => {
                 if let Some(ret_ty) = function.get_type().get_return_type() {
@@ -1632,58 +1649,15 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     let zero = self.int_type().const_int(0, false);
                     map_builder_error(self.builder.build_return(Some(&zero)))?;
                 }
+                Ok(())
             }
-            (Some(expr), ValueType::Float) => {
-                let value = self.compile_expression(expr, function, locals)?;
-                let float = match value {
-                    ExprValue::Float(v) => v,
-                    ExprValue::Int(v) => self.cast_int_to_float(v, "ret_sitofp")?,
-                    _ => bail!("return value must be numeric"),
-                };
-                map_builder_error(self.builder.build_return(Some(&float)))?;
-            }
-            (Some(expr), ValueType::Bool) => {
-                let value = self
-                    .compile_expression(expr, function, locals)?
-                    .into_bool()?;
-                map_builder_error(self.builder.build_return(Some(&value)))?;
-            }
-            (Some(expr), ValueType::String) => {
-                let value = self.compile_expression(expr, function, locals)?;
-                let ptr = match value {
-                    ExprValue::String(p) => p,
-                    _ => bail!("return value must be String"),
-                };
-                map_builder_error(self.builder.build_return(Some(&ptr)))?;
-            }
-            (Some(expr), ValueType::List(_)) => {
-                let value = self.compile_expression(expr, function, locals)?;
-                let ptr = match value {
-                    ExprValue::List { pointer, .. } => pointer,
-                    _ => bail!("return value must be List"),
-                };
-                map_builder_error(self.builder.build_return(Some(&ptr)))?;
-            }
-            (Some(expr), ValueType::Struct(_)) => {
-                let value = self.compile_expression(expr, function, locals)?;
-                let ptr = match value {
-                    ExprValue::Struct { pointer, .. } => pointer,
-                    _ => bail!("return value must be Struct"),
-                };
-                map_builder_error(self.builder.build_return(Some(&ptr)))?;
-            }
-            (Some(expr), ValueType::Function(_, _)) => {
-                let value = self.compile_expression(expr, function, locals)?;
-                let ptr = match value {
-                    ExprValue::Closure { pointer, .. } => pointer,
-                    _ => bail!("return value must be function value"),
-                };
-                map_builder_error(self.builder.build_return(Some(&ptr)))?;
+            (None, ValueType::Optional(inner)) => {
+                let nil_value = self.optional_nil(inner)?;
+                self.emit_return_value(nil_value, return_type)
             }
             (None, ValueType::Function(_, _)) => bail!("missing return value"),
             _ => bail!("missing return value"),
         }
-        Ok(())
     }
 
     fn compile_conditional(
@@ -1834,17 +1808,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     bail!(format!("cannot assign to const '{}'", identifier.name));
                 }
                 let value = self.compile_expression(&assignment.value, function, locals)?;
-                if value.ty() != variable.ty {
-                    bail!(
-                        "assignment to '{}' expected {:?} but found {:?}",
-                        identifier.name,
-                        variable.ty,
-                        value.ty()
-                    );
-                }
-                if let Some(basic) = value.into_basic_value() {
-                    map_builder_error(self.builder.build_store(variable.pointer, basic))?;
-                }
+                self.store_expr_in_pointer(
+                    variable.pointer,
+                    &variable.ty,
+                    value,
+                    &identifier.name,
+                )?;
                 locals.insert(identifier.name.clone(), variable);
                 Ok(ExprValue::Void)
             }
@@ -2221,6 +2190,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&param_types, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&param_types, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&param_types, false),
+            ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
         };
 
         let lambda_fn = self
@@ -2300,14 +2270,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if matches!(signature.return_type, ValueType::Void) {
                     map_builder_error(self.builder.build_return(None))?;
                 } else {
-                    if value.ty() != signature.return_type {
-                        bail!("lambda return type mismatch");
-                    }
-                    if let Some(basic) = value.into_basic_value() {
-                        map_builder_error(self.builder.build_return(Some(&basic)))?;
-                    } else {
-                        bail!("lambda expression did not produce a value");
-                    }
+                    let converted = self.convert_expr_to_type(value, &signature.return_type)?;
+                    self.emit_return_value(converted, &signature.return_type)?;
                 }
             }
             LambdaBody::Block(block) => {
@@ -2444,6 +2408,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     locals,
                 );
             }
+            BinaryOperator::Coalesce => {
+                return self.build_coalesce(&expression.left, &expression.right, function, locals);
+            }
             _ => {}
         }
 
@@ -2456,8 +2423,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             BinaryOperator::Multiply => self.build_numeric_mul(left, right),
             BinaryOperator::Divide => self.build_numeric_div(left, right),
             BinaryOperator::Modulo => self.build_numeric_mod(left, right),
-            BinaryOperator::Equal => self.build_equality(left, right, true),
-            BinaryOperator::NotEqual => self.build_equality(left, right, false),
+            BinaryOperator::Equal => self.build_equality(function, left, right, true),
+            BinaryOperator::NotEqual => self.build_equality(function, left, right, false),
             BinaryOperator::Greater => {
                 self.build_numeric_compare(left, right, IntPredicate::SGT, FloatPredicate::OGT)
             }
@@ -2471,6 +2438,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.build_numeric_compare(left, right, IntPredicate::SLE, FloatPredicate::OLE)
             }
             BinaryOperator::And | BinaryOperator::Or => unreachable!(),
+            BinaryOperator::Coalesce => unreachable!(),
         }
     }
 
@@ -2532,6 +2500,19 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_lambda_expression(lambda, function, locals)
             }
             ExpressionKind::Match(_) => bail!("unsupported expression"),
+            ExpressionKind::Match(_) => bail!("unsupported expression"),
+            ExpressionKind::Unwrap(inner) => {
+                let value = self.compile_expression(inner, function, locals)?;
+                match value {
+                    ExprValue::Optional { value, inner } => {
+                        self.compile_optional_unwrap(value, inner, function)
+                    }
+                    ExprValue::Void => {
+                        bail!("cannot unwrap nil value")
+                    }
+                    _ => bail!("unwrap expects an optional value"),
+                }
+            }
             ExpressionKind::Range(_) => bail!("unsupported expression"),
         }
     }
@@ -2619,6 +2600,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     return_type: return_type.clone(),
                 })
             }
+            ValueType::Optional(inner) => {
+                let loaded = map_builder_error(self.builder.build_load(
+                    self.value_type(),
+                    variable.pointer,
+                    name,
+                ))?;
+                Ok(ExprValue::Optional {
+                    value: loaded.into_struct_value(),
+                    inner: inner.clone(),
+                })
+            }
             ValueType::Void => bail!("void value"),
         }
     }
@@ -2676,14 +2668,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         let value =
                             self.compile_expression(&argument.expression, function, locals)?;
                         let expected = &signature.param_types[index];
-                        if value.ty() != *expected {
-                            bail!(
-                                "argument {} to '{}' has mismatched type",
-                                index + 1,
-                                display_name
-                            );
-                        }
-                        let basic = value
+                        let converted =
+                            self.convert_expr_to_type(value, expected)
+                                .map_err(|error| {
+                                    anyhow!(
+                                        "argument {} to '{}' has mismatched type: {}",
+                                        index + 1,
+                                        display_name,
+                                        error
+                                    )
+                                })?;
+                        let basic = converted
                             .into_basic_value()
                             .ok_or_else(|| anyhow!("argument must produce a value"))?;
                         args.push(basic.into());
@@ -2719,6 +2714,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             pointer: result.into_pointer_value(),
                             param_types: params,
                             return_type: ret,
+                        }),
+                        ValueType::Optional(inner) => Ok(ExprValue::Optional {
+                            value: result.into_struct_value(),
+                            inner,
                         }),
                         ValueType::Void => unreachable!(),
                     };
@@ -5271,10 +5270,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 bail!("named arguments are not supported by the LLVM backend yet");
             }
             let value = self.compile_expression(&argument.expression, function, locals)?;
-            if value.ty() != *expected_type {
-                bail!("argument {} to closure has mismatched type", index + 1);
-            }
-            let basic = value
+            let converted = self
+                .convert_expr_to_type(value, expected_type)
+                .map_err(|error| {
+                    anyhow!(
+                        "argument {} to closure has mismatched type: {}",
+                        index + 1,
+                        error
+                    )
+                })?;
+            let basic = converted
                 .into_basic_value()
                 .ok_or_else(|| anyhow!("argument must produce a value"))?;
             arg_values.push(basic);
@@ -5310,6 +5315,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&llvm_params, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&llvm_params, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Optional(_) => self.value_type().fn_type(&llvm_params, false),
         };
 
         let typed_fn_ptr = map_builder_error(self.builder.build_bit_cast(
@@ -5362,6 +5368,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 pointer: result.into_pointer_value(),
                 param_types: params.clone(),
                 return_type: ret.clone(),
+            },
+            ValueType::Optional(inner) => ExprValue::Optional {
+                value: result.into_struct_value(),
+                inner: inner.clone(),
             },
             ValueType::Void => unreachable!(),
         };
@@ -5470,15 +5480,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
                 let value = self.compile_expression(&argument.expression, function, locals)?;
                 let expected = &field_types[index];
-                if value.ty() != *expected {
-                    bail!(
-                        "field '{}' in struct '{}' expects type {:?}",
-                        field_name,
-                        name,
-                        expected
-                    );
-                }
-                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(value)?);
+                let converted = self
+                    .convert_expr_to_type(value, expected)
+                    .map_err(|error| {
+                        anyhow!(
+                            "field '{}' in struct '{}' expects {:?}: {}",
+                            field_name,
+                            name,
+                            expected,
+                            error
+                        )
+                    })?;
+                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(converted)?);
                 self.call_function(
                     set_fn,
                     &[
@@ -5511,15 +5524,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
                 let value = self.compile_expression(&argument.expression, function, locals)?;
                 let expected = &field_types[index];
-                if value.ty() != *expected {
-                    bail!(
-                        "field '{}' in struct '{}' expects type {:?}",
-                        field_names[index],
-                        name,
-                        expected
-                    );
-                }
-                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(value)?);
+                let converted = self
+                    .convert_expr_to_type(value, expected)
+                    .map_err(|error| {
+                        anyhow!(
+                            "field '{}' in struct '{}' expects {:?}: {}",
+                            field_names[index],
+                            name,
+                            expected,
+                            error
+                        )
+                    })?;
+                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(converted)?);
                 self.call_function(
                     set_fn,
                     &[
@@ -5582,6 +5598,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 ExprValue::Closure { pointer, .. } => {
                     let func = self.ensure_print_closure();
                     self.call_function(func, &[pointer.into()], "print_closure")?;
+                }
+                ExprValue::Optional { value, .. } => {
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[value.into()], "optional_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_print_string();
+                    self.call_function(func, &[string_ptr.into()], "print_optional")?;
                 }
                 ExprValue::Void => {
                     let nil_string = self.compile_string_literal("nil")?;
@@ -5739,6 +5766,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn build_equality(
         &mut self,
+        function: FunctionValue<'ctx>,
         left: ExprValue<'ctx>,
         right: ExprValue<'ctx>,
         is_equal: bool,
@@ -5750,6 +5778,139 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         };
 
         let result = match (left, right) {
+            (ExprValue::Optional { value, .. }, ExprValue::Void) => {
+                let is_nil_fn = self.ensure_util_is_nil_fn();
+                let call = self.call_function(is_nil_fn, &[value.into()], "optional_eq_nil")?;
+                let raw = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected bool from tea_util_is_nil"))?
+                    .into_int_value();
+                let bool_val = self.i32_to_bool(raw, "optional_eq_nil_bool")?;
+                if is_equal {
+                    bool_val
+                } else {
+                    map_builder_error(self.builder.build_not(bool_val, "optional_ne_nil"))?
+                }
+            }
+            (ExprValue::Void, optional @ ExprValue::Optional { .. }) => {
+                return self.build_equality(function, optional, ExprValue::Void, is_equal);
+            }
+            (
+                ExprValue::Optional {
+                    value: left_value,
+                    inner: left_inner,
+                },
+                ExprValue::Optional {
+                    value: right_value,
+                    inner: right_inner,
+                },
+            ) => {
+                if left_inner != right_inner {
+                    bail!("cannot compare optionals with different inner types");
+                }
+
+                let is_nil_fn = self.ensure_util_is_nil_fn();
+                let left_nil_call =
+                    self.call_function(is_nil_fn, &[left_value.into()], "opt_eq_left_nil")?;
+                let left_nil_raw = left_nil_call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected bool from tea_util_is_nil"))?
+                    .into_int_value();
+                let left_nil = self.i32_to_bool(left_nil_raw, "opt_left_nil_bool")?;
+
+                let right_nil_call =
+                    self.call_function(is_nil_fn, &[right_value.into()], "opt_eq_right_nil")?;
+                let right_nil_raw = right_nil_call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected bool from tea_util_is_nil"))?
+                    .into_int_value();
+                let right_nil = self.i32_to_bool(right_nil_raw, "opt_right_nil_bool")?;
+
+                let either_nil = map_builder_error(self.builder.build_or(
+                    left_nil,
+                    right_nil,
+                    "opt_either_nil",
+                ))?;
+                let nil_block = self.context.append_basic_block(function, "opt_eq_nil");
+                let non_nil_block = self.context.append_basic_block(function, "opt_eq_non_nil");
+                let merge_block = self.context.append_basic_block(function, "opt_eq_merge");
+
+                map_builder_error(self.builder.build_conditional_branch(
+                    either_nil,
+                    nil_block,
+                    non_nil_block,
+                ))?;
+
+                self.builder.position_at_end(nil_block);
+                let both_nil =
+                    map_builder_error(self.builder.build_and(left_nil, right_nil, "opt_both_nil"))?;
+                let nil_result = if is_equal {
+                    both_nil
+                } else {
+                    map_builder_error(self.builder.build_not(both_nil, "opt_nil_ne"))?
+                };
+                map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+                let nil_block_end = self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| anyhow!("missing optional nil block"))?;
+
+                self.builder.position_at_end(non_nil_block);
+                let inner_type = (*left_inner).clone();
+                let right_inner_type = inner_type.clone();
+                let left_inner_expr = self.tea_value_to_expr(left_value, inner_type.clone())?;
+                let right_inner_expr = self.tea_value_to_expr(right_value, right_inner_type)?;
+                let inner_cmp =
+                    self.build_equality(function, left_inner_expr, right_inner_expr, true)?;
+                let inner_bool = match inner_cmp {
+                    ExprValue::Bool(value) => value,
+                    _ => bail!("inner optional comparison did not produce a bool"),
+                };
+                let non_nil_result = if is_equal {
+                    inner_bool
+                } else {
+                    map_builder_error(self.builder.build_not(inner_bool, "opt_non_nil_ne"))?
+                };
+                map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+                let non_nil_block_end = self
+                    .builder
+                    .get_insert_block()
+                    .ok_or_else(|| anyhow!("missing optional non-nil block"))?;
+
+                self.builder.position_at_end(merge_block);
+                let phi =
+                    map_builder_error(self.builder.build_phi(self.bool_type(), "opt_eq_phi"))?;
+                let nil_basic = nil_result.as_basic_value_enum();
+                let non_nil_basic = non_nil_result.as_basic_value_enum();
+                phi.add_incoming(&[
+                    (&nil_basic, nil_block_end),
+                    (&non_nil_basic, non_nil_block_end),
+                ]);
+                phi.as_basic_value().into_int_value()
+            }
+            (ExprValue::Optional { value, inner }, other) => {
+                let expected = ValueType::Optional(inner.clone());
+                let converted = self.convert_expr_to_type(other, &expected)?;
+                return self.build_equality(
+                    function,
+                    ExprValue::Optional { value, inner },
+                    converted,
+                    is_equal,
+                );
+            }
+            (other, ExprValue::Optional { value, inner }) => {
+                let expected = ValueType::Optional(inner.clone());
+                let converted = self.convert_expr_to_type(other, &expected)?;
+                return self.build_equality(
+                    function,
+                    converted,
+                    ExprValue::Optional { value, inner },
+                    is_equal,
+                );
+            }
             (ExprValue::Int(lhs), ExprValue::Int(rhs)) => {
                 map_builder_error(self.builder.build_int_compare(int_pred, lhs, rhs, "cmptmp"))?
             }
@@ -6081,6 +6242,267 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .left()
                     .ok_or_else(|| anyhow!("expected TeaValue"))?)
             }
+            ExprValue::Optional { value, .. } => Ok(value.into()),
+        }
+    }
+
+    fn optional_nil(&mut self, inner: &ValueType) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_value_nil();
+        let call = self.call_function(func, &[], "optional_nil")?;
+        let value = call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("expected TeaValue for optional nil"))?
+            .into_struct_value();
+        Ok(ExprValue::Optional {
+            value,
+            inner: Box::new(inner.clone()),
+        })
+    }
+
+    fn convert_expr_to_type(
+        &mut self,
+        value: ExprValue<'ctx>,
+        target: &ValueType,
+    ) -> Result<ExprValue<'ctx>> {
+        match target {
+            ValueType::Optional(inner) => match value {
+                ExprValue::Optional {
+                    inner: ref current, ..
+                } => {
+                    if **current == **inner {
+                        Ok(value)
+                    } else {
+                        bail!(
+                            "optional conversion mismatch: expected {:?}, found {:?}",
+                            inner,
+                            current
+                        )
+                    }
+                }
+                ExprValue::Void => self.optional_nil(inner),
+                other => {
+                    if other.ty() != **inner {
+                        bail!("expected optional[{:?}] but found {:?}", inner, other.ty());
+                    }
+                    let tea_value = self.expr_to_tea_value(other)?;
+                    let struct_value = tea_value.into_struct_value();
+                    Ok(ExprValue::Optional {
+                        value: struct_value,
+                        inner: inner.clone(),
+                    })
+                }
+            },
+            _ => {
+                if value.ty() == *target {
+                    Ok(value)
+                } else {
+                    bail!(
+                        "type mismatch: expected {:?}, found {:?}",
+                        target,
+                        value.ty()
+                    );
+                }
+            }
+        }
+    }
+
+    fn store_expr_in_pointer(
+        &mut self,
+        pointer: PointerValue<'ctx>,
+        ty: &ValueType,
+        value: ExprValue<'ctx>,
+        name: &str,
+    ) -> Result<()> {
+        let converted = self.convert_expr_to_type(value, ty)?;
+        if let Some(basic) = converted.into_basic_value() {
+            map_builder_error(self.builder.build_store(pointer, basic))?;
+        } else if !matches!(ty, ValueType::Void) {
+            bail!(
+                "unable to store expression into '{}': expected {:?} to materialise a value",
+                name,
+                ty
+            );
+        }
+        Ok(())
+    }
+
+    fn emit_return_value(&mut self, value: ExprValue<'ctx>, ty: &ValueType) -> Result<()> {
+        let value_ty = value.ty();
+        match (ty, value) {
+            (ValueType::Int, ExprValue::Int(v)) => {
+                map_builder_error(self.builder.build_return(Some(&v)))?;
+                Ok(())
+            }
+            (ValueType::Float, ExprValue::Float(v)) => {
+                map_builder_error(self.builder.build_return(Some(&v)))?;
+                Ok(())
+            }
+            (ValueType::Bool, ExprValue::Bool(v)) => {
+                map_builder_error(self.builder.build_return(Some(&v)))?;
+                Ok(())
+            }
+            (ValueType::String, ExprValue::String(ptr)) => {
+                map_builder_error(self.builder.build_return(Some(&ptr)))?;
+                Ok(())
+            }
+            (ValueType::List(_), ExprValue::List { pointer, .. }) => {
+                map_builder_error(self.builder.build_return(Some(&pointer)))?;
+                Ok(())
+            }
+            (ValueType::Dict(_), ExprValue::Dict { pointer, .. }) => {
+                map_builder_error(self.builder.build_return(Some(&pointer)))?;
+                Ok(())
+            }
+            (ValueType::Struct(_), ExprValue::Struct { pointer, .. }) => {
+                map_builder_error(self.builder.build_return(Some(&pointer)))?;
+                Ok(())
+            }
+            (ValueType::Function(_, _), ExprValue::Closure { pointer, .. }) => {
+                map_builder_error(self.builder.build_return(Some(&pointer)))?;
+                Ok(())
+            }
+            (ValueType::Optional(expected_inner), ExprValue::Optional { value, inner }) => {
+                if *expected_inner != inner {
+                    bail!(
+                        "return type mismatch: expected Optional {:?}, found Optional {:?}",
+                        expected_inner,
+                        inner
+                    );
+                }
+                map_builder_error(self.builder.build_return(Some(&value)))?;
+                Ok(())
+            }
+            (ValueType::Void, ExprValue::Void) => {
+                map_builder_error(self.builder.build_return(None))?;
+                Ok(())
+            }
+            (expected, _) => {
+                bail!(
+                    "return type mismatch: expected {:?}, found {:?}",
+                    expected,
+                    value_ty
+                );
+            }
+        }
+    }
+
+    fn compile_optional_unwrap(
+        &mut self,
+        optional_value: StructValue<'ctx>,
+        inner: Box<ValueType>,
+        function: FunctionValue<'ctx>,
+    ) -> Result<ExprValue<'ctx>> {
+        let is_nil_fn = self.ensure_util_is_nil_fn();
+        let is_nil_call =
+            self.call_function(is_nil_fn, &[optional_value.into()], "optional_is_nil")?;
+        let is_nil_raw = is_nil_call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_util_is_nil returned no value"))?
+            .into_int_value();
+        let is_nil_bool = self.i32_to_bool(is_nil_raw, "optional_is_nil_bool")?;
+
+        let nil_block = self
+            .context
+            .append_basic_block(function, "optional_unwrap_nil");
+        let ok_block = self
+            .context
+            .append_basic_block(function, "optional_unwrap_ok");
+
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(is_nil_bool, nil_block, ok_block),
+        )?;
+
+        self.builder.position_at_end(nil_block);
+        let message = self.compile_string_literal("attempted to unwrap a nil value at runtime")?;
+        let message_ptr = match message {
+            ExprValue::String(ptr) => ptr,
+            _ => unreachable!("string literal did not produce string"),
+        };
+        let fail_fn = self.ensure_fail_fn();
+        self.call_function(fail_fn, &[message_ptr.into()], "optional_unwrap_fail")?;
+        map_builder_error(self.builder.build_unreachable())?;
+
+        self.builder.position_at_end(ok_block);
+        let inner_expr = self.tea_value_to_expr(optional_value, *inner.clone())?;
+        Ok(inner_expr)
+    }
+
+    fn build_coalesce(
+        &mut self,
+        left: &Expression,
+        right: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        let left_value = self.compile_expression(left, function, locals)?;
+        match left_value {
+            ExprValue::Optional { value, inner } => {
+                let result_type = *inner.clone();
+                let tmp_alloca = self.create_entry_alloca(
+                    function,
+                    "coalesce_tmp",
+                    self.basic_type(&result_type)?,
+                )?;
+
+                let is_nil_fn = self.ensure_util_is_nil_fn();
+                let is_nil_call =
+                    self.call_function(is_nil_fn, &[value.into()], "coalesce_is_nil")?;
+                let is_nil_raw = is_nil_call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_util_is_nil returned no value"))?
+                    .into_int_value();
+                let is_nil_bool = self.i32_to_bool(is_nil_raw, "coalesce_is_nil_bool")?;
+
+                let right_block = self.context.append_basic_block(function, "coalesce_rhs");
+                let left_block = self.context.append_basic_block(function, "coalesce_lhs");
+                let merge_block = self.context.append_basic_block(function, "coalesce_merge");
+
+                map_builder_error(self.builder.build_conditional_branch(
+                    is_nil_bool,
+                    right_block,
+                    left_block,
+                ))?;
+
+                self.builder.position_at_end(right_block);
+                let right_value = self.compile_expression(right, function, locals)?;
+                let converted_right = self
+                    .convert_expr_to_type(right_value, &result_type)
+                    .map_err(|error| {
+                        anyhow!("right operand of '??' has incompatible type: {}", error)
+                    })?;
+                self.store_expr_in_pointer(
+                    tmp_alloca,
+                    &result_type,
+                    converted_right,
+                    "coalesce_tmp",
+                )?;
+                map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+
+                self.builder.position_at_end(left_block);
+                let left_inner = self.tea_value_to_expr(value, *inner.clone())?;
+                let converted_left = self.convert_expr_to_type(left_inner, &result_type)?;
+                self.store_expr_in_pointer(
+                    tmp_alloca,
+                    &result_type,
+                    converted_left,
+                    "coalesce_tmp",
+                )?;
+                map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+
+                self.builder.position_at_end(merge_block);
+                let temp_var = LocalVariable {
+                    pointer: tmp_alloca,
+                    ty: result_type.clone(),
+                    mutable: true,
+                };
+                self.load_local_variable("coalesce_tmp", &temp_var)
+            }
+            ExprValue::Void => self.compile_expression(right, function, locals),
+            _ => bail!("left operand of '??' must be optional"),
         }
     }
 
@@ -6216,6 +6638,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     return_type,
                 })
             }
+            ValueType::Optional(inner) => Ok(ExprValue::Optional { value, inner }),
             ValueType::Void => Ok(ExprValue::Void),
         }
     }
@@ -6258,7 +6681,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             structs: &HashMap<String, StructLowering<'ctx>>,
         ) -> Result<ValueType> {
             let ident = read_ident(chars)?;
-            match ident.as_str() {
+            let ty_result: Result<ValueType> = match ident.as_str() {
                 "Int" => Ok(ValueType::Int),
                 "Float" => Ok(ValueType::Float),
                 "Bool" => Ok(ValueType::Bool),
@@ -6349,7 +6772,19 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         bail!("unsupported type '{other}' in LLVM backend")
                     }
                 }
+            };
+            let mut ty = ty_result?;
+
+            loop {
+                skip_ws(chars);
+                if matches!(chars.peek(), Some('?')) {
+                    chars.next();
+                    ty = ValueType::Optional(Box::new(ty));
+                } else {
+                    break;
+                }
             }
+            Ok(ty)
         }
 
         let mut chars = repr.chars().peekable();
@@ -6398,6 +6833,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&param_types, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&param_types, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&param_types, false),
+            ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
         };
         Ok(fn_type)
     }
@@ -6412,6 +6848,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => Ok(self.dict_ptr_type().into()),
             ValueType::Function(_, _) => Ok(self.closure_ptr_type().into()),
             ValueType::Struct(_) => Ok(self.struct_ptr_type().into()),
+            ValueType::Optional(_) => Ok(self.value_type().into()),
             ValueType::Void => bail!("void type is not a value"),
         }
     }

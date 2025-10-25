@@ -434,6 +434,11 @@ impl Vm {
                         self.frames[frame_index].ip = target;
                     }
                 }
+                Instruction::JumpIfNil(target) => {
+                    if matches!(self.stack.last(), Some(Value::Nil)) {
+                        self.frames[frame_index].ip = target;
+                    }
+                }
                 Instruction::Print => {
                     let value = self.pop()?;
                     println!("{value}");
@@ -713,6 +718,13 @@ impl Vm {
                         result.push_str(&part);
                     }
                     self.stack.push(Value::String(result));
+                }
+                Instruction::AssertNonNil => {
+                    if matches!(self.stack.last(), Some(Value::Nil)) {
+                        bail!(VmError::Runtime(
+                            "attempted to unwrap a nil value at runtime".to_string()
+                        ));
+                    }
                 }
                 Instruction::Return => {
                     let value = self.pop().unwrap_or(Value::Nil);

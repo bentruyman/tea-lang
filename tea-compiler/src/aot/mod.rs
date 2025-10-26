@@ -58,6 +58,7 @@ fn format_type_name(ty: &Type) -> String {
         }
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
         Type::Enum(enum_type) => enum_type.name.clone(),
+        Type::Union(union_type) => union_type.name.clone(),
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -99,6 +100,10 @@ fn type_to_value_type(ty: &Type) -> Result<ValueType> {
         Type::Enum(enum_type) => bail!(format!(
             "LLVM backend does not yet support enums like '{}'",
             enum_type.name
+        )),
+        Type::Union(union_type) => bail!(format!(
+            "LLVM backend does not yet support union '{}'",
+            union_type.name
         )),
         Type::GenericParameter(name) => {
             bail!(format!(
@@ -1555,6 +1560,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_loop(loop_stmt, function, locals, return_type)
             }
             Statement::Struct(_) => Ok(false),
+            Statement::Union(_) => Ok(false),
             Statement::Enum(_) => Ok(false),
             Statement::Test(_) => Ok(false),
             Statement::Match(_) => {
@@ -2484,6 +2490,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     }
                 }
             }
+            ExpressionKind::Is(_) => bail!("'is' expressions are not supported in LLVM backend"),
             ExpressionKind::Call(call) => {
                 self.compile_call(call, expression.span, function, locals)
             }

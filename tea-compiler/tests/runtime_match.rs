@@ -74,6 +74,24 @@ var output = match color
   case Color.Blue => "blue"
 end
 assert.assert_eq(output, "red")
+
+union Shape {
+  String
+  Int
+}
+
+var shape: Shape = 42
+var shape_label = match shape
+  case is String => "string"
+  case is Int => "int"
+end
+assert.assert_eq(shape_label, "int")
+
+var tag = "unknown"
+if shape is Int
+  tag = "int"
+end
+assert.assert_eq(tag, "int")
 "#;
 
     let compilation = compile_program(source)?;

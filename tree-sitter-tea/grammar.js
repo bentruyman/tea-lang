@@ -39,6 +39,7 @@ module.exports = grammar({
       $.var_declaration,
       $.function_definition,
       $.struct_definition,
+      $.union_definition,
       $.enum_definition,
       $.if_statement,
       $.unless_statement,
@@ -100,6 +101,17 @@ module.exports = grammar({
       ":",
       field("type", $.type_annotation)
     ),
+
+    union_definition: $ => seq(
+      optional("pub"),
+      "union",
+      field("name", $.identifier),
+      "{",
+      field("members", repeat1($.union_member)),
+      "}"
+    ),
+
+    union_member: $ => field("type", $.type_annotation),
 
     enum_definition: $ => seq(
       optional("pub"),
@@ -257,6 +269,7 @@ module.exports = grammar({
         ["<=", PREC.comparative],
         [">", PREC.comparative],
         [">=", PREC.comparative],
+        ["is", PREC.comparative],
         ["+", PREC.additive],
         ["-", PREC.additive],
         ["*", PREC.multiplicative],

@@ -757,6 +757,16 @@ fn collect_symbols(
                         });
                     }
                 }
+                Statement::Union(union_stmt) => {
+                    let range = range_from_span!(&union_stmt.name_span);
+                    self.symbols.push(SymbolInfo {
+                        name: union_stmt.name.clone(),
+                        range,
+                        kind: SymbolKind::Struct,
+                        type_desc: None,
+                        docstring: union_stmt.docstring.clone(),
+                    });
+                }
                 Statement::Enum(enum_stmt) => {
                     let range = range_from_span!(&enum_stmt.name_span);
                     self.symbols.push(SymbolInfo {
@@ -894,6 +904,9 @@ fn collect_symbols(
                         });
                     }
                     self.visit_lambda_body(&expr.body);
+                }
+                ExpressionKind::Is(expr) => {
+                    self.visit_expression(&expr.value);
                 }
                 ExpressionKind::Assignment(expr) => {
                     self.visit_expression(&expr.target);

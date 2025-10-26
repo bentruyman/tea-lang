@@ -78,6 +78,7 @@ pub enum Statement {
     Function(FunctionStatement),
     Test(TestStatement),
     Struct(StructStatement),
+    Union(UnionStatement),
     Enum(EnumStatement),
     Conditional(ConditionalStatement),
     Loop(LoopStatement),
@@ -167,6 +168,20 @@ pub struct StructField {
     pub name: String,
     pub span: SourceSpan,
     pub type_annotation: TypeExpression,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnionStatement {
+    pub name: String,
+    pub name_span: SourceSpan,
+    pub members: Vec<UnionMember>,
+    pub docstring: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnionMember {
+    pub type_expression: TypeExpression,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +315,7 @@ pub enum ExpressionKind {
     Dict(DictLiteral),
     Unary(UnaryExpression),
     Binary(BinaryExpression),
+    Is(IsExpression),
     Call(CallExpression),
     Member(MemberExpression),
     Index(IndexExpression),
@@ -349,6 +365,14 @@ pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub left: Box<Expression>,
     pub right: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IsExpression {
+    pub value: Box<Expression>,
+    pub type_annotation: TypeExpression,
+    pub is_span: SourceSpan,
+    pub type_span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -428,4 +452,5 @@ pub struct MatchArmBlock {
 pub enum MatchPattern {
     Wildcard { span: SourceSpan },
     Expression(Expression),
+    Type(TypeExpression, SourceSpan),
 }

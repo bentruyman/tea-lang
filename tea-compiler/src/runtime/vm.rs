@@ -16,7 +16,7 @@ use tea_support::{cli_error, cli_target_error, env_error, fs_error, io_error, pr
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
-use super::bytecode::{Instruction, Program};
+use super::bytecode::{Instruction, Program, TypeCheck};
 use super::cli::{parse_cli, CliParseOutcome, CliScopeOutcome};
 use super::value::{ClosureInstance, StructInstance, StructTemplate, Value};
 use crate::ast::SourceSpan;
@@ -424,6 +424,11 @@ impl Vm {
                 Instruction::Not => {
                     let value = self.pop()?;
                     self.stack.push(Value::Bool(!value.is_truthy()));
+                }
+                Instruction::TypeIs(type_check) => {
+                    let value = self.pop()?;
+                    let result = self.value_matches_type(&value, &type_check);
+                    self.stack.push(Value::Bool(result));
                 }
                 Instruction::Jump(target) => {
                     self.frames[frame_index].ip = target;
@@ -3031,6 +3036,30 @@ impl Vm {
         };
         self.stack.push(result);
         Ok(())
+    }
+
+    fn value_matches_type(&self, value: &Value, type_check: &TypeCheck) -> bool {
+        match type_check {
+            TypeCheck::Bool => matches!(value, Value::Bool(_)),
+            TypeCheck::Int => matches!(value, Value::Int(_)),
+            TypeCheck::Float => matches!(value, Value::Float(_)),
+            TypeCheck::String => matches!(value, Value::String(_)),
+            TypeCheck::Nil => matches!(value, Value::Nil),
+            TypeCheck::Struct(name) => match value {
+                Value::Struct(instance) => instance.template.name == *name,
+                _ => false,
+            },
+            TypeCheck::Enum(name) => match value {
+                Value::EnumVariant(variant) => variant.enum_name == *name,
+                _ => false,
+            },
+            TypeCheck::Optional(inner) => {
+                matches!(value, Value::Nil) || self.value_matches_type(value, inner)
+            }
+            TypeCheck::Union(members) => members
+                .iter()
+                .any(|member| self.value_matches_type(value, member)),
+        }
     }
 
     fn slugify(input: &str) -> String {

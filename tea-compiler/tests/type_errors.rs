@@ -200,6 +200,73 @@ fn rejects_struct_generics_closing_on_newline() {
 }
 
 #[test]
+fn rejects_union_with_unsupported_member_type() {
+    let source = r#"
+union Bad {
+  List[Int]
+}
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("union_bad.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected compiler to reject unsupported union member type"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("union 'Bad' member type 'List[Int]' is not supported")),
+        "expected unsupported union member diagnostic, got {:?}",
+        messages
+    );
+}
+
+#[test]
+fn rejects_impossible_type_test() {
+    let source = r#"
+var value = 5
+if value is String
+  value
+end
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("impossible_type_test.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected type test on incompatible types to fail"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("type test will always be false")),
+        "expected incompatible type test diagnostic, got {:?}",
+        messages
+    );
+}
+
+#[test]
 fn rejects_function_generics_closing_on_newline() {
     let source = "def id[T\n](value: T) -> T\n  value\nend\n";
     let mut compiler = Compiler::new(CompileOptions::default());

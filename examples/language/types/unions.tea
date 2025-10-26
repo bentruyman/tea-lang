@@ -1,0 +1,22 @@
+use debug = "std.debug"
+
+union Result {
+  String
+  Int
+  Bool
+}
+
+var x: Result = "hello"
+
+match x
+  case is String =>
+    debug.print("We have a string!")
+  case is Int =>
+    debug.print("We have an int!")
+  case is Bool =>
+    debug.print("We have a bool!")
+end
+
+if x is String
+  debug.print("x is a String")
+end

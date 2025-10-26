@@ -12,12 +12,12 @@ use crate::ast::{
     TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 
-use super::bytecode::{Chunk, Function, Instruction, Program, TestCase};
+use super::bytecode::{Chunk, Function, Instruction, Program, TestCase, TypeCheck};
 use super::value::{EnumVariantValue, StructTemplate, Value};
 use crate::stdlib::{self, StdFunctionKind};
 use crate::typechecker::{
     EnumDefinition, EnumVariantMetadata, FunctionInstance, StructDefinition, StructInstance,
-    StructType, Type,
+    StructType, Type, UnionDefinition,
 };
 
 fn format_type_name(ty: &Type) -> String {
@@ -45,6 +45,7 @@ fn format_type_name(ty: &Type) -> String {
         }
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
         Type::Enum(enum_type) => enum_type.name.clone(),
+        Type::Union(union_type) => union_type.name.clone(),
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -93,8 +94,10 @@ pub struct VmSemanticMetadata {
     pub function_call_metadata: HashMap<SourceSpan, (String, FunctionInstance)>,
     pub struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     pub struct_definitions: HashMap<String, StructDefinition>,
+    pub union_definitions: HashMap<String, UnionDefinition>,
     pub enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     pub enum_definitions: HashMap<String, EnumDefinition>,
+    pub type_test_metadata: HashMap<SourceSpan, Type>,
 }
 
 #[derive(Debug)]
@@ -126,12 +129,14 @@ pub struct CodeGenerator {
     function_call_metadata: HashMap<SourceSpan, (String, FunctionInstance)>,
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     struct_definitions: HashMap<String, StructDefinition>,
+    union_definitions: HashMap<String, UnionDefinition>,
     functions_by_name: HashMap<String, FunctionStatement>,
     base_function_indices: HashMap<String, usize>,
     function_specializations: HashMap<String, HashMap<Vec<Type>, usize>>,
     generic_binding_stack: Vec<HashMap<String, Type>>,
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     enum_definitions: HashMap<String, EnumDefinition>,
+    type_test_metadata: HashMap<SourceSpan, Type>,
     temp_name_counter: usize,
     next_global_temp_slot: usize,
 }
@@ -152,14 +157,70 @@ impl CodeGenerator {
             function_call_metadata: metadata.function_call_metadata,
             struct_call_metadata: metadata.struct_call_metadata,
             struct_definitions: metadata.struct_definitions,
+            union_definitions: metadata.union_definitions,
             functions_by_name: HashMap::new(),
             base_function_indices: HashMap::new(),
             function_specializations: HashMap::new(),
             generic_binding_stack: Vec::new(),
             enum_variant_metadata: metadata.enum_variant_metadata,
             enum_definitions: metadata.enum_definitions,
+            type_test_metadata: metadata.type_test_metadata,
             temp_name_counter: 0,
             next_global_temp_slot: 0,
+        }
+    }
+
+    fn build_type_check(&self, ty: &Type) -> Result<TypeCheck> {
+        let mut visited = HashSet::new();
+        self.build_type_check_inner(ty, &mut visited)
+    }
+
+    fn build_type_check_inner(
+        &self,
+        ty: &Type,
+        visited: &mut HashSet<String>,
+    ) -> Result<TypeCheck> {
+        match ty {
+            Type::Bool => Ok(TypeCheck::Bool),
+            Type::Int => Ok(TypeCheck::Int),
+            Type::Float => Ok(TypeCheck::Float),
+            Type::String => Ok(TypeCheck::String),
+            Type::Nil => Ok(TypeCheck::Nil),
+            Type::Struct(struct_type) => {
+                Ok(TypeCheck::Struct(format_struct_type_name(struct_type)))
+            }
+            Type::Enum(enum_type) => Ok(TypeCheck::Enum(enum_type.name.clone())),
+            Type::Optional(inner) => Ok(TypeCheck::Optional(Box::new(
+                self.build_type_check_inner(inner, visited)?,
+            ))),
+            Type::Union(union_type) => {
+                if !visited.insert(union_type.name.clone()) {
+                    return Err(anyhow!(
+                        "cyclic union definition '{}' detected during code generation",
+                        union_type.name
+                    ));
+                }
+                let definition = self
+                    .union_definitions
+                    .get(&union_type.name)
+                    .ok_or_else(|| {
+                        anyhow!("unknown union '{}' during code generation", union_type.name)
+                    })?;
+                let mut members = Vec::with_capacity(definition.members.len());
+                for member in &definition.members {
+                    members.push(self.build_type_check_inner(member, visited)?);
+                }
+                visited.remove(&union_type.name);
+                Ok(TypeCheck::Union(members))
+            }
+            Type::GenericParameter(name) => Err(anyhow!(
+                "generic parameter '{}' cannot be used in a type test",
+                name
+            )),
+            Type::List(_) | Type::Dict(_) | Type::Function(_, _) | Type::Unknown => Err(anyhow!(
+                "type test for '{}' is not supported",
+                ty.describe()
+            )),
         }
     }
 
@@ -456,6 +517,7 @@ impl CodeGenerator {
             Statement::Use(use_stmt) => self.compile_use(use_stmt, resolver),
             Statement::Loop(loop_stmt) => self.compile_loop(loop_stmt, chunk, resolver),
             Statement::Struct(_) => Ok(()),
+            Statement::Union(_) => Ok(()),
             Statement::Enum(_) => Ok(()),
             Statement::Test(test_stmt) => self.compile_test(test_stmt),
             Statement::Match(match_stmt) => {
@@ -606,6 +668,22 @@ impl CodeGenerator {
             }
             ExpressionKind::Identifier(identifier) => resolver.load(self, chunk, &identifier.name),
             ExpressionKind::Binary(binary) => self.compile_binary(binary, chunk, resolver),
+            ExpressionKind::Is(is_expr) => {
+                self.compile_expression(&is_expr.value, chunk, resolver)?;
+                let target_type = self
+                    .type_test_metadata
+                    .get(&expression.span)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "missing type metadata for 'is' expression at span {:?}",
+                            expression.span
+                        )
+                    })?
+                    .clone();
+                let type_check = self.build_type_check(&target_type)?;
+                chunk.emit(Instruction::TypeIs(type_check));
+                Ok(())
+            }
             ExpressionKind::Unary(unary) => self.compile_unary(unary, chunk, resolver),
             ExpressionKind::Assignment(assignment) => {
                 if let ExpressionKind::Identifier(identifier) = &assignment.target.kind {
@@ -1294,6 +1372,25 @@ impl CodeGenerator {
                     self.load_temp_slot(temp_slot, chunk, resolver)?;
                     self.compile_expression(expr, chunk, resolver)?;
                     chunk.emit(Instruction::Equal);
+                    let skip = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
+                    let matched = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                    matched_jumps.push(matched);
+                    fallthrough_jumps.push(skip);
+                }
+                MatchPattern::Type(_, pattern_span) => {
+                    self.load_temp_slot(temp_slot, chunk, resolver)?;
+                    let target_type = self
+                        .type_test_metadata
+                        .get(pattern_span)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "missing type metadata for match pattern at span {:?}",
+                                pattern_span
+                            )
+                        })?
+                        .clone();
+                    let type_check = self.build_type_check(&target_type)?;
+                    chunk.emit(Instruction::TypeIs(type_check));
                     let skip = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
                     let matched = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
                     matched_jumps.push(matched);

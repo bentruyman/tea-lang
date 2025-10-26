@@ -32,6 +32,7 @@ impl Precedence {
             | TokenKind::GreaterEqual
             | TokenKind::Less
             | TokenKind::LessEqual => Some(Precedence::Comparison),
+            TokenKind::Keyword(Keyword::Is) => Some(Precedence::Comparison),
             TokenKind::DotDot | TokenKind::DotDotDot => Some(Precedence::Range),
             TokenKind::Plus | TokenKind::Minus => Some(Precedence::Term),
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Some(Precedence::Factor),
@@ -67,6 +68,19 @@ impl<'a> Parser<'a> {
             token.line,
             token.column + len.saturating_sub(1),
         )
+    }
+
+    fn span_from_tokens(tokens: &[Token]) -> SourceSpan {
+        let mut iter = tokens.iter();
+        let Some(first) = iter.next() else {
+            return SourceSpan::default();
+        };
+        let mut span = Self::span_from_token(first);
+        for token in iter {
+            let token_span = Self::span_from_token(token);
+            span = Self::union_spans(&span, &token_span);
+        }
+        span
     }
 
     fn make_expression(span: SourceSpan, kind: ExpressionKind) -> Expression {
@@ -114,6 +128,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Pub) => self.parse_public_statement(docstring.clone()),
             TokenKind::Keyword(Keyword::Test) => self.parse_test(docstring.clone()),
             TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
+            TokenKind::Keyword(Keyword::Union) => self.parse_union(docstring),
             TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
             TokenKind::Keyword(Keyword::Unless) => self.parse_conditional(ConditionalKind::Unless),
@@ -641,6 +656,78 @@ impl<'a> Parser<'a> {
             name_span,
             type_parameters,
             fields,
+            docstring,
+        }))
+    }
+
+    fn parse_union(&mut self, docstring: Option<String>) -> Result<Statement> {
+        self.advance(); // consume 'union'
+        let name_token = self.peek().clone();
+        let name_span = Self::span_from_token(&name_token);
+        let name = match &name_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                name_token.lexeme
+            }
+            _ => bail!(
+                "expected union name at line {}, column {}",
+                name_token.line,
+                name_token.column
+            ),
+        };
+
+        self.skip_newlines();
+        self.expect_token(
+            TokenKind::LBrace,
+            "expected '{' to start union body after union name",
+        )?;
+        self.expect_newline("expected newline after '{' in union declaration")?;
+
+        let mut members = Vec::new();
+        loop {
+            self.skip_newlines();
+            if matches!(self.peek_kind(), TokenKind::RBrace) {
+                self.advance();
+                break;
+            }
+            if self.is_at_end() {
+                self.diagnostics.push_error_with_span(
+                    format!("unterminated union '{}', missing '}}'", name),
+                    Some(name_span),
+                );
+                bail!("unterminated union");
+            }
+
+            let tokens = self.collect_type_tokens();
+            if tokens.is_empty() {
+                let span = Self::span_from_token(&self.peek().clone());
+                self.diagnostics
+                    .push_error_with_span("union members must specify a type", Some(span));
+                bail!("missing union member type");
+            }
+            let type_span = Self::span_from_tokens(&tokens);
+            members.push(UnionMember {
+                type_expression: TypeExpression { tokens },
+                span: type_span,
+            });
+
+            self.expect_newline("expected newline after union member")?;
+        }
+
+        if members.is_empty() {
+            self.diagnostics.push_error_with_span(
+                format!("union '{}' must declare at least one member type", name),
+                Some(name_span),
+            );
+            bail!("union missing members");
+        }
+
+        self.expect_newline("expected newline after union declaration")?;
+
+        Ok(Statement::Union(UnionStatement {
+            name,
+            name_span,
+            members,
             docstring,
         }))
     }
@@ -1366,6 +1453,15 @@ impl<'a> Parser<'a> {
             bail!("missing pattern");
         }
 
+        if matches!(self.peek_kind(), TokenKind::Keyword(Keyword::Is)) {
+            let is_token = self.advance().clone();
+            let is_span = Self::span_from_token(&is_token);
+            let (type_expression, type_span) =
+                self.parse_type_test_target(Precedence::Comparison, terminator_match_pattern)?;
+            let span = Self::union_spans(&is_span, &type_span);
+            return Ok(MatchPattern::Type(type_expression, span));
+        }
+
         let expression =
             self.parse_expression_prec(Precedence::Lowest, terminator_match_pattern)?;
         self.build_match_pattern(expression)
@@ -1684,6 +1780,21 @@ impl<'a> Parser<'a> {
                     }),
                 ))
             }
+            TokenKind::Keyword(Keyword::Is) => {
+                let (type_expression, type_span) =
+                    self.parse_type_test_target(precedence, terminator)?;
+                let span =
+                    Self::union_spans(&Self::union_spans(&left.span, &operator_span), &type_span);
+                Ok(Self::make_expression(
+                    span,
+                    ExpressionKind::Is(IsExpression {
+                        value: Box::new(left),
+                        type_annotation: type_expression,
+                        is_span: operator_span,
+                        type_span,
+                    }),
+                ))
+            }
             TokenKind::DoubleEqual
             | TokenKind::BangEqual
             | TokenKind::Greater
@@ -1756,6 +1867,88 @@ impl<'a> Parser<'a> {
         }
 
         tokens
+    }
+
+    fn parse_type_test_target(
+        &mut self,
+        precedence: Precedence,
+        terminator: fn(&TokenKind) -> bool,
+    ) -> Result<(TypeExpression, SourceSpan)> {
+        let (tokens, span) = self.collect_type_tokens_for_type_test(precedence, terminator);
+        if tokens.is_empty() {
+            let span = if self.is_at_end() {
+                None
+            } else {
+                Some(Self::span_from_token(&self.peek().clone()))
+            };
+            self.diagnostics
+                .push_error_with_span("expected type after 'is' expression", span);
+            bail!("missing type test target");
+        }
+        Ok((TypeExpression { tokens }, span))
+    }
+
+    fn collect_type_tokens_for_type_test(
+        &mut self,
+        precedence: Precedence,
+        terminator: fn(&TokenKind) -> bool,
+    ) -> (Vec<Token>, SourceSpan) {
+        let mut tokens = Vec::new();
+        let mut span = SourceSpan::default();
+        let mut depth = 0usize;
+
+        loop {
+            if self.is_at_end() {
+                break;
+            }
+
+            let kind = self.peek_kind();
+
+            if depth == 0 {
+                if terminator(kind) || matches!(kind, TokenKind::Newline | TokenKind::Semicolon) {
+                    break;
+                }
+                if matches!(
+                    kind,
+                    TokenKind::Keyword(Keyword::Else)
+                        | TokenKind::Keyword(Keyword::End)
+                        | TokenKind::Keyword(Keyword::Case)
+                ) {
+                    break;
+                }
+                if let Some(next_prec) = Precedence::of(kind) {
+                    if precedence >= next_prec {
+                        break;
+                    }
+                }
+            }
+
+            let token = self.advance().clone();
+            let token_span = Self::span_from_token(&token);
+            if tokens.is_empty() {
+                span = token_span;
+            } else {
+                span = Self::union_spans(&span, &token_span);
+            }
+
+            match token.kind {
+                TokenKind::LBracket | TokenKind::LParen => {
+                    depth += 1;
+                }
+                TokenKind::RBracket | TokenKind::RParen => {
+                    if depth > 0 {
+                        depth -= 1;
+                    } else {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+
+            tokens.push(token);
+        }
+
+        (tokens, span)
     }
 
     fn expect_newline(&mut self, message: &str) -> Result<()> {

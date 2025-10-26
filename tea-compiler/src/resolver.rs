@@ -6,7 +6,7 @@ use crate::ast::{
     Identifier, IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral,
     LoopHeader, LoopKind, LoopStatement, MatchPattern, MatchStatement, MemberExpression, Module,
     ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, UnaryExpression,
-    UseStatement, VarStatement,
+    UnionStatement, UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -34,6 +34,7 @@ enum BindingKind {
     Function,
     Parameter,
     Struct,
+    Union,
     Module,
     Enum,
 }
@@ -46,6 +47,7 @@ impl BindingKind {
             BindingKind::Function => "function",
             BindingKind::Parameter => "parameter",
             BindingKind::Struct => "struct",
+            BindingKind::Union => "union",
             BindingKind::Module => "module alias",
             BindingKind::Enum => "enum",
         }
@@ -110,6 +112,7 @@ impl Resolver {
             Statement::Function(function_stmt) => self.resolve_function(function_stmt),
             Statement::Test(test_stmt) => self.resolve_test(test_stmt),
             Statement::Struct(struct_stmt) => self.resolve_struct(struct_stmt),
+            Statement::Union(union_stmt) => self.resolve_union(union_stmt),
             Statement::Enum(enum_stmt) => self.resolve_enum(enum_stmt),
             Statement::Conditional(cond_stmt) => self.resolve_conditional(cond_stmt),
             Statement::Loop(loop_stmt) => self.resolve_loop(loop_stmt),
@@ -221,6 +224,15 @@ impl Resolver {
         );
     }
 
+    fn resolve_union(&mut self, union_stmt: &UnionStatement) {
+        self.declare_binding(
+            &union_stmt.name,
+            union_stmt.name_span,
+            BindingKind::Union,
+            true,
+        );
+    }
+
     fn resolve_enum(&mut self, enum_stmt: &EnumStatement) {
         self.declare_binding(
             &enum_stmt.name,
@@ -302,6 +314,7 @@ impl Resolver {
                 self.resolve_expression(&range.end);
             }
             ExpressionKind::Lambda(lambda) => self.resolve_lambda(lambda),
+            ExpressionKind::Is(is_expr) => self.resolve_expression(&is_expr.value),
             ExpressionKind::Assignment(assignment) => self.resolve_assignment(assignment),
             ExpressionKind::Match(match_expr) => {
                 self.resolve_expression(&match_expr.scrutinee);
@@ -563,7 +576,10 @@ impl Resolver {
                         BindingKind::Variable => format!("unused variable '{}'", name),
                         BindingKind::Const => format!("unused const '{}'", name),
                         BindingKind::Parameter => format!("unused parameter '{}'", name),
-                        BindingKind::Function | BindingKind::Struct | BindingKind::Enum => continue,
+                        BindingKind::Function
+                        | BindingKind::Struct
+                        | BindingKind::Union
+                        | BindingKind::Enum => continue,
                         BindingKind::Module => {
                             format!("unused module alias '{}'", name)
                         }

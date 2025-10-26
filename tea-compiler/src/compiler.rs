@@ -171,6 +171,8 @@ impl Compiler {
             .map(|(name, ty)| (name, ty.describe()))
             .collect::<HashMap<_, _>>();
         let struct_definitions = type_checker.struct_definitions();
+        let union_definitions = type_checker.union_definitions();
+        let type_test_metadata = type_checker.type_test_metadata().clone();
         let enum_definitions = type_checker.enum_definitions();
         let enum_variant_metadata = type_checker.enum_variant_metadata().clone();
         let mut type_diagnostics = type_checker.into_diagnostics();
@@ -264,8 +266,10 @@ impl Compiler {
             function_call_metadata,
             struct_call_metadata,
             struct_definitions,
+            union_definitions,
             enum_variant_metadata,
             enum_definitions,
+            type_test_metadata,
         };
         let generator = CodeGenerator::new(lambda_captures, metadata);
         let program = generator.compile_module(&expanded_module)?;
@@ -473,6 +477,16 @@ impl ModuleExpander {
                         }
                     }
                 }
+                Statement::Union(union_stmt) => {
+                    let renamed = format!("__module_{}_{}", alias, union_stmt.name);
+                    all_renames.insert(union_stmt.name.clone(), renamed.clone());
+                    export_renames.insert(union_stmt.name.clone(), renamed);
+                    if let Some(doc) = union_stmt.docstring.as_ref() {
+                        if !doc.is_empty() {
+                            docstrings.insert(union_stmt.name.clone(), doc.clone());
+                        }
+                    }
+                }
                 Statement::Enum(enum_stmt) => {
                     let renamed = format!("__module_{}_{}", alias, enum_stmt.name);
                     all_renames.insert(enum_stmt.name.clone(), renamed.clone());
@@ -505,6 +519,11 @@ impl ModuleExpander {
                 Statement::Struct(struct_stmt) => {
                     if let Some(new_name) = all_renames.get(&struct_stmt.name).cloned() {
                         struct_stmt.name = new_name;
+                    }
+                }
+                Statement::Union(union_stmt) => {
+                    if let Some(new_name) = all_renames.get(&union_stmt.name).cloned() {
+                        union_stmt.name = new_name;
                     }
                 }
                 Statement::Enum(enum_stmt) => {
@@ -631,6 +650,14 @@ impl ModuleExpander {
                     );
                 }
             }
+            Statement::Union(union_stmt) => {
+                for member in &mut union_stmt.members {
+                    self.rewrite_type_expression_identifiers(
+                        &mut member.type_expression,
+                        rename_map,
+                    );
+                }
+            }
             Statement::Enum(_) => {}
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_identifiers(&mut cond_stmt.condition, rename_map);
@@ -709,6 +736,10 @@ impl ModuleExpander {
                 self.rewrite_expression_identifiers(&mut binary.left, rename_map);
                 self.rewrite_expression_identifiers(&mut binary.right, rename_map);
             }
+            ExpressionKind::Is(is_expr) => {
+                self.rewrite_expression_identifiers(&mut is_expr.value, rename_map);
+                self.rewrite_type_expression_identifiers(&mut is_expr.type_annotation, rename_map);
+            }
             ExpressionKind::Call(call) => {
                 self.rewrite_expression_identifiers(&mut call.callee, rename_map);
                 for argument in &mut call.arguments {
@@ -742,8 +773,14 @@ impl ModuleExpander {
                 self.rewrite_expression_identifiers(&mut match_expr.scrutinee, rename_map);
                 for arm in &mut match_expr.arms {
                     for pattern in &mut arm.patterns {
-                        if let MatchPattern::Expression(pattern_expr) = pattern {
-                            self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                        match pattern {
+                            MatchPattern::Expression(pattern_expr) => {
+                                self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                            }
+                            MatchPattern::Type(type_expr, _) => {
+                                self.rewrite_type_expression_identifiers(type_expr, rename_map);
+                            }
+                            MatchPattern::Wildcard { .. } => {}
                         }
                     }
                     self.rewrite_expression_identifiers(&mut arm.expression, rename_map);
@@ -795,6 +832,11 @@ impl ModuleExpander {
             Statement::Struct(struct_stmt) => {
                 for field in &mut struct_stmt.fields {
                     self.rewrite_type_expression_alias(&mut field.type_annotation, alias_maps);
+                }
+            }
+            Statement::Union(union_stmt) => {
+                for member in &mut union_stmt.members {
+                    self.rewrite_type_expression_alias(&mut member.type_expression, alias_maps);
                 }
             }
             Statement::Enum(_) => {}
@@ -887,6 +929,10 @@ impl ModuleExpander {
                     }
                 }
             }
+            ExpressionKind::Is(is_expr) => {
+                self.rewrite_expression_alias(&mut is_expr.value, alias_maps);
+                self.rewrite_type_expression_alias(&mut is_expr.type_annotation, alias_maps);
+            }
             ExpressionKind::Call(call) => {
                 self.rewrite_expression_alias(&mut call.callee, alias_maps);
                 for argument in &mut call.arguments {
@@ -930,8 +976,14 @@ impl ModuleExpander {
                 self.rewrite_expression_alias(&mut match_expr.scrutinee, alias_maps);
                 for arm in &mut match_expr.arms {
                     for pattern in &mut arm.patterns {
-                        if let MatchPattern::Expression(pattern_expr) = pattern {
-                            self.rewrite_expression_alias(pattern_expr, alias_maps);
+                        match pattern {
+                            MatchPattern::Expression(pattern_expr) => {
+                                self.rewrite_expression_alias(pattern_expr, alias_maps);
+                            }
+                            MatchPattern::Type(type_expr, _) => {
+                                self.rewrite_type_expression_alias(type_expr, alias_maps);
+                            }
+                            MatchPattern::Wildcard { .. } => {}
                         }
                     }
                     self.rewrite_expression_alias(&mut arm.expression, alias_maps);

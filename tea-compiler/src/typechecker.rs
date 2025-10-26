@@ -27,6 +27,7 @@ pub(crate) enum Type {
     Function(Vec<Type>, Box<Type>),
     Struct(StructType),
     Enum(EnumType),
+    Union(UnionType),
     GenericParameter(String),
     Unknown,
 }
@@ -69,6 +70,7 @@ impl Type {
                 }
             }
             Type::Enum(enum_type) => enum_type.name.clone(),
+            Type::Union(union_type) => union_type.name.clone(),
             Type::GenericParameter(name) => name.clone(),
             Type::Unknown => "Unknown".to_string(),
         }
@@ -82,6 +84,11 @@ impl Type {
 pub(crate) struct StructType {
     pub name: String,
     pub type_arguments: Vec<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct UnionType {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -119,6 +126,11 @@ pub(crate) struct StructDefinition {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct UnionDefinition {
+    pub members: Vec<Type>,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct EnumDefinition {
     pub variants: Vec<EnumVariantDefinition>,
 }
@@ -140,6 +152,12 @@ pub(crate) struct EnumVariantMetadata {
     pub enum_name: String,
     pub variant_name: String,
     pub discriminant: usize,
+}
+
+#[derive(Debug, Clone)]
+struct UnionMemberSource {
+    type_expression: TypeExpression,
+    span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +225,9 @@ pub struct TypeChecker {
     non_nil_scopes: Vec<HashSet<String>>,
     functions: HashMap<String, FunctionSignature>,
     structs: HashMap<String, StructDefinition>,
+    unions: HashMap<String, UnionDefinition>,
+    union_name_spans: HashMap<String, SourceSpan>,
+    union_member_sources: HashMap<String, Vec<UnionMemberSource>>,
     enums: HashMap<String, EnumDefinition>,
     type_parameters: Vec<HashSet<String>>,
     builtins: HashMap<String, StdFunctionKind>,
@@ -223,6 +244,7 @@ pub struct TypeChecker {
     argument_expected_types: HashMap<SourceSpan, Type>,
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     match_exhaustiveness: HashMap<SourceSpan, Vec<String>>,
+    type_test_metadata: HashMap<SourceSpan, Type>,
 }
 
 impl TypeChecker {
@@ -233,6 +255,9 @@ impl TypeChecker {
             non_nil_scopes: vec![HashSet::new()],
             functions: HashMap::new(),
             structs: HashMap::new(),
+            unions: HashMap::new(),
+            union_name_spans: HashMap::new(),
+            union_member_sources: HashMap::new(),
             enums: HashMap::new(),
             type_parameters: Vec::new(),
             builtins: HashMap::new(),
@@ -249,14 +274,17 @@ impl TypeChecker {
             argument_expected_types: HashMap::new(),
             enum_variant_metadata: HashMap::new(),
             match_exhaustiveness: HashMap::new(),
+            type_test_metadata: HashMap::new(),
         };
         checker.register_builtin_structs();
         checker
     }
 
     pub fn check_module(&mut self, module: &Module) {
+        self.collect_unions(&module.statements);
         self.collect_enums(&module.statements);
         self.collect_structs(&module.statements);
+        self.populate_unions();
         self.check_statements(&module.statements);
     }
 
@@ -300,6 +328,10 @@ impl TypeChecker {
         self.structs.clone()
     }
 
+    pub(crate) fn union_definitions(&self) -> HashMap<String, UnionDefinition> {
+        self.unions.clone()
+    }
+
     pub(crate) fn enum_definitions(&self) -> HashMap<String, EnumDefinition> {
         self.enums.clone()
     }
@@ -310,6 +342,10 @@ impl TypeChecker {
 
     pub(crate) fn match_exhaustiveness(&self) -> &HashMap<SourceSpan, Vec<String>> {
         &self.match_exhaustiveness
+    }
+
+    pub(crate) fn type_test_metadata(&self) -> &HashMap<SourceSpan, Type> {
+        &self.type_test_metadata
     }
 
     fn report_error<S: Into<String>>(&mut self, message: S, span: Option<SourceSpan>) {
@@ -488,6 +524,40 @@ impl TypeChecker {
         }
     }
 
+    fn collect_unions(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            if let Statement::Union(union_stmt) = statement {
+                if self.unions.contains_key(&union_stmt.name) {
+                    self.report_error(
+                        format!("duplicate union definition '{}'", union_stmt.name),
+                        Some(union_stmt.name_span),
+                    );
+                    continue;
+                }
+
+                self.unions.insert(
+                    union_stmt.name.clone(),
+                    UnionDefinition {
+                        members: Vec::new(),
+                    },
+                );
+                self.union_name_spans
+                    .insert(union_stmt.name.clone(), union_stmt.name_span);
+                self.union_member_sources.insert(
+                    union_stmt.name.clone(),
+                    union_stmt
+                        .members
+                        .iter()
+                        .map(|member| UnionMemberSource {
+                            type_expression: member.type_expression.clone(),
+                            span: member.span,
+                        })
+                        .collect(),
+                );
+            }
+        }
+    }
+
     fn collect_structs(&mut self, statements: &[Statement]) {
         // First pass: register struct names to allow forward references.
         for statement in statements {
@@ -575,6 +645,235 @@ impl TypeChecker {
         self.pop_type_parameters();
     }
 
+    fn populate_unions(&mut self) {
+        let union_names: Vec<String> = self.union_member_sources.keys().cloned().collect();
+        for name in union_names {
+            let sources = match self.union_member_sources.get(&name) {
+                Some(sources) => sources.clone(),
+                None => continue,
+            };
+            let mut members = Vec::new();
+            let mut seen = HashSet::new();
+
+            for source in sources {
+                let ty = self
+                    .parse_type(&source.type_expression)
+                    .unwrap_or(Type::Unknown);
+                if matches!(ty, Type::Unknown) {
+                    continue;
+                }
+                if matches!(&ty, Type::Union(inner) if inner.name == name) {
+                    self.report_error(
+                        format!("union '{}' cannot include itself", name),
+                        Some(source.span),
+                    );
+                    continue;
+                }
+                if !self.is_supported_type_test_target(&ty) {
+                    self.report_error(
+                        format!(
+                            "union '{}' member type '{}' is not supported",
+                            name,
+                            ty.describe()
+                        ),
+                        Some(source.span),
+                    );
+                    continue;
+                }
+                if !seen.insert(ty.clone()) {
+                    self.report_error(
+                        format!(
+                            "duplicate member type '{}' in union '{}'",
+                            ty.describe(),
+                            name
+                        ),
+                        Some(source.span),
+                    );
+                    continue;
+                }
+                members.push(ty);
+            }
+
+            if members.is_empty() {
+                let span = self.union_name_spans.get(&name).copied();
+                self.report_error(
+                    format!(
+                        "union '{}' must declare at least one valid member type",
+                        name
+                    ),
+                    span,
+                );
+            }
+
+            if let Some(definition) = self.unions.get_mut(&name) {
+                definition.members = members;
+            }
+        }
+    }
+
+    fn union_contains_type(
+        &self,
+        union_name: &str,
+        candidate: &Type,
+        visited: &mut HashSet<String>,
+    ) -> bool {
+        if !visited.insert(union_name.to_string()) {
+            return false;
+        }
+        let Some(definition) = self.unions.get(union_name) else {
+            visited.remove(union_name);
+            return false;
+        };
+        for member in &definition.members {
+            if self.types_compatible_for_union(member, candidate, visited) {
+                visited.remove(union_name);
+                return true;
+            }
+        }
+        visited.remove(union_name);
+        false
+    }
+
+    fn union_assignable_to_type(&self, union_name: &str, ty: &Type) -> bool {
+        let Some(definition) = self.unions.get(union_name) else {
+            return false;
+        };
+        definition.members.iter().all(|member| {
+            let mut visited = HashSet::new();
+            self.types_compatible_for_union(member, ty, &mut visited)
+        })
+    }
+
+    fn union_is_subset(&self, subset: &str, superset: &str) -> bool {
+        let Some(definition) = self.unions.get(subset) else {
+            return false;
+        };
+        definition.members.iter().all(|member| {
+            let mut visited = HashSet::new();
+            self.union_contains_type(superset, member, &mut visited)
+        })
+    }
+
+    fn flattened_union_members(&self, union_name: &str) -> HashSet<Type> {
+        let mut visited = HashSet::new();
+        let mut members = HashSet::new();
+        self.collect_union_members_recursive(union_name, &mut visited, &mut members);
+        members
+    }
+
+    fn collect_union_members_recursive(
+        &self,
+        union_name: &str,
+        visited: &mut HashSet<String>,
+        members: &mut HashSet<Type>,
+    ) {
+        if !visited.insert(union_name.to_string()) {
+            return;
+        }
+        let Some(definition) = self.unions.get(union_name) else {
+            return;
+        };
+        for member in &definition.members {
+            match member {
+                Type::Union(inner) => {
+                    self.collect_union_members_recursive(&inner.name, visited, members);
+                }
+                _ => {
+                    members.insert(member.clone());
+                }
+            }
+        }
+    }
+
+    fn types_compatible_for_union(
+        &self,
+        member: &Type,
+        candidate: &Type,
+        visited: &mut HashSet<String>,
+    ) -> bool {
+        if member == candidate {
+            return true;
+        }
+        match member {
+            Type::Union(inner) => self.union_contains_type(&inner.name, candidate, visited),
+            Type::Optional(inner) => {
+                matches!(candidate, Type::Nil)
+                    || self.types_compatible_for_union(inner, candidate, visited)
+                    || matches!(candidate, Type::Optional(other)
+                        if self.types_compatible_for_union(inner, other, visited))
+            }
+            _ => match candidate {
+                Type::Optional(inner) => {
+                    self.types_compatible_for_union(member, inner, visited)
+                        || matches!(member, Type::Nil)
+                }
+                Type::Union(inner_union) => {
+                    self.union_contains_type(&inner_union.name, member, visited)
+                }
+                _ => false,
+            },
+        }
+    }
+
+    fn validate_type_test(&mut self, value_type: &Type, target_type: &Type, span: SourceSpan) {
+        if !self.is_supported_type_test_target(target_type) {
+            self.report_error(
+                format!(
+                    "type test target '{}' is not supported",
+                    target_type.describe()
+                ),
+                Some(span),
+            );
+            return;
+        }
+
+        if matches!(value_type, Type::Unknown) || matches!(target_type, Type::Unknown) {
+            return;
+        }
+
+        let mut visited = HashSet::new();
+        let possible = if let Type::Union(union_type) = value_type {
+            self.union_contains_type(&union_type.name, target_type, &mut visited)
+        } else if let Type::Union(union_type) = target_type {
+            self.union_contains_type(&union_type.name, value_type, &mut visited)
+        } else if let Type::Optional(inner) = value_type {
+            matches!(target_type, Type::Nil)
+                || self.types_compatible_for_union(inner, target_type, &mut visited)
+        } else if let Type::Optional(inner) = target_type {
+            matches!(value_type, Type::Nil)
+                || self.types_compatible_for_union(value_type, inner, &mut visited)
+        } else {
+            value_type == target_type
+                || (matches!(value_type, Type::Nil) && matches!(target_type, Type::Nil))
+        };
+
+        if !possible {
+            self.report_error(
+                format!(
+                    "type test will always be false: '{}' is incompatible with '{}'",
+                    value_type.describe(),
+                    target_type.describe()
+                ),
+                Some(span),
+            );
+        }
+    }
+
+    fn is_supported_type_test_target(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Bool
+            | Type::Int
+            | Type::Float
+            | Type::String
+            | Type::Nil
+            | Type::Struct(_)
+            | Type::Enum(_)
+            | Type::Union(_) => true,
+            Type::Optional(inner) => self.is_supported_type_test_target(inner),
+            _ => false,
+        }
+    }
+
     fn check_statement(&mut self, statement: &Statement) {
         if let Some(ctx) = self.contexts.last_mut() {
             ctx.last_expression_type = None;
@@ -596,6 +895,7 @@ impl TypeChecker {
             Statement::Use(use_stmt) => self.register_use(use_stmt),
             Statement::Match(match_stmt) => self.check_match_statement(match_stmt),
             Statement::Struct(_) => {}
+            Statement::Union(_) => {}
             Statement::Enum(_) => {}
         }
     }
@@ -790,6 +1090,12 @@ impl TypeChecker {
         let mut coverage_complete = false;
         let mut matched_bool_values: HashSet<bool> = HashSet::new();
         let mut matched_enum_variants: HashSet<String> = HashSet::new();
+        let union_members = if let Type::Union(union_type) = &scrutinee_type {
+            Some(self.flattened_union_members(&union_type.name))
+        } else {
+            None
+        };
+        let mut matched_union_members: HashSet<Type> = HashSet::new();
         let mut coverage_due_to_wildcard = false;
 
         for arm in &statement.arms {
@@ -934,11 +1240,58 @@ impl TypeChecker {
                             _ => {}
                         }
                     }
+                    MatchPattern::Type(type_expr, pattern_span) => {
+                        let target_type = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+                        self.validate_type_test(&scrutinee_type, &target_type, *pattern_span);
+                        if !matches!(target_type, Type::Unknown) {
+                            self.type_test_metadata
+                                .insert(*pattern_span, target_type.clone());
+                        }
+
+                        if suppress_unreachable || !arm_reachable {
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(*pattern_span),
+                            );
+                            continue;
+                        }
+
+                        if let (Some(members), Type::Union(_)) =
+                            (union_members.as_ref(), &scrutinee_type)
+                        {
+                            let mut matched_any = false;
+                            if let Type::Union(inner_union) = &target_type {
+                                let target_members =
+                                    self.flattened_union_members(&inner_union.name);
+                                for member in target_members {
+                                    if members.contains(&member) {
+                                        matched_any = true;
+                                        matched_union_members.insert(member);
+                                    }
+                                }
+                            } else if members.contains(&target_type) {
+                                matched_any = true;
+                                matched_union_members.insert(target_type.clone());
+                            }
+
+                            if matched_any {
+                                arm_adds_coverage = true;
+                                if members.is_subset(&matched_union_members) {
+                                    coverage_complete = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            let coverage_trackable =
-                coverage_due_to_wildcard || matches!(scrutinee_type, Type::Bool | Type::Enum(_));
+            let coverage_trackable = coverage_due_to_wildcard
+                || matches!(scrutinee_type, Type::Bool | Type::Enum(_))
+                || union_members.is_some();
             if !arm_adds_coverage && arm_reachable && coverage_trackable {
                 self.report_warning(
                     "match arm is unreachable; previous patterns cover all values",
@@ -1336,6 +1689,57 @@ impl TypeChecker {
             }
             (Type::Dict(expected_inner), Type::Dict(actual_inner)) => {
                 self.ensure_compatible(expected_inner, actual_inner, context, span)
+            }
+            (Type::Union(expected_union), Type::Union(actual_union)) => {
+                if expected_union.name == actual_union.name
+                    || self.union_is_subset(&actual_union.name, &expected_union.name)
+                {
+                    true
+                } else {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    false
+                }
+            }
+            (Type::Union(expected_union), actual_type) => {
+                let mut visited = HashSet::new();
+                if self.union_contains_type(&expected_union.name, actual_type, &mut visited) {
+                    true
+                } else {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    false
+                }
+            }
+            (expected_type, Type::Union(actual_union)) => {
+                if self.union_assignable_to_type(&actual_union.name, expected_type) {
+                    true
+                } else {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    false
+                }
             }
             (
                 Type::Function(expected_params, expected_ret),
@@ -1843,6 +2247,7 @@ impl TypeChecker {
             &type_expr.tokens,
             &type_parameters,
             &self.structs,
+            &self.unions,
             &self.enums,
         );
         match parser.parse_type() {
@@ -1924,6 +2329,18 @@ impl TypeChecker {
                 .unwrap_or(Type::Unknown),
             ExpressionKind::Unary(unary) => self.type_from_unary(unary, expression.span),
             ExpressionKind::Binary(binary) => self.type_from_binary(binary, expression.span),
+            ExpressionKind::Is(is_expr) => {
+                let value_type = self.infer_expression(&is_expr.value);
+                let target_type = self
+                    .parse_type(&is_expr.type_annotation)
+                    .unwrap_or(Type::Unknown);
+                self.validate_type_test(&value_type, &target_type, is_expr.type_span);
+                if !matches!(target_type, Type::Unknown) {
+                    self.type_test_metadata
+                        .insert(expression.span, target_type.clone());
+                }
+                Type::Bool
+            }
             ExpressionKind::Assignment(assignment) => {
                 if let ExpressionKind::Identifier(identifier) = &assignment.target.kind {
                     let value_type = self.infer_expression(&assignment.value);
@@ -1958,9 +2375,16 @@ impl TypeChecker {
             None
         };
 
+        let union_members = if let Type::Union(union_type) = &scrutinee_type {
+            Some(self.flattened_union_members(&union_type.name))
+        } else {
+            None
+        };
+
         let mut coverage_complete = false;
         let mut matched_bool_values: HashSet<bool> = HashSet::new();
         let mut matched_enum_variants: HashSet<String> = HashSet::new();
+        let mut matched_union_members: HashSet<Type> = HashSet::new();
         let mut coverage_due_to_wildcard = false;
 
         for arm in &expression.arms {
@@ -2007,6 +2431,54 @@ impl TypeChecker {
                             arm_adds_coverage = true;
                             coverage_complete = true;
                             coverage_due_to_wildcard = true;
+                        }
+                    }
+                    MatchPattern::Type(type_expr, pattern_span) => {
+                        let target_type = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+
+                        self.validate_type_test(&scrutinee_type, &target_type, *pattern_span);
+
+                        if !matches!(target_type, Type::Unknown) {
+                            self.type_test_metadata
+                                .insert(*pattern_span, target_type.clone());
+                        }
+
+                        if suppress_unreachable || !arm_reachable {
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(*pattern_span),
+                            );
+                            continue;
+                        }
+
+                        if let (Some(members), Type::Union(_)) =
+                            (union_members.as_ref(), &scrutinee_type)
+                        {
+                            let mut matched_any = false;
+                            if let Type::Union(inner_union) = &target_type {
+                                let target_members =
+                                    self.flattened_union_members(&inner_union.name);
+                                for member in target_members {
+                                    if members.contains(&member) {
+                                        matched_any = true;
+                                        matched_union_members.insert(member);
+                                    }
+                                }
+                            } else if members.contains(&target_type) {
+                                matched_any = true;
+                                matched_union_members.insert(target_type.clone());
+                            }
+
+                            if matched_any {
+                                arm_adds_coverage = true;
+                                if members.is_subset(&matched_union_members) {
+                                    coverage_complete = true;
+                                }
+                            }
                         }
                     }
                     MatchPattern::Expression(pattern_expr) => {
@@ -2154,6 +2626,15 @@ impl TypeChecker {
                             if !matched_enum_variants.contains(&variant.name) {
                                 missing_patterns
                                     .push(format!("{}.{}", enum_type.name, variant.name));
+                            }
+                        }
+                    }
+                }
+                Type::Union(_union_type) => {
+                    if let Some(members) = union_members.as_ref() {
+                        for member in members {
+                            if !matched_union_members.contains(member) {
+                                missing_patterns.push(member.describe());
                             }
                         }
                     }
@@ -3409,6 +3890,7 @@ struct TypeAnnotationParser<'a> {
     position: usize,
     type_parameters: &'a HashSet<String>,
     structs: &'a HashMap<String, StructDefinition>,
+    unions: &'a HashMap<String, UnionDefinition>,
     enums: &'a HashMap<String, EnumDefinition>,
 }
 
@@ -3441,6 +3923,7 @@ impl<'a> TypeAnnotationParser<'a> {
         tokens: &'a [Token],
         type_parameters: &'a HashSet<String>,
         structs: &'a HashMap<String, StructDefinition>,
+        unions: &'a HashMap<String, UnionDefinition>,
         enums: &'a HashMap<String, EnumDefinition>,
     ) -> Self {
         Self {
@@ -3448,6 +3931,7 @@ impl<'a> TypeAnnotationParser<'a> {
             position: 0,
             type_parameters,
             structs,
+            unions,
             enums,
         }
     }
@@ -3504,6 +3988,17 @@ impl<'a> TypeAnnotationParser<'a> {
                         Ok(Type::Struct(StructType {
                             name: other.to_string(),
                             type_arguments,
+                        }))
+                    } else if self.unions.contains_key(other) {
+                        if matches!(self.peek_kind(), Some(TokenKind::LBracket)) {
+                            let bracket = self.advance().cloned().unwrap();
+                            return Err(TypeError::at(
+                                &bracket,
+                                format!("union '{}' does not accept type arguments", other),
+                            ));
+                        }
+                        Ok(Type::Union(UnionType {
+                            name: other.to_string(),
                         }))
                     } else if self.enums.contains_key(other) {
                         if matches!(self.peek_kind(), Some(TokenKind::LBracket)) {

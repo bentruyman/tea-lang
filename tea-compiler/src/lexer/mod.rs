@@ -97,10 +97,12 @@ pub enum Keyword {
     Return,
     Use,
     Struct,
+    Union,
     Enum,
     Else,
     Not,
     In,
+    Is,
     Nil,
 }
 
@@ -1130,10 +1132,12 @@ fn keyword_from_lexeme(lexeme: &str) -> Option<Keyword> {
         "return" => Some(Keyword::Return),
         "use" => Some(Keyword::Use),
         "struct" => Some(Keyword::Struct),
+        "union" => Some(Keyword::Union),
         "enum" => Some(Keyword::Enum),
         "else" => Some(Keyword::Else),
         "not" => Some(Keyword::Not),
         "in" => Some(Keyword::In),
+        "is" => Some(Keyword::Is),
         "nil" => Some(Keyword::Nil),
         _ => None,
     }

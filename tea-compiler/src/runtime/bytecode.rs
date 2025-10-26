@@ -63,6 +63,19 @@ impl Chunk {
 }
 
 #[derive(Debug, Clone)]
+pub enum TypeCheck {
+    Bool,
+    Int,
+    Float,
+    String,
+    Nil,
+    Struct(String),
+    Enum(String),
+    Optional(Box<TypeCheck>),
+    Union(Vec<TypeCheck>),
+}
+
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Constant(usize),
     GetGlobal(usize),
@@ -83,6 +96,7 @@ pub enum Instruction {
     LessEqual,
     Negate,
     Not,
+    TypeIs(TypeCheck),
     Jump(usize),
     JumpIfFalse(usize),
     JumpIfNil(usize),
@@ -129,6 +143,7 @@ impl fmt::Display for Instruction {
             Instruction::LessEqual => write!(f, "LTE"),
             Instruction::Negate => write!(f, "NEG"),
             Instruction::Not => write!(f, "NOT"),
+            Instruction::TypeIs(check) => write!(f, "TYPE_IS {:?}", check),
             Instruction::Jump(target) => write!(f, "JUMP {target}"),
             Instruction::JumpIfFalse(target) => write!(f, "JUMP_IF_FALSE {target}"),
             Instruction::JumpIfNil(target) => write!(f, "JUMP_IF_NIL {target}"),

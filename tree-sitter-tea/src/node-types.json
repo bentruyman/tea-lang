@@ -314,6 +314,10 @@
             "named": false
           },
           {
+            "type": "is",
+            "named": false
+          },
+          {
             "type": "||",
             "named": false
           }
@@ -436,6 +440,10 @@
           "named": true
         },
         {
+          "type": "union_definition",
+          "named": true
+        },
+        {
           "type": "unless_statement",
           "named": true
         },
@@ -505,6 +513,10 @@
         },
         {
           "type": "test_block",
+          "named": true
+        },
+        {
+          "type": "union_definition",
           "named": true
         },
         {
@@ -2260,6 +2272,10 @@
           "named": true
         },
         {
+          "type": "union_definition",
+          "named": true
+        },
+        {
           "type": "unless_statement",
           "named": true
         },
@@ -2497,6 +2513,48 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "union_definition",
+    "named": true,
+    "fields": {
+      "members": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "union_member",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "union_member",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_annotation",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -3037,6 +3095,10 @@
     "named": false
   },
   {
+    "type": "is",
+    "named": false
+  },
+  {
     "type": "match",
     "named": false
   },
@@ -3074,6 +3136,10 @@
   },
   {
     "type": "true",
+    "named": false
+  },
+  {
+    "type": "union",
     "named": false
   },
   {

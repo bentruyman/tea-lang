@@ -4,9 +4,9 @@ use crate::ast::{
     AssignmentExpression, BinaryExpression, Block, CallExpression, ConditionalStatement,
     DictLiteral, EnumStatement, Expression, ExpressionKind, FunctionParameter, FunctionStatement,
     Identifier, IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral,
-    LoopHeader, LoopKind, LoopStatement, MatchPattern, MemberExpression, Module, ReturnStatement,
-    SourceSpan, Statement, StructStatement, TestStatement, UnaryExpression, UseStatement,
-    VarStatement,
+    LoopHeader, LoopKind, LoopStatement, MatchPattern, MatchStatement, MemberExpression, Module,
+    ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, UnaryExpression,
+    UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -114,7 +114,20 @@ impl Resolver {
             Statement::Conditional(cond_stmt) => self.resolve_conditional(cond_stmt),
             Statement::Loop(loop_stmt) => self.resolve_loop(loop_stmt),
             Statement::Return(ret_stmt) => self.resolve_return(ret_stmt),
+            Statement::Match(match_stmt) => self.resolve_match_statement(match_stmt),
             Statement::Expression(expr_stmt) => self.resolve_expression(&expr_stmt.expression),
+        }
+    }
+
+    fn resolve_match_statement(&mut self, statement: &MatchStatement) {
+        self.resolve_expression(&statement.scrutinee);
+        for arm in &statement.arms {
+            for pattern in &arm.patterns {
+                if let MatchPattern::Expression(pattern_expr) = pattern {
+                    self.resolve_expression(pattern_expr);
+                }
+            }
+            self.resolve_statements(&arm.block.statements);
         }
     }
 

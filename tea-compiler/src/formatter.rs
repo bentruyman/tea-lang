@@ -25,8 +25,10 @@ pub fn format_source(input: &str) -> String {
             let skip_for_function_edge = block_stack
                 .last()
                 .map(|state| {
-                    matches!(state.kind, BlockKind::Function | BlockKind::Match)
-                        && !state.saw_content
+                    matches!(
+                        state.kind,
+                        BlockKind::Function | BlockKind::Match | BlockKind::MatchCase
+                    ) && !state.saw_content
                 })
                 .unwrap_or(false);
 
@@ -87,16 +89,32 @@ pub fn format_source(input: &str) -> String {
 
         let mut closed_block: Option<BlockKind> = None;
         let mut reopened_from_else: Option<BlockKind> = None;
-        if is_block_closer(code_trimmed) {
-            if line_starts_with_keyword(code_trimmed, "end") {
-                if let Some(state) = block_stack.pop() {
-                    closed_block = Some(state.kind);
-                }
-            } else if line_starts_with_keyword(code_trimmed, "else") {
-                reopened_from_else = block_stack.pop().map(|state| state.kind);
+        let is_case_line = line_starts_with_keyword(code_trimmed, "case");
+        if line_starts_with_keyword(code_trimmed, "end") {
+            while matches!(
+                block_stack.last().map(|state| state.kind),
+                Some(BlockKind::MatchCase)
+            ) {
+                block_stack.pop();
+                block_indent = block_indent.saturating_sub(1);
             }
+            if let Some(state) = block_stack.pop() {
+                closed_block = Some(state.kind);
+                block_indent = block_indent.saturating_sub(1);
+            }
+        } else if line_starts_with_keyword(code_trimmed, "else") {
+            reopened_from_else = block_stack.pop().map(|state| state.kind);
             block_indent = block_indent.saturating_sub(1);
+        } else if is_case_line {
+            if let Some(state) = block_stack.last() {
+                if matches!(state.kind, BlockKind::MatchCase) {
+                    block_stack.pop();
+                    block_indent = block_indent.saturating_sub(1);
+                }
+            }
         }
+
+        let is_block_case = is_case_line && !code_trimmed.contains("=>");
 
         if !trimmed.is_empty()
             && !line_starts_with_keyword(code_trimmed, "else")
@@ -155,6 +173,14 @@ pub fn format_source(input: &str) -> String {
             });
         }
 
+        if is_block_case {
+            block_indent += 1;
+            block_stack.push(BlockState {
+                kind: BlockKind::MatchCase,
+                saw_content: false,
+            });
+        }
+
         if inline_match_line {
             block_indent += 1;
             block_stack.push(BlockState {
@@ -192,6 +218,7 @@ enum BlockKind {
     Conditional,
     Test,
     Match,
+    MatchCase,
     Other,
 }
 

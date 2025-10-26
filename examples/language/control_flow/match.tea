@@ -42,3 +42,14 @@ output = match bool
 end
 
 debug.print(output)
+
+# `match` can also be used as a statement
+# If a case isn't followed by a `=>` then it is assumed what follows is a block of code to be executed
+match code
+  case 200
+    debug.print("ok")
+  case 301 | 302
+    debug.print("redirect")
+  case _
+    debug.print("fallback")
+end

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tea_compiler::{
     CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
-    InterpolatedStringPart, Keyword, Lexer, Module, ModuleAliasBinding, SourceFile, SourceId,
-    Statement, TokenKind,
+    InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module, ModuleAliasBinding, SourceFile,
+    SourceId, Statement, TokenKind,
 };
 use tokio::{
     sync::Mutex,
@@ -801,6 +801,17 @@ fn collect_symbols(
                         self.visit_expression(expr);
                     }
                 }
+                Statement::Match(match_stmt) => {
+                    self.visit_expression(&match_stmt.scrutinee);
+                    for arm in &match_stmt.arms {
+                        for pattern in &arm.patterns {
+                            if let MatchPattern::Expression(pattern_expr) = pattern {
+                                self.visit_expression(pattern_expr);
+                            }
+                        }
+                        self.visit_statements(&arm.block.statements);
+                    }
+                }
                 Statement::Expression(expr_stmt) => {
                     self.visit_expression(&expr_stmt.expression);
                 }
@@ -892,7 +903,7 @@ fn collect_symbols(
                     self.visit_expression(&expr.scrutinee);
                     for arm in &expr.arms {
                         for pattern in &arm.patterns {
-                            if let tea_compiler::MatchPattern::Expression(pattern_expr) = pattern {
+                            if let MatchPattern::Expression(pattern_expr) = pattern {
                                 self.visit_expression(pattern_expr);
                             }
                         }

@@ -83,6 +83,49 @@ assert.assert_eq(output, "red")
 }
 
 #[test]
+fn match_statement_runtime_behaviour() -> anyhow::Result<()> {
+    let source = r#"
+use assert = "std.assert"
+
+var code = 301
+var ok = false
+var redirect = false
+var fallback = false
+
+match code
+  case 200
+    ok = true
+  case 301 | 302
+    redirect = true
+  case _
+    fallback = true
+end
+
+assert.assert(!ok)
+assert.assert(redirect)
+assert.assert(!fallback)
+
+var counter = 0
+
+match code
+  case 200
+    counter = counter + 1
+  case 301
+    counter = counter + 10
+  case _
+    counter = counter + 100
+end
+
+assert.assert_eq(counter, 10)
+"#;
+
+    let compilation = compile_program(source)?;
+    let mut vm = Vm::new(&compilation.program);
+    vm.run()?;
+    Ok(())
+}
+
+#[test]
 fn match_expression_emits_expected_jumps() -> anyhow::Result<()> {
     let source = r#"
 var code = 302
@@ -151,6 +194,41 @@ end
         messages
             .iter()
             .any(|message| message.contains("match expression is not exhaustive")),
+        "expected non-exhaustive diagnostic, got {messages:?}"
+    );
+}
+
+#[test]
+fn match_statement_requires_wildcard_arm() {
+    let source = r#"
+var hits = 0
+match 1
+  case 1
+    hits = hits + 1
+end
+"#;
+
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("missing_statement_case.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected compilation to fail without wildcard arm in match statement"
+    );
+    let messages: Vec<String> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("match statement is not exhaustive")),
         "expected non-exhaustive diagnostic, got {messages:?}"
     );
 }

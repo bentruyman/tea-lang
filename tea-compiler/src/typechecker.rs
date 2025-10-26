@@ -4,9 +4,9 @@ use crate::ast::{
     BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, ConditionalKind,
     ConditionalStatement, DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier,
     IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal,
-    LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern, Module, ReturnStatement,
-    SourceSpan, Statement, StructStatement, TestStatement, TypeExpression, TypeParameter,
-    UnaryExpression, UnaryOperator, VarStatement,
+    LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
+    ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TypeExpression,
+    TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Keyword, Token, TokenKind};
@@ -594,6 +594,7 @@ impl TypeChecker {
             Statement::Function(func) => self.check_function(func),
             Statement::Test(test_stmt) => self.check_test(test_stmt),
             Statement::Use(use_stmt) => self.register_use(use_stmt),
+            Statement::Match(match_stmt) => self.check_match_statement(match_stmt),
             Statement::Struct(_) => {}
             Statement::Enum(_) => {}
         }
@@ -772,6 +773,236 @@ impl TypeChecker {
             }
         }
         self.check_statements(&statement.body.statements);
+    }
+
+    fn check_match_statement(&mut self, statement: &MatchStatement) {
+        let span = statement.span;
+        let scrutinee_type = self.infer_expression(&statement.scrutinee);
+
+        let enum_variant_total = if let Type::Enum(enum_type) = &scrutinee_type {
+            self.enums
+                .get(&enum_type.name)
+                .map(|definition| definition.variants.len())
+        } else {
+            None
+        };
+
+        let mut coverage_complete = false;
+        let mut matched_bool_values: HashSet<bool> = HashSet::new();
+        let mut matched_enum_variants: HashSet<String> = HashSet::new();
+        let mut coverage_due_to_wildcard = false;
+
+        for arm in &statement.arms {
+            let arm_reachable = !coverage_complete;
+            let arm_is_wildcard_only = arm
+                .patterns
+                .iter()
+                .all(|pattern| matches!(pattern, MatchPattern::Wildcard { .. }));
+            let suppress_unreachable =
+                !arm_reachable && arm_is_wildcard_only && !coverage_due_to_wildcard;
+
+            if !arm_reachable && !suppress_unreachable {
+                self.report_warning(
+                    "match arm is unreachable; previous patterns cover all values",
+                    Some(arm.span),
+                );
+            }
+
+            let mut arm_adds_coverage = false;
+
+            for pattern in &arm.patterns {
+                match pattern {
+                    MatchPattern::Wildcard { span: pattern_span } => {
+                        if suppress_unreachable {
+                            continue;
+                        }
+
+                        if !arm_reachable {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(*pattern_span),
+                            );
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            if coverage_due_to_wildcard {
+                                self.report_warning(
+                                    "pattern is unreachable; previous patterns cover all values",
+                                    Some(*pattern_span),
+                                );
+                            }
+                        } else {
+                            arm_adds_coverage = true;
+                            coverage_complete = true;
+                            coverage_due_to_wildcard = true;
+                        }
+                    }
+                    MatchPattern::Expression(pattern_expr) => {
+                        let pattern_type = self.infer_expression(pattern_expr);
+                        if scrutinee_type != Type::Unknown
+                            && pattern_type != Type::Unknown
+                            && pattern_type != scrutinee_type
+                        {
+                            self.report_error(
+                                format!(
+                                    "pattern type '{}' is incompatible with scrutinee type '{}'",
+                                    pattern_type.describe(),
+                                    scrutinee_type.describe()
+                                ),
+                                Some(pattern_expr.span),
+                            );
+                        }
+
+                        if suppress_unreachable {
+                            continue;
+                        }
+
+                        if !arm_reachable {
+                            continue;
+                        }
+
+                        if coverage_complete {
+                            self.report_warning(
+                                "pattern is unreachable; previous patterns cover all values",
+                                Some(pattern_expr.span),
+                            );
+                            continue;
+                        }
+
+                        match (&scrutinee_type, &pattern_expr.kind) {
+                            (Type::Bool, ExpressionKind::Literal(Literal::Boolean(value))) => {
+                                if !matched_bool_values.insert(*value) {
+                                    self.report_warning(
+                                        format!(
+                                            "pattern `{}` is unreachable; value already matched",
+                                            value
+                                        ),
+                                        Some(pattern_expr.span),
+                                    );
+                                } else {
+                                    arm_adds_coverage = true;
+                                    if matched_bool_values.len() == 2 {
+                                        coverage_complete = true;
+                                    }
+                                }
+                            }
+                            (Type::Enum(enum_type), _) => {
+                                let variant_name = if let Some(metadata) =
+                                    self.enum_variant_metadata.get(&pattern_expr.span)
+                                {
+                                    if metadata.enum_name == enum_type.name {
+                                        Some(metadata.variant_name.clone())
+                                    } else {
+                                        None
+                                    }
+                                } else if let ExpressionKind::Member(member) = &pattern_expr.kind {
+                                    if let ExpressionKind::Identifier(identifier) =
+                                        &member.object.kind
+                                    {
+                                        if identifier.name == enum_type.name {
+                                            Some(member.property.clone())
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
+
+                                if let Some(variant) = variant_name {
+                                    if !matched_enum_variants.insert(variant.clone()) {
+                                        self.report_warning(
+                                            format!(
+                                                "pattern `{}.{}` is unreachable; variant already matched",
+                                                enum_type.name, variant
+                                            ),
+                                            Some(pattern_expr.span),
+                                        );
+                                    } else {
+                                        arm_adds_coverage = true;
+                                        if let Some(total) = enum_variant_total {
+                                            if matched_enum_variants.len() == total {
+                                                coverage_complete = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            let coverage_trackable =
+                coverage_due_to_wildcard || matches!(scrutinee_type, Type::Bool | Type::Enum(_));
+            if !arm_adds_coverage && arm_reachable && coverage_trackable {
+                self.report_warning(
+                    "match arm is unreachable; previous patterns cover all values",
+                    Some(arm.span),
+                );
+            }
+
+            self.run_branch(|checker| {
+                checker.check_statements(&arm.block.statements);
+            });
+        }
+
+        let mut missing_patterns: Vec<String> = Vec::new();
+        if !coverage_complete {
+            match &scrutinee_type {
+                Type::Bool => {
+                    if !matched_bool_values.contains(&true) {
+                        missing_patterns.push("true".to_string());
+                    }
+                    if !matched_bool_values.contains(&false) {
+                        missing_patterns.push("false".to_string());
+                    }
+                }
+                Type::Enum(enum_type) => {
+                    if let Some(definition) = self.enums.get(&enum_type.name) {
+                        for variant in &definition.variants {
+                            if !matched_enum_variants.contains(&variant.name) {
+                                missing_patterns
+                                    .push(format!("{}.{}", enum_type.name, variant.name));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if coverage_complete {
+            self.match_exhaustiveness.remove(&span);
+        } else if !missing_patterns.is_empty() {
+            let preview = missing_patterns
+                .iter()
+                .take(3)
+                .map(|case| format!("`{case}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let message = if missing_patterns.len() <= 3 {
+                format!("match statement is not exhaustive; missing {preview}")
+            } else {
+                format!(
+                    "match statement is not exhaustive; missing {} cases (e.g. {})",
+                    missing_patterns.len(),
+                    preview
+                )
+            };
+            self.report_error(message, Some(span));
+            self.match_exhaustiveness.insert(span, missing_patterns);
+        } else {
+            self.report_error(
+                "match statement is not exhaustive; add `_` arm or cover all values".to_string(),
+                Some(span),
+            );
+            self.match_exhaustiveness.remove(&span);
+        }
     }
 
     fn check_return(&mut self, statement: &ReturnStatement) {

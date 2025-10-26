@@ -24,6 +24,8 @@ module.exports = grammar({
     [$.return_statement],
     [$.argument, $.parenthesized_expression],
     [$.braced_block, $.dict_literal],
+    [$._expression, $.match_pattern],
+    [$.match_case_block, $.match_case_expression],
   ],
 
   word: $ => $.identifier,
@@ -43,6 +45,7 @@ module.exports = grammar({
       $.while_statement,
       $.until_statement,
       $.test_block,
+      $.match_statement,
       $.return_statement,
       $.expression_statement,
     ),
@@ -167,6 +170,22 @@ module.exports = grammar({
       "end"
     ),
 
+    match_statement: $ => seq(
+      "match",
+      field("value", $._expression),
+      repeat1($.match_case_block),
+      "end"
+    ),
+
+    match_case_block: $ => seq(
+      "case",
+      field("patterns", $.match_patterns),
+      choice(
+        seq("=>", field("value", $._expression)),
+        field("body", $.block)
+      )
+    ),
+
     test_block: $ => seq(
       "test",
       field("name", $.string),
@@ -193,6 +212,7 @@ module.exports = grammar({
       $.assignment,
       $.binary_expression,
       $.lambda_expression,
+      $.match_expression,
       $.call_expression,
       $.member_expression,
       $.index_expression,
@@ -212,6 +232,20 @@ module.exports = grammar({
       "=",
       field("right", $._expression),
     )),
+
+    match_expression: $ => seq(
+      "match",
+      field("value", $._expression),
+      repeat1($.match_case_expression),
+      "end"
+    ),
+
+    match_case_expression: $ => seq(
+      "case",
+      field("patterns", $.match_patterns),
+      "=>",
+      field("value", $._expression)
+    ),
 
     binary_expression: $ => choice(
       ...[
@@ -307,6 +341,20 @@ module.exports = grammar({
       field("key", choice($.identifier, $.string, $.template_string)),
       ":",
       field("value", $._expression)
+    ),
+
+    match_patterns: $ => prec.left(seq(
+      field("pattern", $.match_pattern),
+      repeat(seq("|", field("pattern", $.match_pattern)))
+    )),
+
+    match_pattern: $ => choice(
+      "_",
+      $.identifier,
+      $.string,
+      $.number,
+      $.boolean,
+      $.member_expression
     ),
 
     parenthesized_expression: $ => seq("(", $._expression, ")"),

@@ -121,6 +121,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::While) => self.parse_loop(LoopKind::While),
             TokenKind::Keyword(Keyword::Until) => self.parse_loop(LoopKind::Until),
             TokenKind::Keyword(Keyword::Return) => self.parse_return(),
+            TokenKind::Keyword(Keyword::Match) => self.parse_match_statement(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -1088,6 +1089,66 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_match_statement(&mut self) -> Result<Statement> {
+        let match_token = self.advance().clone();
+        let match_span = Self::span_from_token(&match_token);
+
+        self.skip_newlines();
+        let scrutinee =
+            self.parse_expression_prec(Precedence::Lowest, default_expression_terminator)?;
+        self.expect_newline("expected newline after match scrutinee")?;
+
+        let mut arms = Vec::new();
+        loop {
+            self.skip_newlines();
+            match self.peek_kind() {
+                TokenKind::Keyword(Keyword::Case) => {
+                    let arm = self.parse_match_arm_block()?;
+                    arms.push(arm);
+                }
+                TokenKind::Keyword(Keyword::End) => break,
+                TokenKind::Eof => {
+                    self.diagnostics
+                        .push_error_with_span("unterminated match statement", Some(match_span));
+                    bail!("unterminated match statement");
+                }
+                other => {
+                    let token = self.peek().clone();
+                    self.diagnostics.push_error_with_span(
+                        format!("unexpected token {:?} inside match statement", other),
+                        Some(Self::span_from_token(&token)),
+                    );
+                    bail!("invalid match statement");
+                }
+            }
+        }
+
+        if arms.is_empty() {
+            self.diagnostics.push_error_with_span(
+                "match statement requires at least one case",
+                Some(match_span),
+            );
+            bail!("match statement requires cases");
+        }
+
+        let end_token = self.peek().clone();
+        self.expect_keyword(Keyword::End, "expected 'end' to close match statement")?;
+        let end_span = Self::span_from_token(&end_token);
+        self.expect_newline("expected newline after match statement")?;
+
+        let mut span = Self::union_spans(&match_span, &scrutinee.span);
+        if let Some(last_arm) = arms.last() {
+            span = Self::union_spans(&span, &last_arm.span);
+        }
+        span = Self::union_spans(&span, &end_span);
+
+        Ok(Statement::Match(MatchStatement {
+            scrutinee,
+            arms,
+            span,
+        }))
+    }
+
     fn parse_match_expression(&mut self, match_span: SourceSpan) -> Result<Expression> {
         self.skip_newlines();
         let scrutinee =
@@ -1145,6 +1206,100 @@ impl<'a> Parser<'a> {
                 arms,
             }),
         ))
+    }
+
+    fn parse_match_arm_block(&mut self) -> Result<MatchArmBlock> {
+        let case_token = self.advance().clone();
+        let case_span = Self::span_from_token(&case_token);
+
+        let mut patterns = Vec::new();
+        loop {
+            let pattern = self.parse_match_pattern()?;
+            patterns.push(pattern);
+
+            if matches!(self.peek_kind(), TokenKind::Pipe) {
+                self.advance();
+                continue;
+            }
+            if matches!(self.peek_kind(), TokenKind::Newline) {
+                let mut newline_count = 1usize;
+                let mut offset = 1usize;
+                while matches!(self.peek_kind_at(offset), Some(TokenKind::Newline)) {
+                    newline_count += 1;
+                    offset += 1;
+                }
+                match self.peek_kind_at(offset) {
+                    Some(TokenKind::Pipe) => {
+                        for _ in 0..newline_count {
+                            self.advance();
+                        }
+                        self.advance();
+                        continue;
+                    }
+                    Some(TokenKind::FatArrow) => {
+                        for _ in 0..newline_count {
+                            self.advance();
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            break;
+        }
+
+        if patterns.is_empty() {
+            self.diagnostics
+                .push_error_with_span("match cases require at least one pattern", Some(case_span));
+            bail!("match case missing pattern");
+        }
+
+        if matches!(self.peek_kind(), TokenKind::FatArrow) {
+            self.advance();
+            self.skip_newlines();
+            let expression = self.parse_expression_with(terminator_match_arm_expression)?;
+            let expr_span = expression.span;
+            let arm_span = Self::union_spans(&case_span, &expr_span);
+
+            match self.peek_kind() {
+                TokenKind::Newline => {
+                    self.skip_newlines();
+                }
+                TokenKind::Keyword(Keyword::Case)
+                | TokenKind::Keyword(Keyword::End)
+                | TokenKind::Eof => {}
+                other => {
+                    let span = Self::span_from_token(&self.peek().clone());
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected newline after match arm expression (found '{:?}')",
+                            other
+                        ),
+                        Some(span),
+                    );
+                    bail!("expected newline after match arm");
+                }
+            }
+
+            let block = Block {
+                statements: vec![Statement::Expression(ExpressionStatement { expression })],
+            };
+
+            return Ok(MatchArmBlock {
+                patterns,
+                block,
+                span: arm_span,
+            });
+        }
+
+        self.expect_newline("expected newline before match arm block")?;
+        let block = self.parse_block_until(&[Keyword::Case, Keyword::End])?;
+
+        Ok(MatchArmBlock {
+            patterns,
+            block,
+            span: case_span,
+        })
     }
 
     fn parse_match_arm(&mut self) -> Result<MatchArm> {

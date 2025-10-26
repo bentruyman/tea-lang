@@ -1557,6 +1557,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Statement::Struct(_) => Ok(false),
             Statement::Enum(_) => Ok(false),
             Statement::Test(_) => Ok(false),
+            Statement::Match(_) => {
+                bail!("match statements are not supported by the AOT backend yet")
+            }
             Statement::Use(_) | Statement::Function(_) => {
                 bail!("unsupported statement in function body")
             }

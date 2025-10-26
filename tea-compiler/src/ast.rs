@@ -82,6 +82,7 @@ pub enum Statement {
     Conditional(ConditionalStatement),
     Loop(LoopStatement),
     Return(ReturnStatement),
+    Match(MatchStatement),
     Expression(ExpressionStatement),
 }
 
@@ -202,6 +203,13 @@ pub struct LoopStatement {
     pub kind: LoopKind,
     pub header: LoopHeader,
     pub body: Block,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchStatement {
+    pub scrutinee: Expression,
+    pub arms: Vec<MatchArmBlock>,
     pub span: SourceSpan,
 }
 
@@ -406,6 +414,13 @@ pub struct MatchExpression {
 pub struct MatchArm {
     pub patterns: Vec<MatchPattern>,
     pub expression: Expression,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchArmBlock {
+    pub patterns: Vec<MatchPattern>,
+    pub block: Block,
     pub span: SourceSpan,
 }
 

@@ -526,6 +526,29 @@ end
 }
 
 #[test]
+fn indents_match_statement_blocks() {
+    let input = r#"
+match status
+case 200
+debug.print("ok")
+case _
+debug.print("fallback")
+end
+"#;
+
+    let expected = [
+        "match status",
+        "  case 200",
+        "    debug.print(\"ok\")",
+        "  case _",
+        "    debug.print(\"fallback\")",
+        "end",
+    ];
+
+    assert_lines(&format_source(input), &expected);
+}
+
+#[test]
 fn enforces_comparison_spacing() {
     let input = r#"
 while count<max

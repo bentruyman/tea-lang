@@ -656,6 +656,17 @@ impl ModuleExpander {
                     self.rewrite_expression_identifiers(expression, rename_map);
                 }
             }
+            Statement::Match(match_stmt) => {
+                self.rewrite_expression_identifiers(&mut match_stmt.scrutinee, rename_map);
+                for arm in &mut match_stmt.arms {
+                    for pattern in &mut arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                        }
+                    }
+                    self.rewrite_block_identifiers(&mut arm.block, rename_map);
+                }
+            }
             Statement::Expression(expr_stmt) => {
                 self.rewrite_expression_identifiers(&mut expr_stmt.expression, rename_map);
             }
@@ -809,6 +820,17 @@ impl ModuleExpander {
             Statement::Return(ret_stmt) => {
                 if let Some(expression) = &mut ret_stmt.expression {
                     self.rewrite_expression_alias(expression, alias_maps);
+                }
+            }
+            Statement::Match(match_stmt) => {
+                self.rewrite_expression_alias(&mut match_stmt.scrutinee, alias_maps);
+                for arm in &mut match_stmt.arms {
+                    for pattern in &mut arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.rewrite_expression_alias(pattern_expr, alias_maps);
+                        }
+                    }
+                    self.rewrite_block_alias(&mut arm.block, alias_maps);
                 }
             }
             Statement::Expression(expr_stmt) => {

@@ -8,8 +8,8 @@ use crate::ast::{
     Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
     ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern,
-    MemberExpression, Module, ReturnStatement, SourceSpan, Statement, TestStatement,
-    UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
+    MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
+    TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase};
@@ -458,6 +458,9 @@ impl CodeGenerator {
             Statement::Struct(_) => Ok(()),
             Statement::Enum(_) => Ok(()),
             Statement::Test(test_stmt) => self.compile_test(test_stmt),
+            Statement::Match(match_stmt) => {
+                self.compile_match_statement(match_stmt, chunk, resolver)
+            }
         }
     }
 
@@ -1217,6 +1220,47 @@ impl CodeGenerator {
 
         let nil_index = chunk.add_constant(Value::Nil);
         chunk.emit(Instruction::Constant(nil_index));
+
+        for jump in end_jumps {
+            self.patch_jump(chunk, jump)?;
+        }
+
+        Ok(())
+    }
+
+    fn compile_match_statement<R: Resolver>(
+        &mut self,
+        statement: &MatchStatement,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        if statement.arms.is_empty() {
+            return Ok(());
+        }
+
+        self.compile_expression(&statement.scrutinee, chunk, resolver)?;
+        let temp_slot = self.allocate_temp_slot(resolver)?;
+        self.store_temp_slot(&temp_slot, chunk, resolver)?;
+        chunk.emit(Instruction::Pop);
+
+        let mut end_jumps = Vec::new();
+
+        for arm in &statement.arms {
+            let (matched_jumps, fallthroughs) =
+                self.emit_match_arm_conditions(&temp_slot, &arm.patterns, chunk, resolver)?;
+
+            for jump in matched_jumps {
+                self.patch_jump(chunk, jump)?;
+            }
+
+            let _ = self.compile_block(&arm.block, chunk, resolver)?;
+            let exit_jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+            end_jumps.push(exit_jump);
+
+            for jump in fallthroughs {
+                self.patch_jump(chunk, jump)?;
+            }
+        }
 
         for jump in end_jumps {
             self.patch_jump(chunk, jump)?;

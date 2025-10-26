@@ -185,13 +185,13 @@ var cubes = [
 #[test]
 fn removes_all_spaces_before_parameter_list() {
     let input = r#"
-def print_user          (user: User) -> Nil
+def print_user          (user: User) -> Void
 print(user.name)
 end
 "#;
 
     let expected = [
-        "def print_user(user: User) -> Nil",
+        "def print_user(user: User) -> Void",
         "  print(user.name)",
         "end",
     ];

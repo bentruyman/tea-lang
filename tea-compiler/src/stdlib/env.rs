@@ -34,14 +34,14 @@ const ENV_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::EnvSet,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "unset",
         StdFunctionKind::EnvUnset,
         StdArity::Exact(1),
         &[StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "vars",
@@ -62,7 +62,7 @@ const ENV_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::EnvSetCwd,
         StdArity::Exact(1),
         &[StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "temp_dir",

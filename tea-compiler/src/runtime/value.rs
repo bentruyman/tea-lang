@@ -44,6 +44,7 @@ pub struct EnumVariantValue {
 #[derive(Debug, Clone)]
 pub enum Value {
     Nil,
+    Void,
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -60,6 +61,7 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Nil => false,
+            Value::Void => false,
             Value::Bool(value) => *value,
             _ => true,
         }
@@ -70,6 +72,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
+            Value::Void => write!(f, "void"),
             Value::Int(value) => write!(f, "{value}"),
             Value::Float(value) => write!(f, "{value}"),
             Value::Bool(value) => write!(f, "{value}"),
@@ -123,6 +126,7 @@ impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Nil, Value::Nil) => true,
+            (Value::Void, Value::Void) => true,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,

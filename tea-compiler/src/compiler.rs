@@ -33,7 +33,8 @@ fn describe_std_type(ty: StdType) -> String {
         StdType::List => "List[Unknown]".into(),
         StdType::Dict => "Dict[String, Unknown]".into(),
         StdType::Struct => "Struct".into(),
-        StdType::Nil | StdType::Void => "Nil".into(),
+        StdType::Nil => "Nil".into(),
+        StdType::Void => "Void".into(),
     }
 }
 

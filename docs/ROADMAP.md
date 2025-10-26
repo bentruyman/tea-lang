@@ -8,7 +8,7 @@ This document tracks the near-term implementation plan for tea-lang. With the re
   - Emit diagnostics for undefined bindings, duplicate declarations, and shadowing rules.
   - ✅ Initial resolver pass lands in the compiler, enforcing scope tracking and halting on undefined/shadowed bindings before type checking.  
 - **Type Information**  
-  - Annotate AST nodes with simple types (Int, Bool, String, Nil).  
+  - Annotate AST nodes with simple types (Int, Bool, String, Nil, Void).  
   - Enforce arity and type expectations on function calls and operators.  
   - Provide structured error messages (with spans) instead of generic strings.
 - **Generics Support**  

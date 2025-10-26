@@ -3,13 +3,13 @@
 Goal: make type annotations meaningful and catch obvious mismatches before bytecode generation.
 
 ## Scope
-- Support primitive types: `Int`, `Bool`, `Float`, `String`, `Nil` plus container shells (`List`, `Dict[String, T]`).
+- Support primitive types: `Int`, `Bool`, `Float`, `String`, `Nil`, `Void` plus container shells (`List`, `Dict[String, T]`).
 - Recognise annotated variables (`var x: Bool = ...`) and verify initialisers.
 - Infer types for literals, lists/dicts, unary/binary expressions, simple assignments, and loop/conditional conditions.
 - Track globals so later uses of a binding see the most precise type we have inferred.
 
 ## Steps
-1. **Type Representation**: Introduce a `Type` enum (Bool/Int/Float/String/Nil/List[T]/Dict[T]/Unknown) plus helpers for comparison/pretty-printing.
+1. **Type Representation**: Introduce a `Type` enum (Bool/Int/Float/String/Nil/Void/List[T]/Dict[T]/Unknown) plus helpers for comparison/pretty-printing.
 2. **TypeChecker Pass**:
    - Traverse statements before code generation.
    - Maintain an environment mapping variable names to resolved types.

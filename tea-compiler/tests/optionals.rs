@@ -87,7 +87,7 @@ fn coalesce_flows_into_int_arguments() {
     let source = r#"
 use debug = "std.debug"
 
-def consume(value: Int) -> Nil
+def consume(value: Int) -> Void
   debug.print(value)
 end
 

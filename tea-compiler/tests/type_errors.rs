@@ -89,6 +89,63 @@ fn rejects_missing_return_value() {
 }
 
 #[test]
+fn allows_void_return_without_value() {
+    let source = r#"
+use debug = "std.debug"
+
+def log(message: String) -> Void
+  debug.print(message)
+end
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("void_return.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(result.is_ok(), "expected implicit void return to succeed");
+    assert!(
+        !compiler.diagnostics().has_errors(),
+        "unexpected diagnostics: {:?}",
+        compiler.diagnostics()
+    );
+}
+
+#[test]
+fn rejects_nil_function_without_explicit_return() {
+    let source = r#"
+use debug = "std.debug"
+
+def make_nil() -> Nil
+  debug.print("noop")
+end
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("missing_nil_return.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected Nil-returning function without explicit nil to be rejected"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|entry| entry.message.as_str())
+        .collect();
+    assert!(
+        messages.iter().any(|msg| msg.contains("found Void")),
+        "expected diagnostic mentioning Void mismatch, found {:?}",
+        messages
+    );
+}
+
+#[test]
 fn rejects_argument_type_mismatch() {
     let source = "def inc(value: Int) -> Int\n  value + 1\nend\n\ninc(true)\n";
     let mut compiler = Compiler::new(CompileOptions::default());

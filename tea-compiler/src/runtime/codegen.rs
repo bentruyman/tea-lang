@@ -27,6 +27,7 @@ fn format_type_name(ty: &Type) -> String {
         Type::Float => "Float".to_string(),
         Type::String => "String".to_string(),
         Type::Nil => "Nil".to_string(),
+        Type::Void => "Void".to_string(),
         Type::Optional(inner) => format!("{}?", format_type_name(inner)),
         Type::List(inner) => format!("List[{}]", format_type_name(inner)),
         Type::Dict(inner) => format!("Dict[String, {}]", format_type_name(inner)),
@@ -186,6 +187,7 @@ impl CodeGenerator {
             Type::Float => Ok(TypeCheck::Float),
             Type::String => Ok(TypeCheck::String),
             Type::Nil => Ok(TypeCheck::Nil),
+            Type::Void => Err(anyhow!("void type cannot be used in a type test")),
             Type::Struct(struct_type) => {
                 Ok(TypeCheck::Struct(format_struct_type_name(struct_type)))
             }
@@ -388,8 +390,8 @@ impl CodeGenerator {
             Some(Instruction::Return)
         ) {
             if !returns_value {
-                let nil_index = function_chunk.add_constant(Value::Nil);
-                function_chunk.emit(Instruction::Constant(nil_index));
+                let void_index = function_chunk.add_constant(Value::Void);
+                function_chunk.emit(Instruction::Constant(void_index));
             }
             function_chunk.emit(Instruction::Return);
         }
@@ -594,7 +596,7 @@ impl CodeGenerator {
         if let Some(expr) = &statement.expression {
             self.compile_expression(expr, chunk, resolver)?;
         } else {
-            let constant = chunk.add_constant(Value::Nil);
+            let constant = chunk.add_constant(Value::Void);
             chunk.emit(Instruction::Constant(constant));
         }
         chunk.emit(Instruction::Return);
@@ -1157,8 +1159,8 @@ impl CodeGenerator {
             Some(Instruction::Return)
         ) {
             if !returns_value {
-                let nil_index = function_chunk.add_constant(Value::Nil);
-                function_chunk.emit(Instruction::Constant(nil_index));
+                let void_index = function_chunk.add_constant(Value::Void);
+                function_chunk.emit(Instruction::Constant(void_index));
             }
             function_chunk.emit(Instruction::Return);
         }
@@ -1489,8 +1491,8 @@ impl CodeGenerator {
             Some(Instruction::Return)
         ) {
             if !returns_value {
-                let nil_index = function_chunk.add_constant(Value::Nil);
-                function_chunk.emit(Instruction::Constant(nil_index));
+                let void_index = function_chunk.add_constant(Value::Void);
+                function_chunk.emit(Instruction::Constant(void_index));
             }
             function_chunk.emit(Instruction::Return);
         }

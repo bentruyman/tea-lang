@@ -27,21 +27,21 @@ const IO_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::IoWrite,
         StdArity::Exact(1),
         &[StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "write_err",
         StdFunctionKind::IoWriteErr,
         StdArity::Exact(1),
         &[StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "flush",
         StdFunctionKind::IoFlush,
         StdArity::Exact(0),
         &[],
-        StdType::Nil,
+        StdType::Void,
     ),
 ];
 

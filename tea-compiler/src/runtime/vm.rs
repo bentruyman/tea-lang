@@ -447,7 +447,7 @@ impl Vm {
                 Instruction::Print => {
                     let value = self.pop()?;
                     println!("{value}");
-                    self.stack.push(Value::Nil);
+                    self.stack.push(Value::Void);
                 }
                 Instruction::BuiltinCall { kind, arg_count } => {
                     self.execute_builtin(kind, arg_count)?;
@@ -732,7 +732,7 @@ impl Vm {
                     }
                 }
                 Instruction::Return => {
-                    let value = self.pop().unwrap_or(Value::Nil);
+                    let value = self.pop().unwrap_or(Value::Void);
                     let frame = self.frames.pop().unwrap();
                     self.stack.truncate(frame.stack_start);
                     self.stack.push(value.clone());
@@ -874,7 +874,7 @@ impl Vm {
                 if !condition {
                     return Err(VmError::Runtime(message).into());
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::AssertEq => {
                 if args.len() != 2 {
@@ -891,7 +891,7 @@ impl Vm {
                     ))
                     .into());
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::AssertNe => {
                 if args.len() != 2 {
@@ -907,7 +907,7 @@ impl Vm {
                     ))
                     .into());
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::AssertFail => {
                 if args.len() != 1 {
@@ -942,7 +942,7 @@ impl Vm {
                     None
                 };
                 self.handle_snapshot_assertion(&name, &actual, label.as_deref())?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::AssertEmpty => {
                 if args.len() != 1 {
@@ -959,7 +959,7 @@ impl Vm {
                     ))
                     .into());
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::UtilLen => {
                 if args.len() != 1 {
@@ -1165,7 +1165,7 @@ impl Vm {
                 let value =
                     self.expect_string(&args[1], "env.set expects the value to be a String")?;
                 env::set_var(&key, &value);
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::EnvUnset => {
                 if args.len() != 1 {
@@ -1177,7 +1177,7 @@ impl Vm {
                 let key =
                     self.expect_string(&args[0], "env.unset expects the name to be a String")?;
                 env::remove_var(&key);
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::EnvVars => {
                 if !args.is_empty() {
@@ -1220,7 +1220,7 @@ impl Vm {
                 if let Err(error) = env::set_current_dir(&path) {
                     return Err(VmError::Runtime(env_error("set_cwd", Some(&path), error)).into());
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::EnvTempDir => {
                 if !args.is_empty() {
@@ -1491,7 +1491,7 @@ impl Vm {
                 std::io::stdout()
                     .write_all(text)
                     .map_err(|error| VmError::Runtime(io_error("write", &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::IoWriteErr => {
                 if args.len() != 1 {
@@ -1511,7 +1511,7 @@ impl Vm {
                 std::io::stderr()
                     .write_all(text)
                     .map_err(|error| VmError::Runtime(io_error("write_err", &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::IoFlush => {
                 if !args.is_empty() {
@@ -1523,7 +1523,7 @@ impl Vm {
                 std::io::stdout()
                     .flush()
                     .map_err(|error| VmError::Runtime(io_error("flush", &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::JsonEncode => {
                 if args.len() != 1 {
@@ -1638,7 +1638,7 @@ impl Vm {
                 };
                 std::fs::write(&path, contents.as_bytes())
                     .map_err(|error| VmError::Runtime(fs_error("write_text", &path, &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsWriteTextAtomic => {
                 if args.len() != 2 {
@@ -1664,7 +1664,7 @@ impl Vm {
                     }
                 };
                 vm_write_atomic(Path::new(&path), contents.as_bytes())?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsReadBytes => {
                 if args.len() != 1 {
@@ -1732,7 +1732,7 @@ impl Vm {
                 }
                 std::fs::write(&path, buffer)
                     .map_err(|error| VmError::Runtime(fs_error("write_bytes", &path, &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsWriteBytesAtomic => {
                 if args.len() != 2 {
@@ -1776,7 +1776,7 @@ impl Vm {
                     }
                 }
                 vm_write_atomic(Path::new(&path), &buffer)?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsCreateDir => {
                 if !(1..=2).contains(&args.len()) {
@@ -1813,7 +1813,7 @@ impl Vm {
                     std::fs::create_dir(&path)
                         .map_err(|error| VmError::Runtime(fs_error("create_dir", &path, &error)))?;
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsEnsureDir => {
                 if args.len() != 1 {
@@ -1832,7 +1832,7 @@ impl Vm {
                 };
                 fs::create_dir_all(&path)
                     .map_err(|error| VmError::Runtime(fs_error("ensure_dir", &path, &error)))?;
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsEnsureParent => {
                 if args.len() != 1 {
@@ -1857,7 +1857,7 @@ impl Vm {
                         })?;
                     }
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsRemove => {
                 if args.len() != 1 {
@@ -1884,7 +1884,7 @@ impl Vm {
                         VmError::Runtime(fs_error("remove", &path_text, &error))
                     })?;
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::FsExists => {
                 if args.len() != 1 {
@@ -2231,7 +2231,7 @@ impl Vm {
                 if self.fs_handles.remove(&handle_id).is_none() {
                     bail!(VmError::Runtime(format!("invalid file handle {handle_id}")));
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::ProcessRun => {
                 if args.is_empty() || args.len() > 5 {
@@ -2514,7 +2514,7 @@ impl Vm {
                     stdin.write_all(data.as_bytes()).map_err(|error| {
                         VmError::Runtime(process_error("write_stdin", &entry.command, &error))
                     })?;
-                    self.stack.push(Value::Nil);
+                    self.stack.push(Value::Void);
                 } else {
                     bail!(VmError::Runtime(
                         "process stdin has already been closed".to_string()
@@ -2540,7 +2540,7 @@ impl Vm {
                     VmError::Runtime(format!("invalid process handle {handle_id}"))
                 })?;
                 entry.stdin.take();
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::ProcessWait => {
                 if args.len() != 1 {
@@ -2616,7 +2616,7 @@ impl Vm {
                 if let Some(mut entry) = self.process_handles.remove(&handle_id) {
                     let _ = entry.child.kill();
                 }
-                self.stack.push(Value::Nil);
+                self.stack.push(Value::Void);
             }
             StdFunctionKind::CliArgs => {
                 if !args.is_empty() {
@@ -3212,6 +3212,7 @@ impl Vm {
 fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
     Ok(match value {
         Value::Nil => JsonValue::Null,
+        Value::Void => JsonValue::Null,
         Value::Int(v) => (*v).into(),
         Value::Float(v) => serde_json::Number::from_f64(*v)
             .map(JsonValue::Number)

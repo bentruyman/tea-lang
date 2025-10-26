@@ -158,7 +158,7 @@ Under the hood, programs move through a resolver and static type checker before 
 - Dictionary literals and member/index access (`var point = { x: 1 }`; `point.x` / `point["x"]`)
 - String literals and a builtin `print` function
 - CLI-focused helpers: `std.io` for streaming stdin/stdout, `std.fs` for globbing, directory walking, atomic writes, and metadata, `std.path` for join/normalize/relative utilities, `std.env` for reading/updating environment state and resolving common directories, `std.process` for spawning commands and capturing their output, plus `std.json` / `std.yaml` for encoding and decoding structured data (available in both the VM and LLVM backends). Upcoming modules for networking live in `docs/cli-stdlib-roadmap.md`.
-- Type annotations on variables (`Bool`, `Int`, `Float`, `String`, `Nil`) plus container/function forms (`List[Int]`, `Dict[String, Int]`, `Func(Int) -> Int`) and required parameter annotations in function definitions
+- Type annotations on variables (`Bool`, `Int`, `Float`, `String`, `Nil`, `Void`) plus container/function forms (`List[Int]`, `Dict[String, Int]`, `Func(Int) -> Int`) and required parameter annotations in function definitions
 - Generic functions and structs that specialise automatically wherever they are called—even across modules brought in via `use`.
 
 ### Tooling

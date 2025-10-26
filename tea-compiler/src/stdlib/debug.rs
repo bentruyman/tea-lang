@@ -5,7 +5,7 @@ pub(super) const PRINT_FUNCTIONS: &[StdFunction] = &[std_function(
     StdFunctionKind::Print,
     StdArity::Exact(1),
     &[StdType::Any],
-    StdType::Nil,
+    StdType::Void,
 )];
 
 pub const MODULE: StdModule = std_module!(

@@ -21,6 +21,7 @@ pub(crate) enum Type {
     Float,
     String,
     Nil,
+    Void,
     Optional(Box<Type>),
     List(Box<Type>),
     Dict(Box<Type>),
@@ -40,6 +41,7 @@ impl Type {
             Type::Float => "Float".to_string(),
             Type::String => "String".to_string(),
             Type::Nil => "Nil".to_string(),
+            Type::Void => "Void".to_string(),
             Type::Optional(inner) => format!("{}?", inner.describe()),
             Type::List(element) => format!("List[{}]", element.describe()),
             Type::Dict(value) => format!("Dict[String, {}]", value.describe()),
@@ -1391,24 +1393,24 @@ impl TypeChecker {
             }
             (None, Type::Unknown) => {
                 if let Some(ctx) = self.contexts.last_mut() {
-                    ctx.explicit_return_types.push(Type::Nil);
+                    ctx.explicit_return_types.push(Type::Void);
                 }
             }
-            (None, Type::Nil) => {
+            (None, Type::Void) => {
                 if let Some(ctx) = self.contexts.last_mut() {
-                    ctx.explicit_return_types.push(Type::Nil);
+                    ctx.explicit_return_types.push(Type::Void);
                 }
             }
             (None, expected_type) => {
                 self.report_error(
                     format!(
-                        "return type mismatch: expected {}, found Nil",
+                        "return type mismatch: expected {}, found Void",
                         expected_type.describe()
                     ),
                     Some(statement.span),
                 );
                 if let Some(ctx) = self.contexts.last_mut() {
-                    ctx.explicit_return_types.push(Type::Nil);
+                    ctx.explicit_return_types.push(Type::Void);
                 }
             }
         }
@@ -1641,7 +1643,7 @@ impl TypeChecker {
                     );
                 }
                 None => {
-                    if declared_return_type != Type::Unknown && declared_return_type != Type::Nil {
+                    if declared_return_type != Type::Unknown && declared_return_type != Type::Void {
                         self.report_error(
                             format!(
                                 "function '{}' may exit without returning a value of type {}",
@@ -2232,7 +2234,7 @@ impl TypeChecker {
             StdType::Dict => Type::Dict(Box::new(Type::Unknown)),
             StdType::Struct => Type::Unknown,
             StdType::Nil => Type::Nil,
-            StdType::Void => Type::Nil,
+            StdType::Void => Type::Void,
         }
     }
 
@@ -3764,7 +3766,7 @@ impl TypeChecker {
 
                 if !context.explicit_return_types.is_empty() {
                     let mut iter = context.explicit_return_types.into_iter();
-                    let mut acc = iter.next().unwrap_or(Type::Nil);
+                    let mut acc = iter.next().unwrap_or(Type::Void);
                     for ty in iter {
                         acc = self.merge_binding_type(acc, ty, "lambda return type", None);
                     }
@@ -3772,9 +3774,9 @@ impl TypeChecker {
                 } else if let Some(last) = context.last_expression_type {
                     last
                 } else if context.saw_explicit_return {
-                    Type::Nil
+                    Type::Void
                 } else {
-                    Type::Nil
+                    Type::Void
                 }
             }
         };
@@ -3973,6 +3975,10 @@ impl<'a> TypeAnnotationParser<'a> {
                 "Nil" => {
                     self.advance();
                     Ok(Type::Nil)
+                }
+                "Void" => {
+                    self.advance();
+                    Ok(Type::Void)
                 }
                 "List" => self.parse_list_type(),
                 "Dict" => self.parse_dict_type(),

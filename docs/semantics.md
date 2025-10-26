@@ -15,7 +15,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 ## Types
 - Scalar: `Bool`, `Int`, `Float`, `String`.
 - Compound: `List[T]`, `Dict[K, V]`, `Struct`, `Func`.
-- `Nil` represents absence; only `nil` and `false` are falsy.
+- `Nil` represents optional absence and is a first-class value; `Void` marks functions that do not return data. Both `nil` and `void` evaluate as falsy alongside `false`.
 - Type annotations use postfix colon: `var count: Int = 0`. Omitted annotations trigger inference. Containers use brackets (`List[Int]`, `Dict[String, Int]`) and function types use `Func(Int) -> Int`.
 - **Generics:** functions and structs can be parameterised with square-bracket type parameters (e.g. `def identity[T](value: T) -> T`). Call sites may pass explicit type arguments (`identity[Int](42)`), and both the VM and LLVM backends monomorphise the concrete instantiations that the type checker discovers—even when the generic is defined in a separate module that is pulled in via `use`.
 - Structs introduce nominal record types:
@@ -26,7 +26,7 @@ This document captures the first working cut of tea-lang. It is the contract for
   }
   ```
   Instances require all declared fields and can be created with positional or named arguments (`User("Ada", 37)` or `User(name: "Ada", age: 37)`). Fields are immutable; use helper functions for updates.
-- The compiler currently validates annotated variables against `Bool`, `Int`, `Float`, `String`, and `Nil` literals, and infers element types for list/dict literals so mixed containers surface diagnostics.
+- The compiler currently validates annotated variables against `Bool`, `Int`, `Float`, `String`, `Nil`, and `Void` literals, and infers element types for list/dict literals so mixed containers surface diagnostics.
 - Struct definitions: `struct App { server: http.Server }`. Fields are immutable by default; setter functions must handle mutations.
 
 ## Expressions
@@ -87,7 +87,7 @@ This document captures the first working cut of tea-lang. It is the contract for
   - `while condition ... end`
   - `until condition ... end`
   - `for item of iterable ... end` *(planned)*
-- `return` exits current function; bare `return` returns `nil`.
+- `return` exits the current function; bare `return` (or falling off the end of a `-> Void` function) produces `void`, while functions declared `-> Nil` must return an explicit `nil`.
 - `break` and `next` (skip) are future additions; flag TODO.
 
 ## Scopes & Variables

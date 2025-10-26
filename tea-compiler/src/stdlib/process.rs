@@ -71,21 +71,21 @@ const PROCESS_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::ProcessWriteStdin,
         StdArity::Exact(2),
         &[StdType::Int, StdType::String],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "close_stdin",
         StdFunctionKind::ProcessCloseStdin,
         StdArity::Exact(1),
         &[StdType::Int],
-        StdType::Nil,
+        StdType::Void,
     ),
     std_function(
         "close",
         StdFunctionKind::ProcessClose,
         StdArity::Exact(1),
         &[StdType::Int],
-        StdType::Nil,
+        StdType::Void,
     ),
 ];
 

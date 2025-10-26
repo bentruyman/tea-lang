@@ -109,7 +109,7 @@ mod tests {
         let compilation = compile_source(
             r#"use debug = "std.debug"
 
-def main() -> Nil
+def main() -> Void
   debug.print("hello")
 end
 "#,

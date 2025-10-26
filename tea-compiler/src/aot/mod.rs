@@ -40,6 +40,7 @@ fn format_type_name(ty: &Type) -> String {
         Type::Float => "Float".to_string(),
         Type::String => "String".to_string(),
         Type::Nil => "Nil".to_string(),
+        Type::Void => "Void".to_string(),
         Type::List(inner) => format!("List[{}]", format_type_name(inner)),
         Type::Dict(inner) => format!("Dict[String, {}]", format_type_name(inner)),
         Type::Optional(inner) => format!("{}?", format_type_name(inner)),
@@ -85,6 +86,7 @@ fn type_to_value_type(ty: &Type) -> Result<ValueType> {
         Type::Float => Ok(ValueType::Float),
         Type::String => Ok(ValueType::String),
         Type::Nil => Ok(ValueType::Void),
+        Type::Void => Ok(ValueType::Void),
         Type::List(inner) => Ok(ValueType::List(Box::new(type_to_value_type(inner)?))),
         Type::Function(params, return_type) => {
             let mut lowered_params = Vec::with_capacity(params.len());
@@ -6696,6 +6698,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 "Bool" => Ok(ValueType::Bool),
                 "String" => Ok(ValueType::String),
                 "Nil" => Ok(ValueType::Void),
+                "Void" => Ok(ValueType::Void),
                 "List" => {
                     skip_ws(chars);
                     match chars.next() {

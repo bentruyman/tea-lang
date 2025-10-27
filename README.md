@@ -147,6 +147,22 @@ Bundles embed reproducible metadata (respecting `SOURCE_DATE_EPOCH`) so teams ca
 
 Under the hood, programs move through a resolver and static type checker before bytecode generation, so undefined bindings, mismatched annotations, and container shape errors are caught before the VM ever runs. The runtime currently executes a compact stack-based bytecode format, and a feature-gated LLVM AOT backend can lower the same programs to native binaries.
 
+### Initial Setup
+
+After cloning the repository:
+
+```bash
+# One-command setup (installs deps + generates code)
+make setup
+
+# Or do it manually:
+bun install
+make codegen
+cargo build
+```
+
+The project uses specification-driven code generation. See [docs/CODEGEN.md](docs/CODEGEN.md) for details on how language structure is defined in `docs/grammar.ebnf`, `docs/ast.yaml`, and `docs/tokens.toml` and automatically generates tree-sitter queries and AST code.
+
 ### Language Capabilities
 
 - Variable declarations via `var name = expr`
@@ -178,6 +194,7 @@ Additional language constructs (pattern matching, richer modules, native code ge
 
 ### Further Reading
 
+- [Code generation system](docs/CODEGEN.md)
 - [Tea LSP installation & editor setup](docs/tea-lsp-setup.md)
 - [LLVM backend architecture notes](docs/aot-backend.md)
 - [Type checker overview](docs/type-checking.md)

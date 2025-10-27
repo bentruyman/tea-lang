@@ -1,0 +1,240 @@
+(* Tea Language Grammar *)
+(* Canonical syntax specification for the Tea programming language *)
+
+(* ===== Program Structure ===== *)
+
+source_file = { statement } ;
+
+statement = use_statement
+          | const_declaration
+          | var_declaration
+          | function_definition
+          | struct_definition
+          | union_definition
+          | enum_definition
+          | error_definition
+          | if_statement
+          | unless_statement
+          | while_statement
+          | until_statement
+          | test_block
+          | match_statement
+          | throw_statement
+          | return_statement
+          | expression_statement
+          ;
+
+(* ===== Declarations ===== *)
+
+use_statement = "use" identifier "=" ( string | template_string ) ;
+
+const_declaration = [ "pub" ] "const" identifier [ ":" type_annotation ] "=" expression ;
+
+var_declaration = "var" identifier [ ":" type_annotation ] "=" expression ;
+
+function_definition = [ "pub" ] "def" identifier
+                      [ type_parameters ]
+                      parameter_list
+                      [ "->" type_annotation ]
+                      [ error_annotation ]
+                      block
+                      "end"
+                      ;
+
+struct_definition = [ "pub" ] "struct" identifier
+                    [ type_parameters ]
+                    "{"
+                    { struct_field }
+                    "}"
+                    ;
+
+struct_field = identifier ":" type_annotation ;
+
+union_definition = [ "pub" ] "union" identifier
+                   "{"
+                   { union_member }
+                   "}"
+                   ;
+
+union_member = type_annotation ;
+
+enum_definition = [ "pub" ] "enum" identifier
+                  [ type_parameters ]
+                  "{"
+                  { enum_variant }
+                  "}"
+                  ;
+
+enum_variant = identifier ;
+
+error_definition = [ "pub" ] "error" identifier [ error_variant_block ] ;
+
+error_variant_block = "{" { error_variant } "}" ;
+
+error_variant = identifier [ "(" [ error_field { "," error_field } [ "," ] ] ")" ] ;
+
+error_field = identifier ":" type_annotation ;
+
+(* ===== Type System ===== *)
+
+type_annotation = identifier
+                | identifier "." identifier
+                | identifier "[" type_annotation { "," type_annotation } "]"
+                | "Func" "(" [ type_annotation { "," type_annotation } ] ")" "->" type_annotation
+                | "List" "[" type_annotation "]"
+                | "Dict" "[" type_annotation "," type_annotation "]"
+                ;
+
+type_parameters = "[" identifier { "," identifier } [ "," ] "]" ;
+
+parameter_list = "(" [ parameter { "," parameter } [ "," ] ] ")" ;
+
+parameter = identifier ":" type_annotation ;
+
+error_annotation = "!" ( error_type | "{" error_type { "," error_type } [ "," ] "}" ) ;
+
+error_type = identifier [ "." identifier ] ;
+
+(* ===== Control Flow ===== *)
+
+if_statement = "if" expression block [ "else" block ] "end" ;
+
+unless_statement = "unless" expression block "end" ;
+
+while_statement = "while" expression block "end" ;
+
+until_statement = "until" expression block "end" ;
+
+match_statement = "match" expression { match_case_block } "end" ;
+
+match_case_block = "case" match_patterns ( "=>" expression | block ) ;
+
+match_patterns = match_pattern { "|" match_pattern } ;
+
+match_pattern = "_"
+              | "is" type_annotation
+              | identifier
+              | string
+              | number
+              | boolean
+              | member_expression
+              ;
+
+test_block = "test" string block "end" ;
+
+block = { statement } ;
+
+braced_block = "{" { statement } "}" ;
+
+(* ===== Statements ===== *)
+
+return_statement = "return" [ expression ] ;
+
+throw_statement = "throw" expression ;
+
+expression_statement = expression ;
+
+(* ===== Expressions ===== *)
+
+expression = assignment
+           | catch_expression
+           | try_expression
+           | binary_expression
+           | lambda_expression
+           | match_expression
+           | call_expression
+           | member_expression
+           | index_expression
+           | list_literal
+           | dict_literal
+           | template_string
+           | string
+           | number
+           | boolean
+           | nil
+           | identifier
+           | parenthesized_expression
+           ;
+
+assignment = ( identifier | member_expression | index_expression ) "=" expression ;
+
+catch_expression = expression catch_clause ;
+
+try_expression = "try" expression [ catch_clause ] ;
+
+catch_clause = "catch" ( ( identifier { catch_case } "end" ) | expression ) ;
+
+catch_case = "case" match_patterns ( "=>" expression | block ) ;
+
+match_expression = "match" expression { match_case_expression } "end" ;
+
+match_case_expression = "case" match_patterns "=>" expression ;
+
+binary_expression = expression binary_operator expression ;
+
+binary_operator = "||" | "&&"
+                | "==" | "!="
+                | "<" | "<=" | ">" | ">="
+                | "is"
+                | "+" | "-"
+                | "*" | "/" | "%"
+                ;
+
+call_expression = expression argument_list ;
+
+argument_list = "(" [ argument { "," argument } [ "," ] ] ")" ;
+
+argument = expression | named_argument ;
+
+named_argument = identifier ":" expression ;
+
+member_expression = expression "." identifier ;
+
+index_expression = expression "[" expression "]" ;
+
+lambda_expression = ( "|" [ lambda_parameter { "," lambda_parameter } [ "," ] ] "|" | "||" )
+                    "=>"
+                    ( braced_block | expression )
+                    ;
+
+lambda_parameter = identifier [ ":" type_annotation ] ;
+
+list_literal = "[" [ expression { "," expression } [ "," ] ] "]" ;
+
+dict_literal = "{" [ dict_entry { "," dict_entry } [ "," ] ] "}" ;
+
+dict_entry = ( identifier | string | template_string ) ":" expression ;
+
+parenthesized_expression = "(" expression ")" ;
+
+(* ===== Literals ===== *)
+
+template_string = "`" { template_interpolation | string_fragment } "`" ;
+
+template_interpolation = "${" expression "}" ;
+
+string_fragment = (* any character except `, $, or \ ; or escape sequences *) ;
+
+identifier = ( letter | "_" ) { letter | digit | "_" } ;
+
+number = digit { digit | "_" } [ "." digit { digit | "_" } ]
+       | "." digit { digit | "_" }
+       ;
+
+string = '"' { (* any character except " or \ *) | escape_sequence } '"' ;
+
+boolean = "true" | "false" ;
+
+nil = "nil" ;
+
+comment = "#" { (* any character except newline *) } ;
+
+(* ===== Terminals ===== *)
+
+letter = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m"
+       | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z"
+       | "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M"
+       | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+       ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;

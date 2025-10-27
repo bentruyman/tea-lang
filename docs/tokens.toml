@@ -1,0 +1,162 @@
+# Tea Language Tokens
+# Canonical token definitions for lexer, tree-sitter, LSP, and formatter
+
+[keywords]
+# Declaration keywords
+def = { semantic = "keyword", context = "function_definition" }
+pub = { semantic = "keyword" }
+var = { semantic = "keyword" }
+const = { semantic = "keyword" }
+use = { semantic = "keyword" }
+
+# Type definition keywords
+struct = { semantic = "keyword", context = "struct_definition" }
+enum = { semantic = "keyword", context = "enum_definition" }
+union = { semantic = "keyword", context = "union_definition" }
+error = { semantic = "keyword", context = "error_definition" }
+
+# Control flow keywords
+if = { semantic = "keyword" }
+else = { semantic = "keyword" }
+unless = { semantic = "keyword" }
+while = { semantic = "keyword" }
+until = { semantic = "keyword" }
+match = { semantic = "keyword" }
+case = { semantic = "keyword", context = ["match_case_block", "match_case_expression", "catch_case"] }
+end = { semantic = "keyword" }
+
+# Error handling keywords
+throw = { semantic = "keyword", context = "throw_statement" }
+try = { semantic = "keyword", context = "try_expression" }
+catch = { semantic = "keyword", context = "catch_clause" }
+
+# Other keywords
+return = { semantic = "keyword" }
+test = { semantic = "keyword" }
+
+[operators]
+# Arithmetic
+"+" = { semantic = "operator", precedence = 7, associativity = "left" }
+"-" = { semantic = "operator", precedence = 7, associativity = "left" }
+"*" = { semantic = "operator", precedence = 8, associativity = "left" }
+"/" = { semantic = "operator", precedence = 8, associativity = "left" }
+"%" = { semantic = "operator", precedence = 8, associativity = "left" }
+
+# Comparison
+"==" = { semantic = "operator", precedence = 5, associativity = "left" }
+"!=" = { semantic = "operator", precedence = 5, associativity = "left" }
+"<" = { semantic = "operator", precedence = 6, associativity = "left" }
+"<=" = { semantic = "operator", precedence = 6, associativity = "left" }
+">" = { semantic = "operator", precedence = 6, associativity = "left" }
+">=" = { semantic = "operator", precedence = 6, associativity = "left" }
+
+# Logical
+"&&" = { semantic = "operator", precedence = 4, associativity = "left" }
+"||" = { semantic = "operator", precedence = 3, associativity = "left" }
+
+# Type checking
+is = { semantic = "operator", precedence = 6, associativity = "left" }
+
+# Assignment
+"=" = { semantic = "operator", precedence = 2, associativity = "right" }
+
+# Function and lambda
+"->" = { semantic = "operator" }
+"=>" = { semantic = "operator" }
+
+# Error annotation
+"!" = { semantic = "operator" }
+
+[punctuation]
+"(" = { semantic = "punctuation.bracket" }
+")" = { semantic = "punctuation.bracket" }
+"[" = { semantic = "punctuation.bracket" }
+"]" = { semantic = "punctuation.bracket" }
+"{" = { semantic = "punctuation.bracket" }
+"}" = { semantic = "punctuation.bracket" }
+"," = { semantic = "punctuation.delimiter" }
+":" = { semantic = "punctuation.delimiter" }
+"." = { semantic = "punctuation.delimiter" }
+"|" = { semantic = "punctuation.delimiter" }
+"_" = { semantic = "punctuation.delimiter", description = "Wildcard pattern" }
+
+[literals]
+true = { semantic = "boolean" }
+false = { semantic = "boolean" }
+nil = { semantic = "constant.builtin" }
+
+[builtins]
+# Built-in types
+Func = { semantic = "type.builtin" }
+List = { semantic = "type.builtin" }
+Dict = { semantic = "type.builtin" }
+String = { semantic = "type.builtin" }
+Int = { semantic = "type.builtin" }
+Float = { semantic = "type.builtin" }
+Bool = { semantic = "type.builtin" }
+
+[semantic_tokens]
+# LSP Semantic Token types mapping
+# Maps AST node kinds to LSP semantic token types
+namespace = ["use_statement.alias"]
+type = ["struct_definition.name", "enum_definition.name", "error_definition.name", "union_definition.name", "type_annotation"]
+class = ["struct_definition.name"]
+enum = ["enum_definition.name"]
+interface = ["union_definition.name"]
+struct = ["struct_definition.name"]
+typeParameter = ["type_parameter"]
+parameter = ["parameter.name", "lambda_parameter.name"]
+variable = ["var_declaration.name", "identifier"]
+property = ["struct_field.name", "dict_entry.key", "member_expression.property", "error_field.name"]
+enumMember = ["enum_variant.name", "error_variant.name"]
+function = ["function_definition.name"]
+method = ["function_definition.name"]
+macro = []
+keyword = ["keywords.*"]
+modifier = ["pub"]
+comment = ["comment"]
+string = ["string", "template_string"]
+number = ["number"]
+regexp = []
+operator = ["binary_expression.operator", "assignment.operator"]
+decorator = []
+
+[semantic_tokens.modifiers]
+declaration = ["function_definition", "struct_definition", "enum_definition", "error_definition", "const_declaration", "var_declaration"]
+definition = ["function_definition", "struct_definition", "enum_definition", "error_definition"]
+readonly = ["const_declaration"]
+static = []
+deprecated = []
+abstract = []
+async = []
+modification = ["assignment"]
+documentation = []
+defaultLibrary = ["builtins.*"]
+
+[tree_sitter]
+# Tree-sitter specific mappings for highlights.scm generation
+# Maps node types to capture names
+
+# Contextual keywords that conflict with tree-sitter internal nodes
+contextual_keywords = [
+  { node = "error_definition", keyword = "error" },
+  { node = "throw_statement", keyword = "throw" },
+  { node = "try_expression", keyword = "try" },
+  { node = "catch_clause", keyword = "catch" },
+  { node = "match_case_block", keyword = "case" },
+  { node = "match_case_expression", keyword = "case" },
+  { node = "catch_case", keyword = "case" },
+]
+
+# Safe keywords that can be in top-level array
+safe_keywords = [
+  "def", "pub", "var", "const", "use", "struct", "enum",
+  "if", "else", "unless", "while", "until", "return", "test", "end"
+]
+
+[patterns]
+identifier = '[A-Za-z_][A-Za-z0-9_]*'
+number = '\d+(_\d+)*(\.\d+(_\d+)*)?|\.\d+(_\d+)*'
+string = '"([^"\\]|\\.)*"'
+template_string = '`([^`$\\]|\\.|\\$\\{[^}]*\\})*`'
+comment = '#.*'

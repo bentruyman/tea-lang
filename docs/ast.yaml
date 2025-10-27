@@ -1,0 +1,761 @@
+# Tea Language AST Schema
+# Canonical node structure matching tea-compiler/src/ast.rs
+# This schema reflects the actual implementation used by the compiler
+
+nodes:
+  # ===== Utilities =====
+  
+  SourceSpan:
+    description: Source location information
+    derives: ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
+    fields:
+      line:
+        type: usize
+        description: Starting line (1-based)
+      column:
+        type: usize
+        description: Starting column (1-based)
+      end_line:
+        type: usize
+        description: Ending line (1-based)
+      end_column:
+        type: usize
+        description: Ending column (1-based)
+
+  # ===== Top-level =====
+  
+  Module:
+    description: Root AST node representing a complete source file
+    derives: ["Debug", "Clone", "Default"]
+    fields:
+      statements:
+        type: Vec<Statement>
+        description: Top-level statements in the module
+
+  # ===== Statements =====
+
+  Statement:
+    description: Statement enum encompassing all statement types
+    derives: ["Debug", "Clone"]
+    variants:
+      - Use:
+          type: UseStatement
+      - Var:
+          type: VarStatement
+      - Function:
+          type: FunctionStatement
+      - Test:
+          type: TestStatement
+      - Struct:
+          type: StructStatement
+      - Union:
+          type: UnionStatement
+      - Enum:
+          type: EnumStatement
+      - Error:
+          type: ErrorStatement
+      - Conditional:
+          type: ConditionalStatement
+      - Loop:
+          type: LoopStatement
+      - Throw:
+          type: ThrowStatement
+      - Return:
+          type: ReturnStatement
+      - Match:
+          type: MatchStatement
+      - Expression:
+          type: ExpressionStatement
+
+  UseStatement:
+    description: Module import declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      alias:
+        type: UseAlias
+        description: Local name for the imported module
+      module_path:
+        type: String
+        description: Path to the imported module
+      module_span:
+        type: SourceSpan
+
+  UseAlias:
+    description: Alias for an imported module
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+
+  VarStatement:
+    description: Variable or constant declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      is_const:
+        type: bool
+        description: Whether this is a const declaration
+      bindings:
+        type: Vec<VarBinding>
+        description: Variable bindings
+      docstring:
+        type: Option<String>
+
+  VarBinding:
+    description: Single variable binding
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+      type_annotation:
+        type: Option<TypeExpression>
+      initializer:
+        type: Option<Expression>
+
+  TypeExpression:
+    description: Type annotation with token sequence
+    derives: ["Debug", "Clone"]
+    fields:
+      tokens:
+        type: Vec<Token>
+        description: Token sequence representing the type
+
+  TypeParameter:
+    description: Generic type parameter
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+
+  FunctionStatement:
+    description: Function declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      is_public:
+        type: bool
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      type_parameters:
+        type: Vec<TypeParameter>
+      parameters:
+        type: Vec<FunctionParameter>
+      return_type:
+        type: Option<TypeExpression>
+      error_annotation:
+        type: Option<ErrorAnnotation>
+      body:
+        type: Block
+      docstring:
+        type: Option<String>
+
+  TestStatement:
+    description: Test block declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+        description: Test description
+      name_span:
+        type: SourceSpan
+      body:
+        type: Block
+      docstring:
+        type: Option<String>
+
+  FunctionParameter:
+    description: Function parameter
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+      type_annotation:
+        type: Option<TypeExpression>
+      default_value:
+        type: Option<Expression>
+
+  ErrorAnnotation:
+    description: Function error declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      types:
+        type: Vec<ErrorTypeSpecifier>
+      span:
+        type: SourceSpan
+
+  ErrorTypeSpecifier:
+    description: Error type specifier in error annotation
+    derives: ["Debug", "Clone"]
+    fields:
+      path:
+        type: Vec<String>
+        description: Path components for error type
+      span:
+        type: SourceSpan
+
+  StructStatement:
+    description: Struct type declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      type_parameters:
+        type: Vec<TypeParameter>
+      fields:
+        type: Vec<StructField>
+      docstring:
+        type: Option<String>
+
+  StructField:
+    description: Field within a struct
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+      type_annotation:
+        type: TypeExpression
+      docstring:
+        type: Option<String>
+
+  UnionStatement:
+    description: Union type declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      members:
+        type: Vec<UnionMember>
+      docstring:
+        type: Option<String>
+
+  UnionMember:
+    description: Member type within a union
+    derives: ["Debug", "Clone"]
+    fields:
+      type_expression:
+        type: TypeExpression
+      span:
+        type: SourceSpan
+
+  ErrorStatement:
+    description: Error type declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      variants:
+        type: Vec<ErrorVariant>
+      docstring:
+        type: Option<String>
+      span:
+        type: SourceSpan
+
+  ErrorVariant:
+    description: Variant within an error type
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      fields:
+        type: Vec<ErrorField>
+      span:
+        type: SourceSpan
+
+  ErrorField:
+    description: Field within an error variant
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      type_annotation:
+        type: TypeExpression
+
+  EnumStatement:
+    description: Enumeration type declaration
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      name_span:
+        type: SourceSpan
+      variants:
+        type: Vec<EnumVariant>
+      docstring:
+        type: Option<String>
+
+  EnumVariant:
+    description: Variant within an enum
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+      docstring:
+        type: Option<String>
+
+  ConditionalStatement:
+    description: If or unless conditional statement
+    derives: ["Debug", "Clone"]
+    fields:
+      kind:
+        type: ConditionalKind
+      condition:
+        type: Expression
+      consequent:
+        type: Block
+      alternative:
+        type: Option<Block>
+
+  ConditionalKind:
+    description: Kind of conditional statement
+    derives: ["Debug", "Clone", "Copy"]
+    variants:
+      - If
+      - Unless
+
+  LoopStatement:
+    description: Loop statement (for, while, until)
+    derives: ["Debug", "Clone"]
+    fields:
+      kind:
+        type: LoopKind
+      header:
+        type: LoopHeader
+      body:
+        type: Block
+      span:
+        type: SourceSpan
+
+  LoopKind:
+    description: Kind of loop
+    derives: ["Debug", "Clone"]
+    variants:
+      - For
+      - While
+      - Until
+
+  LoopHeader:
+    description: Loop header (condition or for iterator)
+    derives: ["Debug", "Clone"]
+    variants:
+      - For:
+          pattern: Expression
+          iterator: Expression
+      - Condition:
+          type: Expression
+
+  ThrowStatement:
+    description: Error throw statement
+    derives: ["Debug", "Clone"]
+    fields:
+      expression:
+        type: Expression
+      span:
+        type: SourceSpan
+
+  MatchStatement:
+    description: Pattern matching statement with blocks
+    derives: ["Debug", "Clone"]
+    fields:
+      scrutinee:
+        type: Expression
+        description: Value to match against
+      arms:
+        type: Vec<MatchArmBlock>
+      span:
+        type: SourceSpan
+
+  MatchArmBlock:
+    description: Match arm with block body
+    derives: ["Debug", "Clone"]
+    fields:
+      patterns:
+        type: Vec<MatchPattern>
+      block:
+        type: Block
+      span:
+        type: SourceSpan
+
+  ReturnStatement:
+    description: Early return from function
+    derives: ["Debug", "Clone"]
+    fields:
+      span:
+        type: SourceSpan
+      expression:
+        type: Option<Expression>
+
+  ExpressionStatement:
+    description: Statement consisting of a single expression
+    derives: ["Debug", "Clone"]
+    fields:
+      expression:
+        type: Expression
+
+  Block:
+    description: Sequence of statements
+    derives: ["Debug", "Clone", "Default"]
+    fields:
+      statements:
+        type: Vec<Statement>
+
+  # ===== Expressions =====
+
+  Expression:
+    description: Expression with span and kind
+    derives: ["Debug", "Clone"]
+    fields:
+      span:
+        type: SourceSpan
+      kind:
+        type: ExpressionKind
+
+  ExpressionKind:
+    description: Expression variants
+    derives: ["Debug", "Clone"]
+    variants:
+      - Identifier:
+          type: Identifier
+      - Literal:
+          type: Literal
+      - InterpolatedString:
+          type: InterpolatedStringExpression
+      - List:
+          type: ListLiteral
+      - Dict:
+          type: DictLiteral
+      - Unary:
+          type: UnaryExpression
+      - Binary:
+          type: BinaryExpression
+      - Is:
+          type: IsExpression
+      - Call:
+          type: CallExpression
+      - Member:
+          type: MemberExpression
+      - Index:
+          type: IndexExpression
+      - Range:
+          type: RangeExpression
+      - Lambda:
+          type: LambdaExpression
+      - Assignment:
+          type: AssignmentExpression
+      - Match:
+          type: MatchExpression
+      - Unwrap:
+          type: Box<Expression>
+      - Try:
+          type: TryExpression
+      - Grouping:
+          type: Box<Expression>
+
+  Identifier:
+    description: Named identifier
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: String
+      span:
+        type: SourceSpan
+
+  Literal:
+    description: Literal value
+    derives: ["Debug", "Clone"]
+    variants:
+      - Integer:
+          type: i64
+      - Float:
+          type: f64
+      - String:
+          type: String
+      - Boolean:
+          type: bool
+      - Nil
+
+  InterpolatedStringExpression:
+    description: Template string with interpolations
+    derives: ["Debug", "Clone"]
+    fields:
+      parts:
+        type: Vec<InterpolatedStringPart>
+
+  InterpolatedStringPart:
+    description: Part of an interpolated string
+    derives: ["Debug", "Clone"]
+    variants:
+      - Literal:
+          type: String
+      - Expression:
+          type: Expression
+
+  ListLiteral:
+    description: List literal expression
+    derives: ["Debug", "Clone"]
+    fields:
+      elements:
+        type: Vec<Expression>
+
+  DictLiteral:
+    description: Dictionary literal expression
+    derives: ["Debug", "Clone"]
+    fields:
+      entries:
+        type: Vec<DictEntry>
+
+  DictEntry:
+    description: Key-value pair in a dictionary
+    derives: ["Debug", "Clone"]
+    fields:
+      key:
+        type: String
+      value:
+        type: Expression
+
+  UnaryExpression:
+    description: Unary operation
+    derives: ["Debug", "Clone"]
+    fields:
+      operator:
+        type: UnaryOperator
+      operand:
+        type: Box<Expression>
+
+  UnaryOperator:
+    description: Unary operator kinds
+    derives: ["Debug", "Clone", "Copy"]
+    variants:
+      - Positive
+      - Negative
+      - Not
+
+  BinaryExpression:
+    description: Binary operation
+    derives: ["Debug", "Clone"]
+    fields:
+      operator:
+        type: BinaryOperator
+      left:
+        type: Box<Expression>
+      right:
+        type: Box<Expression>
+
+  BinaryOperator:
+    description: Binary operator kinds
+    derives: ["Debug", "Clone", "Copy"]
+    variants:
+      - Add
+      - Subtract
+      - Multiply
+      - Divide
+      - Modulo
+      - Equal
+      - NotEqual
+      - Greater
+      - GreaterEqual
+      - Less
+      - LessEqual
+      - And
+      - Or
+      - Coalesce
+
+  IsExpression:
+    description: Type checking expression
+    derives: ["Debug", "Clone"]
+    fields:
+      value:
+        type: Box<Expression>
+      type_annotation:
+        type: TypeExpression
+      is_span:
+        type: SourceSpan
+      type_span:
+        type: SourceSpan
+
+  CallExpression:
+    description: Function call
+    derives: ["Debug", "Clone"]
+    fields:
+      callee:
+        type: Box<Expression>
+      type_arguments:
+        type: Vec<TypeExpression>
+      arguments:
+        type: Vec<CallArgument>
+
+  CallArgument:
+    description: Function call argument
+    derives: ["Debug", "Clone"]
+    fields:
+      name:
+        type: Option<String>
+        description: Optional named argument
+      name_span:
+        type: Option<SourceSpan>
+      expression:
+        type: Expression
+
+  MemberExpression:
+    description: Property access
+    derives: ["Debug", "Clone"]
+    fields:
+      object:
+        type: Box<Expression>
+      property:
+        type: String
+      property_span:
+        type: SourceSpan
+
+  IndexExpression:
+    description: Collection indexing
+    derives: ["Debug", "Clone"]
+    fields:
+      object:
+        type: Box<Expression>
+      index:
+        type: Box<Expression>
+
+  RangeExpression:
+    description: Range expression
+    derives: ["Debug", "Clone"]
+    fields:
+      start:
+        type: Box<Expression>
+      end:
+        type: Box<Expression>
+      inclusive:
+        type: bool
+
+  LambdaExpression:
+    description: Anonymous function
+    derives: ["Debug", "Clone"]
+    fields:
+      id:
+        type: usize
+        description: Unique lambda ID
+      parameters:
+        type: Vec<FunctionParameter>
+      body:
+        type: LambdaBody
+
+  LambdaBody:
+    description: Lambda body (expression or block)
+    derives: ["Debug", "Clone"]
+    variants:
+      - Expression:
+          type: Box<Expression>
+      - Block:
+          type: Block
+
+  AssignmentExpression:
+    description: Assignment expression
+    derives: ["Debug", "Clone"]
+    fields:
+      target:
+        type: Box<Expression>
+      value:
+        type: Box<Expression>
+
+  MatchExpression:
+    description: Pattern matching expression
+    derives: ["Debug", "Clone"]
+    fields:
+      scrutinee:
+        type: Box<Expression>
+      arms:
+        type: Vec<MatchArm>
+
+  MatchArm:
+    description: Match arm with expression
+    derives: ["Debug", "Clone"]
+    fields:
+      patterns:
+        type: Vec<MatchPattern>
+      expression:
+        type: Expression
+      span:
+        type: SourceSpan
+
+  TryExpression:
+    description: Error-catching try expression
+    derives: ["Debug", "Clone"]
+    fields:
+      expression:
+        type: Box<Expression>
+      catch:
+        type: Option<CatchClause>
+
+  CatchClause:
+    description: Error handler clause
+    derives: ["Debug", "Clone"]
+    fields:
+      binding:
+        type: Option<Identifier>
+      kind:
+        type: CatchKind
+      span:
+        type: SourceSpan
+
+  CatchKind:
+    description: Catch clause kind
+    derives: ["Debug", "Clone"]
+    variants:
+      - Fallback:
+          type: Box<Expression>
+      - Arms:
+          type: Vec<CatchArm>
+
+  CatchArm:
+    description: Pattern case within a catch clause
+    derives: ["Debug", "Clone"]
+    fields:
+      patterns:
+        type: Vec<MatchPattern>
+      handler:
+        type: CatchHandler
+      span:
+        type: SourceSpan
+
+  CatchHandler:
+    description: Catch arm handler
+    derives: ["Debug", "Clone"]
+    variants:
+      - Expression:
+          type: Expression
+      - Block:
+          type: Block
+
+  # ===== Pattern Matching =====
+
+  MatchPattern:
+    description: Pattern in match/catch expression
+    derives: ["Debug", "Clone"]
+    variants:
+      - Wildcard:
+          span: SourceSpan
+      - Expression:
+          type: Expression
+      - Type:
+          fields: [TypeExpression, SourceSpan]

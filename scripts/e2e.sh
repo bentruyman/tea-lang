@@ -9,16 +9,16 @@ echo "Running tree-sitter grammar tests..."
 (
   cd "${root_dir}/tree-sitter-tea"
   if [[ ! -d "node_modules" ]]; then
-    if ! command -v npm >/dev/null 2>&1; then
-      echo "error: npm is required to install tree-sitter dependencies" >&2
+    if ! command -v bun >/dev/null 2>&1; then
+      echo "error: bun is required to install tree-sitter dependencies" >&2
       exit 1
     fi
 
     echo "Installing tree-sitter dependencies..."
-    npm ci >/tmp/tea-e2e-tree-sitter-install.log 2>&1
+    bun install >/tmp/tea-e2e-tree-sitter-install.log 2>&1
   fi
 
-  npx tree-sitter test
+  bunx tree-sitter test
 )
 
 echo "✅ tree-sitter tests passed"

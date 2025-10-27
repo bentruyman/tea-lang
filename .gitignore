@@ -1,2 +1,8 @@
 target/
 bin/
+node_modules/
+package-lock.json
+
+# Generated files (run `make codegen` to regenerate)
+tree-sitter-tea/queries/highlights.scm
+tea-compiler/src/ast.rs

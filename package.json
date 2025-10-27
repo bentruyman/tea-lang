@@ -1,0 +1,17 @@
+{
+  "name": "tea-lang",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "codegen": "bun run codegen:highlights && bun run codegen:ast",
+    "codegen:highlights": "bun scripts/codegen-highlights.js",
+    "codegen:ast": "bun scripts/codegen-ast.js"
+  },
+  "devDependencies": {
+    "toml": "^3.0.0",
+    "yaml": "^2.3.4"
+  },
+  "workspaces": [
+    "tree-sitter-tea"
+  ]
+}

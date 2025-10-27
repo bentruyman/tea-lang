@@ -1756,15 +1756,24 @@ impl<'a> Parser<'a> {
         let case_span = Self::span_from_token(&case_token);
 
         let mut patterns = Vec::new();
+        let mut _consumed_newline_after_patterns = false;
         loop {
             let pattern = self.parse_match_pattern()?;
             patterns.push(pattern);
 
-            self.skip_newlines();
+            let mut saw_newline = false;
+            while matches!(self.peek_kind(), TokenKind::Newline) {
+                self.advance();
+                saw_newline = true;
+            }
+
             if matches!(self.peek_kind(), TokenKind::Pipe) {
                 self.advance();
+                _consumed_newline_after_patterns = false;
                 continue;
             }
+
+            _consumed_newline_after_patterns = saw_newline;
             break;
         }
 
@@ -2717,13 +2726,13 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_catch_arms(&mut self) -> Result<Vec<MatchArm>> {
+    fn parse_catch_arms(&mut self) -> Result<Vec<CatchArm>> {
         let mut arms = Vec::new();
         loop {
             self.skip_newlines();
             match self.peek_kind() {
                 TokenKind::Keyword(Keyword::Case) => {
-                    let arm = self.parse_match_arm()?;
+                    let arm = self.parse_catch_arm()?;
                     arms.push(arm);
                 }
                 TokenKind::Keyword(Keyword::End) => break,
@@ -2743,6 +2752,80 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(arms)
+    }
+
+    fn parse_catch_arm(&mut self) -> Result<CatchArm> {
+        let case_token = self.advance().clone();
+        let case_span = Self::span_from_token(&case_token);
+
+        let mut patterns = Vec::new();
+        let consumed_newline_after_patterns = loop {
+            let pattern = self.parse_match_pattern()?;
+            patterns.push(pattern);
+
+            let mut saw_newline = false;
+            while matches!(self.peek_kind(), TokenKind::Newline) {
+                self.advance();
+                saw_newline = true;
+            }
+
+            if matches!(self.peek_kind(), TokenKind::Pipe) {
+                self.advance();
+                continue;
+            }
+
+            break saw_newline;
+        };
+
+        if patterns.is_empty() {
+            self.diagnostics
+                .push_error_with_span("catch cases require at least one pattern", Some(case_span));
+            bail!("catch case missing pattern");
+        }
+
+        if matches!(self.peek_kind(), TokenKind::FatArrow) {
+            self.advance();
+            self.skip_newlines();
+            let expression = self.parse_expression_with(terminator_match_arm_expression)?;
+            let arm_span = Self::union_spans(&case_span, &expression.span);
+
+            match self.peek_kind() {
+                TokenKind::Newline => {
+                    self.skip_newlines();
+                }
+                TokenKind::Keyword(Keyword::Case)
+                | TokenKind::Keyword(Keyword::End)
+                | TokenKind::Eof => {}
+                other => {
+                    let span = Self::span_from_token(&self.peek().clone());
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected newline after catch arm expression (found '{:?}')",
+                            other
+                        ),
+                        Some(span),
+                    );
+                    bail!("expected newline after catch arm");
+                }
+            }
+
+            return Ok(CatchArm {
+                patterns,
+                handler: CatchHandler::Expression(expression),
+                span: arm_span,
+            });
+        }
+
+        if !consumed_newline_after_patterns {
+            self.expect_newline("expected newline before catch arm block")?;
+        }
+        let block = self.parse_block_until(&[Keyword::Case, Keyword::End])?;
+
+        Ok(CatchArm {
+            patterns,
+            handler: CatchHandler::Block(block),
+            span: case_span,
+        })
     }
 
     fn skip_newlines(&mut self) {

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{
-    Block, CatchKind, Expression, ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody,
-    LoopHeader, MatchPattern, Module, SourceSpan, Statement, TypeExpression,
+    Block, CatchHandler, CatchKind, Expression, ExpressionKind, Identifier, InterpolatedStringPart,
+    LambdaBody, LoopHeader, MatchPattern, Module, SourceSpan, Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
@@ -810,10 +810,14 @@ impl ModuleExpander {
                                         );
                                     }
                                 }
-                                self.rewrite_expression_identifiers(
-                                    &mut arm.expression,
-                                    rename_map,
-                                );
+                                match &mut arm.handler {
+                                    CatchHandler::Expression(expr) => {
+                                        self.rewrite_expression_identifiers(expr, rename_map);
+                                    }
+                                    CatchHandler::Block(block) => {
+                                        self.rewrite_block_identifiers(block, rename_map);
+                                    }
+                                }
                             }
                         }
                     }
@@ -1040,7 +1044,14 @@ impl ModuleExpander {
                                         self.rewrite_expression_alias(pattern_expr, alias_maps);
                                     }
                                 }
-                                self.rewrite_expression_alias(&mut arm.expression, alias_maps);
+                                match &mut arm.handler {
+                                    CatchHandler::Expression(expr) => {
+                                        self.rewrite_expression_alias(expr, alias_maps);
+                                    }
+                                    CatchHandler::Block(block) => {
+                                        self.rewrite_block_alias(block, alias_maps);
+                                    }
+                                }
                             }
                         }
                     }

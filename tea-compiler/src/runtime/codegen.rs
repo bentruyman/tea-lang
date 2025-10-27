@@ -4,12 +4,13 @@ use std::rc::Rc;
 use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, CatchKind, ConditionalKind, ConditionalStatement,
-    DictLiteral, Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
-    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
-    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern,
-    MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
-    TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
+    BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalKind,
+    ConditionalStatement, DictLiteral, Expression, ExpressionKind, FunctionParameter,
+    FunctionStatement, IndexExpression, InterpolatedStringExpression, InterpolatedStringPart,
+    LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement,
+    MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
+    SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
+    VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase, TypeCheck};
@@ -863,9 +864,18 @@ impl CodeGenerator {
                         self.patch_jump(chunk, jump)?;
                     }
 
-                    self.compile_expression(&arm.expression, chunk, resolver)?;
-                    let exit_jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
-                    end_jumps.push(exit_jump);
+                    match &arm.handler {
+                        CatchHandler::Expression(expr) => {
+                            self.compile_expression(expr, chunk, resolver)?;
+                            let exit_jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                            end_jumps.push(exit_jump);
+                        }
+                        CatchHandler::Block(block) => {
+                            let _ = self.compile_block(block, chunk, resolver)?;
+                            self.load_temp_slot(&temp_slot, chunk, resolver)?;
+                            chunk.emit(Instruction::Throw);
+                        }
+                    }
 
                     for jump in fallthroughs {
                         self.patch_jump(chunk, jump)?;

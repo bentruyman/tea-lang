@@ -497,7 +497,20 @@ pub struct CatchClause {
 #[derive(Debug, Clone)]
 pub enum CatchKind {
     Fallback(Box<Expression>),
-    Arms(Vec<MatchArm>),
+    Arms(Vec<CatchArm>),
+}
+
+#[derive(Debug, Clone)]
+pub struct CatchArm {
+    pub patterns: Vec<MatchPattern>,
+    pub handler: CatchHandler,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub enum CatchHandler {
+    Expression(Expression),
+    Block(Block),
 }
 
 #[derive(Debug, Clone)]

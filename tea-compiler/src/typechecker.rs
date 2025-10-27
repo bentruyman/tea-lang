@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, CatchKind,
+    BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, CatchHandler, CatchKind,
     ConditionalKind, ConditionalStatement, DictLiteral, ErrorAnnotation, ErrorTypeSpecifier,
     Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
     InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
@@ -2199,6 +2199,20 @@ impl TypeChecker {
         result
     }
 
+    fn analyze_catch_patterns(&mut self, patterns: &[MatchPattern]) {
+        for pattern in patterns {
+            if let MatchPattern::Expression(expr) = pattern {
+                self.infer_expression(expr);
+            }
+            if let MatchPattern::Type(type_expr, pattern_span) = pattern {
+                let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+                if !matches!(ty, Type::Unknown) {
+                    self.type_test_metadata.insert(*pattern_span, ty);
+                }
+            }
+        }
+    }
+
     fn clear_non_nil_fact(&mut self, name: &str) {
         for scope in self.non_nil_scopes.iter_mut().rev() {
             if scope.remove(name) {
@@ -3439,49 +3453,47 @@ impl TypeChecker {
                                 self.insert(binding.name.clone(), existing.clone(), true);
                                 self.binding_types.insert(binding.span, existing);
                             }
-                            for pattern in &arm.patterns {
-                                if let MatchPattern::Expression(expr) = pattern {
-                                    self.infer_expression(expr);
-                                }
-                                if let MatchPattern::Type(type_expr, pattern_span) = pattern {
-                                    let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
-                                    if !matches!(ty, Type::Unknown) {
-                                        self.type_test_metadata.insert(*pattern_span, ty);
+                            self.analyze_catch_patterns(&arm.patterns);
+                            match &arm.handler {
+                                CatchHandler::Expression(expr) => {
+                                    let arm_type = self.infer_expression(expr);
+                                    if inner_type != Type::Unknown && arm_type != Type::Unknown {
+                                        self.ensure_compatible(
+                                            &inner_type,
+                                            &arm_type,
+                                            "catch arm expression",
+                                            Some(expr.span),
+                                        );
                                     }
                                 }
-                            }
-                            let arm_type = self.infer_expression(&arm.expression);
-                            if inner_type != Type::Unknown && arm_type != Type::Unknown {
-                                self.ensure_compatible(
-                                    &inner_type,
-                                    &arm_type,
-                                    "catch arm expression",
-                                    Some(arm.expression.span),
-                                );
+                                CatchHandler::Block(block) => {
+                                    self.run_branch(|checker| {
+                                        checker.check_statements(&block.statements);
+                                    });
+                                }
                             }
                             self.pop_scope();
                         }
                     } else {
                         for arm in arms {
-                            for pattern in &arm.patterns {
-                                if let MatchPattern::Expression(expr) = pattern {
-                                    self.infer_expression(expr);
-                                }
-                                if let MatchPattern::Type(type_expr, pattern_span) = pattern {
-                                    let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
-                                    if !matches!(ty, Type::Unknown) {
-                                        self.type_test_metadata.insert(*pattern_span, ty);
+                            self.analyze_catch_patterns(&arm.patterns);
+                            match &arm.handler {
+                                CatchHandler::Expression(expr) => {
+                                    let arm_type = self.infer_expression(expr);
+                                    if inner_type != Type::Unknown && arm_type != Type::Unknown {
+                                        self.ensure_compatible(
+                                            &inner_type,
+                                            &arm_type,
+                                            "catch arm expression",
+                                            Some(expr.span),
+                                        );
                                     }
                                 }
-                            }
-                            let arm_type = self.infer_expression(&arm.expression);
-                            if inner_type != Type::Unknown && arm_type != Type::Unknown {
-                                self.ensure_compatible(
-                                    &inner_type,
-                                    &arm_type,
-                                    "catch arm expression",
-                                    Some(arm.expression.span),
-                                );
+                                CatchHandler::Block(block) => {
+                                    self.run_branch(|checker| {
+                                        checker.check_statements(&block.statements);
+                                    });
+                                }
                             }
                         }
                     }

@@ -1045,7 +1045,14 @@ fn collect_symbols(
                                             self.visit_expression(pattern_expr);
                                         }
                                     }
-                                    self.visit_expression(&arm.expression);
+                                    match &arm.handler {
+                                        tea_compiler::CatchHandler::Expression(expr) => {
+                                            self.visit_expression(expr);
+                                        }
+                                        tea_compiler::CatchHandler::Block(block) => {
+                                            self.visit_block(block);
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -21,7 +21,7 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, CallExpression, CatchKind, ConditionalKind,
+    BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind, ConditionalKind,
     ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, Literal,
     LoopHeader, LoopKind, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement,
@@ -431,6 +431,14 @@ impl<'ctx> ErrorVariantLowering<'ctx> {
 }
 
 #[derive(Clone)]
+struct GlobalBindingSlot<'ctx> {
+    pointer: GlobalValue<'ctx>,
+    ty: ValueType,
+    mutable: bool,
+    initialized: bool,
+}
+
+#[derive(Clone)]
 enum ExprValue<'ctx> {
     Int(IntValue<'ctx>),
     Float(FloatValue<'ctx>),
@@ -552,6 +560,7 @@ struct LlvmCodeGenerator<'ctx> {
     struct_call_metadata_tc: HashMap<SourceSpan, (String, StructInstance)>,
     binding_types_tc: HashMap<SourceSpan, Type>,
     type_test_metadata_tc: HashMap<SourceSpan, Type>,
+    global_slots: HashMap<String, GlobalBindingSlot<'ctx>>,
     struct_field_variants: HashMap<String, Vec<ValueType>>,
     struct_variant_bases: HashMap<String, String>,
     struct_definitions_tc: HashMap<String, StructDefinition>,
@@ -922,6 +931,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             error_get_template_fn: None,
             error_mode_stack: vec![ErrorHandlingMode::Propagate],
             function_return_stack: Vec::new(),
+            global_slots: HashMap::new(),
         }
     }
 
@@ -1071,6 +1081,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
         self.collect_structs(&module_ast.statements)?;
+        self.collect_globals(&module_ast.statements)?;
         for statement in &module_ast.statements {
             if let Statement::Function(func) = statement {
                 self.declare_function(func)?;
@@ -1319,6 +1330,30 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(())
     }
 
+    fn collect_globals(&mut self, statements: &[Statement]) -> Result<()> {
+        for statement in statements {
+            if let Statement::Var(var_stmt) = statement {
+                for binding in &var_stmt.bindings {
+                    let ty = self
+                        .binding_types_tc
+                        .get(&binding.span)
+                        .cloned()
+                        .with_context(|| {
+                            format!(
+                                "missing type information for top-level binding '{}' at {}",
+                                binding.name,
+                                Self::describe_span(binding.span)
+                            )
+                        })?;
+                    let value_type = self.resolve_type_with_bindings_to_value(&ty)?;
+                    let _ =
+                        self.ensure_global_slot(&binding.name, &value_type, !var_stmt.is_const)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn ensure_struct_template(&mut self, name: &str) -> Result<PointerValue<'ctx>> {
         if let Some(ptr) = self
             .structs
@@ -1413,6 +1448,46 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         Ok(template_ptr)
+    }
+
+    fn ensure_global_slot(
+        &mut self,
+        name: &str,
+        ty: &ValueType,
+        mutable: bool,
+    ) -> Result<GlobalValue<'ctx>> {
+        if let Some(slot) = self.global_slots.get_mut(name) {
+            if slot.ty != *ty {
+                bail!(format!(
+                    "top-level binding '{}' has conflicting types (previous {:?}, new {:?})",
+                    name, slot.ty, ty
+                ));
+            }
+            if slot.mutable != mutable {
+                bail!(format!(
+                    "top-level binding '{}' has conflicting mutability",
+                    name
+                ));
+            }
+            return Ok(slot.pointer);
+        }
+
+        let basic = self.basic_type(ty)?;
+        let symbol = format!(".binding.{}", sanitize_symbol_component(name));
+        let global = self.module.add_global(basic, None, &symbol);
+        global.set_linkage(Linkage::Private);
+        let initializer = self.zero_value_for_basic(&basic);
+        global.set_initializer(&initializer);
+        self.global_slots.insert(
+            name.to_string(),
+            GlobalBindingSlot {
+                pointer: global,
+                ty: ty.clone(),
+                mutable,
+                initialized: false,
+            },
+        );
+        Ok(global)
     }
 
     fn ensure_error_variant_metadata(
@@ -1847,6 +1922,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 | Statement::Function(_)
                 | Statement::Test(_)
                 | Statement::Enum(_) => {}
+                Statement::Var(var_stmt) => {
+                    self.compile_global_var(var_stmt, main_fn, &mut locals)?;
+                }
                 Statement::Return(_) => bail!("return at top level not supported"),
                 _ => {
                     let _ = self.compile_statement(
@@ -1954,6 +2032,76 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 Ok(true)
             }
         }
+    }
+
+    fn compile_global_var(
+        &mut self,
+        statement: &VarStatement,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<()> {
+        for binding in &statement.bindings {
+            let initializer = match binding.initializer.as_ref() {
+                Some(expr) => expr,
+                None if statement.is_const => {
+                    bail!(format!(
+                        "const '{}' requires an initializer (at {})",
+                        binding.name,
+                        Self::describe_span(binding.span)
+                    ));
+                }
+                None => {
+                    bail!(format!(
+                        "variable '{}' requires an initializer (at {})",
+                        binding.name,
+                        Self::describe_span(binding.span)
+                    ));
+                }
+            };
+
+            let value = self.compile_expression(initializer, function, locals)?;
+            let (ty, initial_value) = match binding.type_annotation.as_ref() {
+                Some(type_expr) => {
+                    let expected = self.parse_type(type_expr)?;
+                    let init_type = value.ty();
+                    let converted = self
+                        .convert_expr_to_type(value, &expected)
+                        .with_context(|| {
+                            format!(
+                                "initializer for '{}' has mismatched type (expected {:?}, found {:?})",
+                                binding.name, expected, init_type
+                            )
+                        })?;
+                    (expected, converted)
+                }
+                None => {
+                    let ty = value.ty();
+                    (ty, value)
+                }
+            };
+
+            let global = self.ensure_global_slot(&binding.name, &ty, !statement.is_const)?;
+            self.store_expr_in_pointer(
+                global.as_pointer_value(),
+                &ty,
+                initial_value,
+                &binding.name,
+            )?;
+            if let Some(slot) = self.global_slots.get_mut(&binding.name) {
+                slot.initialized = true;
+                slot.mutable = !statement.is_const;
+                slot.ty = ty.clone();
+            }
+            locals.insert(
+                binding.name.clone(),
+                LocalVariable {
+                    pointer: global.as_pointer_value(),
+                    ty,
+                    mutable: !statement.is_const,
+                },
+            );
+        }
+        Ok(())
     }
 
     fn compile_var(
@@ -2211,24 +2359,39 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     ) -> Result<ExprValue<'ctx>> {
         match &assignment.target.kind {
             ExpressionKind::Identifier(identifier) => {
-                let variable = locals
-                    .get(identifier.name.as_str())
-                    .ok_or_else(|| {
-                        anyhow!("assignment to undefined variable '{}'", identifier.name)
-                    })?
-                    .clone();
-                if !variable.mutable {
-                    bail!(format!("cannot assign to const '{}'", identifier.name));
+                if let Some(variable) = locals.get(identifier.name.as_str()) {
+                    if !variable.mutable {
+                        bail!(format!(
+                            "cannot assign to const '{}' at {}",
+                            identifier.name,
+                            Self::describe_span(assignment.target.span)
+                        ));
+                    }
+                    let pointer = variable.pointer;
+                    let var_ty = variable.ty.clone();
+                    let value = self.compile_expression(&assignment.value, function, locals)?;
+                    self.store_expr_in_pointer(pointer, &var_ty, value, &identifier.name)?;
+                    Ok(ExprValue::Void)
+                } else if let Some(slot) = self.global_slots.get(identifier.name.as_str()).cloned()
+                {
+                    if !slot.mutable {
+                        bail!(format!(
+                            "cannot assign to const '{}' at {}",
+                            identifier.name,
+                            Self::describe_span(assignment.target.span)
+                        ));
+                    }
+                    let pointer = slot.pointer.as_pointer_value();
+                    let ty = slot.ty.clone();
+                    let value = self.compile_expression(&assignment.value, function, locals)?;
+                    self.store_expr_in_pointer(pointer, &ty, value, &identifier.name)?;
+                    if let Some(slot_mut) = self.global_slots.get_mut(identifier.name.as_str()) {
+                        slot_mut.initialized = true;
+                    }
+                    Ok(ExprValue::Void)
+                } else {
+                    Err(self.undefined_identifier_error(&identifier.name, assignment.target.span))
                 }
-                let value = self.compile_expression(&assignment.value, function, locals)?;
-                self.store_expr_in_pointer(
-                    variable.pointer,
-                    &variable.ty,
-                    value,
-                    &identifier.name,
-                )?;
-                locals.insert(identifier.name.clone(), variable);
-                Ok(ExprValue::Void)
             }
             _ => bail!("only identifier assignment supported"),
         }
@@ -2734,6 +2897,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     None
                 };
 
+                let clear_fn = self.ensure_error_clear_current();
+
                 for (index, arm) in arms.iter().enumerate() {
                     let cond = self.build_catch_pattern_condition(template_ptr, &arm.patterns)?;
                     let arm_block = self
@@ -2781,21 +2946,57 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         }
                     }
 
-                    let clear_fn = self.ensure_error_clear_current();
-                    self.call_function(clear_fn, &[], "error_clear_current")?;
-                    let arm_value =
-                        self.compile_expression(&arm.expression, function, &mut arm_locals)?;
-                    if let Some(alloca) = result_alloca {
-                        self.store_expr_in_pointer(alloca, &result_type, arm_value, "try_result")?;
-                    } else if !matches!(arm_value.ty(), ValueType::Void) {
-                        bail!("catch arm expression must evaluate to a Void value");
+                    match &arm.handler {
+                        CatchHandler::Expression(expr) => {
+                            self.call_function(clear_fn, &[], "error_clear_current")?;
+                            let arm_value =
+                                self.compile_expression(expr, function, &mut arm_locals)?;
+                            if let Some(alloca) = result_alloca {
+                                self.store_expr_in_pointer(
+                                    alloca,
+                                    &result_type,
+                                    arm_value,
+                                    "try_result",
+                                )?;
+                            } else if !matches!(arm_value.ty(), ValueType::Void) {
+                                bail!("catch arm expression must evaluate to a Void value");
+                            }
+                            map_builder_error(
+                                self.builder.build_unconditional_branch(merge_block),
+                            )?;
+                        }
+                        CatchHandler::Block(block) => {
+                            let function_return_type = self.current_function_return_type().clone();
+                            let _ = self.compile_block(
+                                &block.statements,
+                                function,
+                                &mut arm_locals,
+                                &function_return_type,
+                                true,
+                            )?;
+                            let block_terminated = self
+                                .builder
+                                .get_insert_block()
+                                .and_then(|b| b.get_terminator())
+                                .is_some();
+                            if !block_terminated {
+                                self.emit_error_return(function, &function_return_type)?;
+                            }
+                        }
                     }
-                    map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
 
                     self.builder.position_at_end(next_block);
                 }
 
-                self.emit_error_return(function, &result_type)?;
+                let function_return_type = self.current_function_return_type().clone();
+                let block_terminated = self
+                    .builder
+                    .get_insert_block()
+                    .and_then(|b| b.get_terminator())
+                    .is_some();
+                if !block_terminated {
+                    self.emit_error_return(function, &function_return_type)?;
+                }
             }
         }
         self.builder.position_at_end(merge_block);
@@ -3253,10 +3454,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_interpolated_string(template, function, locals)
             }
             ExpressionKind::Identifier(ident) => {
-                let variable = locals
-                    .get(ident.name.as_str())
-                    .ok_or_else(|| anyhow!("undefined identifier '{}'", ident.name))?;
-                self.load_local_variable(&ident.name, variable)
+                if let Some(variable) = locals.get(ident.name.as_str()) {
+                    self.load_local_variable(&ident.name, variable)
+                } else if let Some(slot) = self.global_slots.get(ident.name.as_str()).cloned() {
+                    self.load_global_variable(&ident.name, slot)
+                } else {
+                    Err(self.undefined_identifier_error(&ident.name, expression.span))
+                }
             }
             ExpressionKind::Binary(binary) => self.compile_binary(binary, function, locals),
             ExpressionKind::Unary(unary) => {
@@ -3324,35 +3528,35 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         name: &str,
         variable: &LocalVariable<'ctx>,
     ) -> Result<ExprValue<'ctx>> {
-        match &variable.ty {
+        self.load_from_pointer(variable.pointer, &variable.ty, name)
+    }
+
+    fn load_from_pointer(
+        &mut self,
+        pointer: PointerValue<'ctx>,
+        ty: &ValueType,
+        name: &str,
+    ) -> Result<ExprValue<'ctx>> {
+        match ty {
             ValueType::Int => {
-                let loaded = map_builder_error(self.builder.build_load(
-                    self.int_type(),
-                    variable.pointer,
-                    name,
-                ))?;
+                let loaded =
+                    map_builder_error(self.builder.build_load(self.int_type(), pointer, name))?;
                 Ok(ExprValue::Int(loaded.into_int_value()))
             }
             ValueType::Float => {
-                let loaded = map_builder_error(self.builder.build_load(
-                    self.float_type(),
-                    variable.pointer,
-                    name,
-                ))?;
+                let loaded =
+                    map_builder_error(self.builder.build_load(self.float_type(), pointer, name))?;
                 Ok(ExprValue::Float(loaded.into_float_value()))
             }
             ValueType::Bool => {
-                let loaded = map_builder_error(self.builder.build_load(
-                    self.bool_type(),
-                    variable.pointer,
-                    name,
-                ))?;
+                let loaded =
+                    map_builder_error(self.builder.build_load(self.bool_type(), pointer, name))?;
                 Ok(ExprValue::Bool(loaded.into_int_value()))
             }
             ValueType::String => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.string_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::String(loaded.into_pointer_value()))
@@ -3360,7 +3564,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::List(element_type) => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.list_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::List {
@@ -3371,7 +3575,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(value_type) => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.dict_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::Dict {
@@ -3382,7 +3586,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Struct(struct_name) => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.struct_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::Struct {
@@ -3396,7 +3600,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             } => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.error_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::Error {
@@ -3408,7 +3612,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Function(param_types, return_type) => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.closure_ptr_type(),
-                    variable.pointer,
+                    pointer,
                     name,
                 ))?;
                 Ok(ExprValue::Closure {
@@ -3418,18 +3622,44 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 })
             }
             ValueType::Optional(inner) => {
-                let loaded = map_builder_error(self.builder.build_load(
-                    self.value_type(),
-                    variable.pointer,
-                    name,
-                ))?;
+                let loaded =
+                    map_builder_error(self.builder.build_load(self.value_type(), pointer, name))?;
                 Ok(ExprValue::Optional {
                     value: loaded.into_struct_value(),
                     inner: inner.clone(),
                 })
             }
-            ValueType::Void => bail!("void value"),
+            ValueType::Void => bail!("void value cannot be loaded"),
         }
+    }
+
+    fn load_global_variable(
+        &mut self,
+        name: &str,
+        slot: GlobalBindingSlot<'ctx>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.load_from_pointer(slot.pointer.as_pointer_value(), &slot.ty, name)
+    }
+
+    fn describe_span(span: SourceSpan) -> String {
+        if span.line == 0 {
+            "unknown location".to_string()
+        } else if span.line == span.end_line && span.column == span.end_column {
+            format!("line {}, column {}", span.line, span.column)
+        } else {
+            format!(
+                "line {} column {} to line {} column {}",
+                span.line, span.column, span.end_line, span.end_column
+            )
+        }
+    }
+
+    fn undefined_identifier_error(&self, name: &str, span: SourceSpan) -> anyhow::Error {
+        anyhow!(format!(
+            "undefined identifier '{}' at {}",
+            name,
+            Self::describe_span(span)
+        ))
     }
 
     fn compile_call(
@@ -3576,7 +3806,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     );
                 }
 
-                bail!(format!("undefined function '{}'", identifier.name));
+                let has_variable = locals.contains_key(identifier.name.as_str())
+                    || self.global_slots.contains_key(identifier.name.as_str());
+                if !has_variable {
+                    bail!(format!("undefined function '{}'", identifier.name));
+                }
             }
         }
 
@@ -7471,56 +7705,26 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
     }
 
-    fn emit_error_return(&mut self, _function: FunctionValue<'ctx>, ty: &ValueType) -> Result<()> {
-        match ty {
-            ValueType::Void => {
+    fn emit_error_return(&mut self, function: FunctionValue<'ctx>, ty: &ValueType) -> Result<()> {
+        if let ValueType::Optional(inner) = ty {
+            let nil_value = self.optional_nil(inner)?;
+            if let ExprValue::Optional { value, .. } = nil_value {
+                map_builder_error(self.builder.build_return(Some(&value)))?;
+                return Ok(());
+            }
+            unreachable!("optional_nil did not produce optional value");
+        }
+
+        match function.get_type().get_return_type() {
+            None => {
                 map_builder_error(self.builder.build_return(None))?;
             }
-            ValueType::Int => {
-                let zero = self.int_type().const_zero();
+            Some(basic) => {
+                let zero = self.zero_value_for_basic(&basic);
                 map_builder_error(self.builder.build_return(Some(&zero)))?;
-            }
-            ValueType::Float => {
-                let zero = self.float_type().const_float(0.0);
-                map_builder_error(self.builder.build_return(Some(&zero)))?;
-            }
-            ValueType::Bool => {
-                let zero = self.bool_type().const_zero();
-                map_builder_error(self.builder.build_return(Some(&zero)))?;
-            }
-            ValueType::String => {
-                let null = self.string_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::List(_) => {
-                let null = self.list_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::Dict(_) => {
-                let null = self.dict_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::Struct(_) => {
-                let null = self.struct_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::Error { .. } => {
-                let null = self.error_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::Function(_, _) => {
-                let null = self.closure_ptr_type().const_null();
-                map_builder_error(self.builder.build_return(Some(&null)))?;
-            }
-            ValueType::Optional(inner) => {
-                let nil_value = self.optional_nil(inner)?;
-                if let ExprValue::Optional { value, .. } = nil_value {
-                    map_builder_error(self.builder.build_return(Some(&value)))?;
-                } else {
-                    unreachable!("optional_nil did not produce optional value");
-                }
             }
         }
+
         Ok(())
     }
 
@@ -8007,6 +8211,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Error { .. } => Ok(self.error_ptr_type().into()),
             ValueType::Optional(_) => Ok(self.value_type().into()),
             ValueType::Void => bail!("void type is not a value"),
+        }
+    }
+
+    fn zero_value_for_basic(&self, ty: &BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match ty {
+            BasicTypeEnum::ArrayType(array) => array.const_zero().as_basic_value_enum(),
+            BasicTypeEnum::FloatType(float) => float.const_zero().into(),
+            BasicTypeEnum::IntType(int) => int.const_zero().into(),
+            BasicTypeEnum::PointerType(ptr) => ptr.const_null().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().as_basic_value_enum(),
+            BasicTypeEnum::VectorType(vec) => vec.const_zero().as_basic_value_enum(),
         }
     }
 

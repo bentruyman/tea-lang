@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssignmentExpression, BinaryExpression, Block, CallExpression, CatchKind, ConditionalStatement,
-    DictLiteral, EnumStatement, ErrorStatement, Expression, ExpressionKind, FunctionParameter,
-    FunctionStatement, Identifier, IndexExpression, InterpolatedStringPart, LambdaBody,
-    LambdaExpression, ListLiteral, LoopHeader, LoopKind, LoopStatement, MatchArm, MatchPattern,
-    MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
-    StructStatement, TestStatement, ThrowStatement, TryExpression, UnaryExpression, UnionStatement,
-    UseStatement, VarStatement,
+    AssignmentExpression, BinaryExpression, Block, CallExpression, CatchArm, CatchHandler,
+    CatchKind, ConditionalStatement, DictLiteral, EnumStatement, ErrorStatement, Expression,
+    ExpressionKind, FunctionParameter, FunctionStatement, Identifier, IndexExpression,
+    InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, LoopHeader, LoopKind,
+    LoopStatement, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
+    SourceSpan, Statement, StructStatement, TestStatement, ThrowStatement, TryExpression,
+    UnaryExpression, UnionStatement, UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -506,14 +506,17 @@ impl Resolver {
         }
     }
 
-    fn resolve_catch_arms(&mut self, arms: &[MatchArm]) {
+    fn resolve_catch_arms(&mut self, arms: &[CatchArm]) {
         for arm in arms {
             for pattern in &arm.patterns {
                 if let MatchPattern::Expression(expr) = pattern {
                     self.resolve_expression(expr);
                 }
             }
-            self.resolve_expression(&arm.expression);
+            match &arm.handler {
+                CatchHandler::Expression(expr) => self.resolve_expression(expr),
+                CatchHandler::Block(block) => self.resolve_statements(&block.statements),
+            }
         }
     }
 

@@ -335,8 +335,10 @@ module.exports = grammar({
     catch_case: $ => seq(
       "case",
       field("patterns", $.match_patterns),
-      "=>",
-      field("value", $._expression)
+      choice(
+        seq("=>", field("value", $._expression)),
+        field("body", $.block)
+      )
     ),
 
     match_expression: $ => seq(

@@ -61,7 +61,9 @@ var fallback = open(path) catch "fallback"
 
 try open(path) catch err
   case is FsError.NotFound => "missing"
-  case _ => "unknown"
+  case _
+    debug.print("fallback")
+    return "unknown"
 end
 --------------------------------------------------------------------------------
 (source_file
@@ -93,5 +95,14 @@ end
         (catch_case
           patterns: (match_patterns
             (match_pattern))
-          value: (string))
+          body: (block
+            (expression_statement
+              (call_expression
+                function: (member_expression
+                  object: (identifier)
+                  property: (identifier))
+                arguments: (argument_list
+                  (argument (string)))))
+            (return_statement
+              (string)))))
         "end"))))

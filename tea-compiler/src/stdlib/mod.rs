@@ -31,6 +31,7 @@ pub enum StdFunctionKind {
     UtilIsString,
     UtilIsList,
     UtilIsStruct,
+    UtilIsError,
     EnvGet,
     EnvGetOr,
     EnvHas,

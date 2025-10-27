@@ -26,6 +26,7 @@ module.exports = grammar({
     [$.braced_block, $.dict_literal],
     [$._expression, $.match_pattern],
     [$.match_case_block, $.match_case_expression],
+    [$._expression, $.catch_clause],
   ],
 
   word: $ => $.identifier,
@@ -41,12 +42,14 @@ module.exports = grammar({
       $.struct_definition,
       $.union_definition,
       $.enum_definition,
+      $.error_definition,
       $.if_statement,
       $.unless_statement,
       $.while_statement,
       $.until_statement,
       $.test_block,
       $.match_statement,
+      $.throw_statement,
       $.return_statement,
       $.expression_statement,
     ),
@@ -82,6 +85,7 @@ module.exports = grammar({
       optional(field("type_parameters", $.type_parameters)),
       field("parameters", $.parameter_list),
       optional(seq("->", field("return_type", $.type_annotation))),
+      optional(field("error_annotation", $.error_annotation)),
       field("body", $.block),
       "end"
     ),
@@ -127,6 +131,41 @@ module.exports = grammar({
       field("name", $.identifier)
     ),
 
+    error_definition: $ => choice(
+      prec.dynamic(1, seq(
+        optional("pub"),
+        "error",
+        field("name", $.identifier),
+        field("variants", $.error_variant_block)
+      )),
+      seq(
+        optional("pub"),
+        "error",
+        field("name", $.identifier)
+      )
+    ),
+
+    error_variant_block: $ => seq(
+      token.immediate("{"),
+      repeat1($.error_variant),
+      "}"
+    ),
+
+    error_variant: $ => seq(
+      field("name", $.identifier),
+      optional(seq(
+        "(",
+        optional(commaSep1($.error_field)),
+        ")"
+      ))
+    ),
+
+    error_field: $ => seq(
+      field("name", $.identifier),
+      ":",
+      field("type", $.type_annotation)
+    ),
+
     parameter_list: $ => seq(
       "(",
       optional(commaSep1($.parameter)),
@@ -147,11 +186,29 @@ module.exports = grammar({
 
     type_annotation: $ => prec.right(choice(
       $.identifier,
+      seq($.identifier, ".", $.identifier),
       seq($.identifier, "[", commaSep1($.type_annotation), "]"),
       seq("Func", "(", optional(commaSep1($.type_annotation)), ")", "->", $.type_annotation),
       seq("List", "[", $.type_annotation, "]"),
       seq("Dict", "[", $.type_annotation, ",", $.type_annotation, "]")
     )),
+
+    error_annotation: $ => seq(
+      "!",
+      choice(
+        field("error", $.error_type),
+        seq(
+          "{",
+          commaSep1($.error_type),
+          "}"
+        )
+      )
+    ),
+
+    error_type: $ => seq(
+      field("name", $.identifier),
+      optional(seq(".", field("variant", $.identifier)))
+    ),
 
     if_statement: $ => seq(
       "if",
@@ -218,10 +275,17 @@ module.exports = grammar({
       "return"
     ),
 
+    throw_statement: $ => seq(
+      "throw",
+      field("value", $._expression)
+    ),
+
     expression_statement: $ => $._expression,
 
     _expression: $ => choice(
       $.assignment,
+      $.catch_expression,
+      $.try_expression,
       $.binary_expression,
       $.lambda_expression,
       $.match_expression,
@@ -244,6 +308,36 @@ module.exports = grammar({
       "=",
       field("right", $._expression),
     )),
+
+    catch_expression: $ => prec.left(PREC.assignment, seq(
+      field("value", $._expression),
+      field("handler", $.catch_clause)
+    )),
+
+    try_expression: $ => seq(
+      "try",
+      field("value", $._expression),
+      optional(field("handler", $.catch_clause))
+    ),
+
+    catch_clause: $ => seq(
+      "catch",
+      choice(
+        prec.dynamic(1, seq(
+          field("binding", $.identifier),
+          repeat1($.catch_case),
+          "end"
+        )),
+        field("fallback", $._expression)
+      )
+    ),
+
+    catch_case: $ => seq(
+      "case",
+      field("patterns", $.match_patterns),
+      "=>",
+      field("value", $._expression)
+    ),
 
     match_expression: $ => seq(
       "match",
@@ -363,6 +457,7 @@ module.exports = grammar({
 
     match_pattern: $ => choice(
       "_",
+      seq("is", field("type", $.type_annotation)),
       $.identifier,
       $.string,
       $.number,

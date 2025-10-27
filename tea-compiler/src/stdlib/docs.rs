@@ -19,6 +19,7 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::UtilIsString => "Return true if the value is a String.",
         StdFunctionKind::UtilIsList => "Return true if the value is a List.",
         StdFunctionKind::UtilIsStruct => "Return true if the value is a Struct instance.",
+        StdFunctionKind::UtilIsError => "Return true if the value is an Error instance.",
         StdFunctionKind::EnvGet => "Lookup an environment variable (returns Nil if unset).",
         StdFunctionKind::EnvGetOr => "Lookup an environment variable or return a default value.",
         StdFunctionKind::EnvHas => "Return true if an environment variable is set.",

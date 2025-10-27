@@ -9,6 +9,13 @@ pub struct StructTemplate {
 }
 
 #[derive(Debug, Clone)]
+pub struct ErrorTemplate {
+    pub error_name: String,
+    pub variant_name: String,
+    pub field_names: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StructInstance {
     pub template: Rc<StructTemplate>,
     pub fields: Vec<Value>,
@@ -42,6 +49,13 @@ pub struct EnumVariantValue {
 }
 
 #[derive(Debug, Clone)]
+pub struct ErrorVariantValue {
+    pub error_name: String,
+    pub variant_name: String,
+    pub fields: Vec<Value>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     Void,
@@ -55,6 +69,7 @@ pub enum Value {
     Dict(Rc<HashMap<String, Value>>),
     Struct(Rc<StructInstance>),
     EnumVariant(Rc<EnumVariantValue>),
+    Error(Rc<ErrorVariantValue>),
 }
 
 impl Value {
@@ -118,6 +133,16 @@ impl fmt::Display for Value {
             Value::EnumVariant(variant) => {
                 write!(f, "{}.{}", variant.enum_name, variant.variant_name)
             }
+            Value::Error(error) => {
+                write!(f, "{}.{}(", error.error_name, error.variant_name)?;
+                for (index, value) in error.fields.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{value}")?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -141,6 +166,12 @@ impl PartialEq for Value {
                     || (a.enum_name == b.enum_name
                         && a.variant_name == b.variant_name
                         && a.discriminant == b.discriminant)
+            }
+            (Value::Error(a), Value::Error(b)) => {
+                Rc::ptr_eq(a, b)
+                    || (a.error_name == b.error_name
+                        && a.variant_name == b.variant_name
+                        && a.fields == b.fields)
             }
             _ => false,
         }

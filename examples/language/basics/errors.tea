@@ -1,0 +1,75 @@
+use debug = "std.debug"
+use util = "std.util"
+
+# Individual errors act like zero-field structs
+error InvalidText
+
+def validate(text: String) -> Nil ! InvalidText
+  if text == "error"
+    throw InvalidText()
+  end
+end
+
+def shout(text: String) -> String ! InvalidText
+  validate(text)
+  return `shout: ${text}`
+end
+
+# Families of errors collect variants under a shared namespace
+error FsError {
+  NotFound(path: String)
+  Permission(reason: String)
+}
+
+# `try` forwards errors from the callee to the caller
+def open(path: String) -> String ! { FsError.NotFound, FsError.Permission }
+  if path == "secret.txt"
+    throw FsError.Permission("requires admin access")
+  end
+
+  if path == "notes.txt"
+    return "Meeting notes"
+  end
+
+  if path == "readme.txt"
+    return "Welcome to tea!"
+  end
+
+  throw FsError.NotFound(path)
+end
+
+def get_file(path: String) -> String ! { FsError.NotFound, FsError.Permission }
+  try open(path)
+end
+
+# `catch` can map specific variants to fallback values
+def file_text(path: String) -> String
+  try get_file(path) catch err
+    case is FsError.NotFound => `File not found: ${err.path}`
+    case is FsError.Permission => `Permission denied: ${err.reason}`
+    case _ => "Unknown error"
+  end
+end
+
+# A short-form catch handles "any error" the same way
+def safe_text(path: String) -> String
+  open(path) catch "Unavailable"
+end
+
+def safe_length(path: String) -> Int
+  var text = open(path) catch ""
+  return util.len(text)
+end
+
+debug.print(shout("tea"))
+debug.print(shout("error") catch "Invalid input")
+
+debug.print(file_text("notes.txt"))
+debug.print(file_text("missing.txt"))
+debug.print(file_text("secret.txt"))
+
+debug.print(safe_text("notes.txt"))
+debug.print(safe_text("missing.txt"))
+
+debug.print(safe_length("notes.txt"))
+debug.print(safe_length("missing.txt"))

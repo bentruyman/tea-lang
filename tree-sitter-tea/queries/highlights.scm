@@ -7,6 +7,11 @@
   "use"
   "struct"
   "enum"
+  "error"
+  "throw"
+  "try"
+  "catch"
+  "case"
   "if"
   "else"
   "unless"
@@ -22,11 +27,26 @@
 (function_definition
   return_type: (_) @type)
 
+(error_type
+  name: (identifier) @type)
+
+(error_type
+  variant: (identifier) @constructor)
+
 (struct_definition
   name: (identifier) @type)
 
 (enum_definition
   name: (identifier) @type)
+
+(error_definition
+  name: (identifier) @type)
+
+(error_variant
+  name: (identifier) @constructor)
+
+(error_field
+  name: (identifier) @property)
 
 (parameter
   name: (identifier) @variable.parameter)
@@ -51,6 +71,9 @@
 
 (use_statement
   alias: (identifier) @namespace)
+
+(catch_clause
+  binding: (identifier) @variable)
 
 [
   (string)

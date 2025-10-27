@@ -21,16 +21,18 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, CallExpression, ConditionalKind, ConditionalStatement,
-    Expression, ExpressionKind, FunctionStatement, InterpolatedStringExpression,
-    InterpolatedStringPart, LambdaBody, LambdaExpression, Literal, LoopHeader, LoopKind,
-    LoopStatement, Module as AstModule, ReturnStatement, SourceSpan, Statement, TypeExpression,
-    UseStatement, VarStatement,
+    BinaryExpression, BinaryOperator, CallExpression, CatchKind, ConditionalKind,
+    ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
+    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, Literal,
+    LoopHeader, LoopKind, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement,
+    SourceSpan, Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement,
+    VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
 use crate::stdlib::{self, StdFunctionKind};
 use crate::typechecker::{
-    FunctionInstance, StructDefinition, StructInstance, StructType, Type, TypeChecker,
+    ErrorDefinition, FunctionInstance, StructDefinition, StructInstance, StructType, Type,
+    TypeChecker,
 };
 
 fn format_type_name(ty: &Type) -> String {
@@ -60,6 +62,10 @@ fn format_type_name(ty: &Type) -> String {
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
         Type::Enum(enum_type) => enum_type.name.clone(),
         Type::Union(union_type) => union_type.name.clone(),
+        Type::Error(error_type) => match &error_type.variant {
+            Some(variant) => format!("{}.{}", error_type.name, variant),
+            None => error_type.name.clone(),
+        },
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -115,6 +121,10 @@ fn type_to_value_type(ty: &Type) -> Result<ValueType> {
         }
         Type::Dict(inner) => Ok(ValueType::Dict(Box::new(type_to_value_type(inner)?))),
         Type::Optional(inner) => Ok(ValueType::Optional(Box::new(type_to_value_type(inner)?))),
+        Type::Error(error_type) => Ok(ValueType::Error {
+            error_name: error_type.name.clone(),
+            variant_name: error_type.variant.clone(),
+        }),
         Type::Unknown => bail!("cannot lower Unknown type in LLVM backend"),
     }
 }
@@ -147,10 +157,13 @@ struct SemanticMetadata {
     lambda_captures: HashMap<usize, Vec<String>>,
     lambda_signatures: HashMap<usize, LambdaSignature>,
     struct_definitions: HashMap<String, StructDefinition>,
+    error_definitions: HashMap<String, ErrorDefinition>,
     function_instances: HashMap<String, Vec<FunctionInstance>>,
     struct_instances: HashMap<String, Vec<StructInstance>>,
     function_call_metadata: HashMap<SourceSpan, (String, FunctionInstance)>,
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
+    binding_types: HashMap<SourceSpan, Type>,
+    type_test_metadata: HashMap<SourceSpan, Type>,
 }
 
 fn collect_semantic_metadata(module_ast: &AstModule) -> Result<SemanticMetadata> {
@@ -169,10 +182,13 @@ fn collect_semantic_metadata(module_ast: &AstModule) -> Result<SemanticMetadata>
     type_checker.check_module(module_ast);
     let lambda_types = type_checker.lambda_types().clone();
     let struct_definitions = type_checker.struct_definitions();
+    let error_definitions = type_checker.error_definitions();
     let function_instances = type_checker.function_instances().clone();
     let struct_instances = type_checker.struct_instances().clone();
     let function_call_metadata = type_checker.function_call_metadata().clone();
     let struct_call_metadata = type_checker.struct_call_metadata().clone();
+    let binding_types = type_checker.binding_types().clone();
+    let type_test_metadata = type_checker.type_test_metadata().clone();
     let type_diagnostics = type_checker.into_diagnostics();
     if type_diagnostics.has_errors() {
         bail!("Type checking failed for LLVM lowering");
@@ -202,10 +218,13 @@ fn collect_semantic_metadata(module_ast: &AstModule) -> Result<SemanticMetadata>
         lambda_captures,
         lambda_signatures,
         struct_definitions,
+        error_definitions,
         function_instances,
         struct_instances,
         function_call_metadata,
         struct_call_metadata,
+        binding_types,
+        type_test_metadata,
     })
 }
 
@@ -331,8 +350,18 @@ enum ValueType {
     Dict(Box<ValueType>),
     Function(Vec<ValueType>, Box<ValueType>),
     Struct(String),
+    Error {
+        error_name: String,
+        variant_name: Option<String>,
+    },
     Optional(Box<ValueType>),
     Void,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ErrorHandlingMode {
+    Propagate,
+    Capture,
 }
 
 #[derive(Clone)]
@@ -346,6 +375,7 @@ struct FunctionSignature<'ctx> {
     value: FunctionValue<'ctx>,
     return_type: ValueType,
     param_types: Vec<ValueType>,
+    can_throw: bool,
 }
 
 #[derive(Clone)]
@@ -380,6 +410,27 @@ impl<'ctx> StructLowering<'ctx> {
 }
 
 #[derive(Clone)]
+struct ErrorVariantLowering<'ctx> {
+    field_names: Vec<String>,
+    field_types: Vec<ValueType>,
+    template_global: Option<GlobalValue<'ctx>>,
+    field_names_global: Option<GlobalValue<'ctx>>,
+    template_pointer: Option<PointerValue<'ctx>>,
+}
+
+impl<'ctx> ErrorVariantLowering<'ctx> {
+    fn new() -> Self {
+        Self {
+            field_names: Vec::new(),
+            field_types: Vec::new(),
+            template_global: None,
+            field_names_global: None,
+            template_pointer: None,
+        }
+    }
+}
+
+#[derive(Clone)]
 enum ExprValue<'ctx> {
     Int(IntValue<'ctx>),
     Float(FloatValue<'ctx>),
@@ -396,6 +447,11 @@ enum ExprValue<'ctx> {
     Struct {
         pointer: PointerValue<'ctx>,
         struct_name: String,
+    },
+    Error {
+        pointer: PointerValue<'ctx>,
+        error_name: String,
+        variant_name: Option<String>,
     },
     Closure {
         pointer: PointerValue<'ctx>,
@@ -419,6 +475,14 @@ impl<'ctx> ExprValue<'ctx> {
             ExprValue::List { element_type, .. } => ValueType::List(element_type.clone()),
             ExprValue::Dict { value_type, .. } => ValueType::Dict(value_type.clone()),
             ExprValue::Struct { struct_name, .. } => ValueType::Struct(struct_name.clone()),
+            ExprValue::Error {
+                error_name,
+                variant_name,
+                ..
+            } => ValueType::Error {
+                error_name: error_name.clone(),
+                variant_name: variant_name.clone(),
+            },
             ExprValue::Closure {
                 param_types,
                 return_type,
@@ -438,6 +502,7 @@ impl<'ctx> ExprValue<'ctx> {
             ExprValue::List { pointer, .. } => Some(pointer.into()),
             ExprValue::Dict { pointer, .. } => Some(pointer.into()),
             ExprValue::Struct { pointer, .. } => Some(pointer.into()),
+            ExprValue::Error { pointer, .. } => Some(pointer.into()),
             ExprValue::Closure { pointer, .. } => Some(pointer.into()),
             ExprValue::Optional { value, .. } => Some(value.into()),
             ExprValue::Void => None,
@@ -475,17 +540,22 @@ struct LlvmCodeGenerator<'ctx> {
     tea_value: inkwell::types::StructType<'ctx>,
     tea_struct_template: inkwell::types::StructType<'ctx>,
     tea_closure: inkwell::types::StructType<'ctx>,
+    tea_error_template: inkwell::types::StructType<'ctx>,
     string_counter: usize,
     structs: HashMap<String, StructLowering<'ctx>>,
+    errors: HashMap<String, HashMap<String, ErrorVariantLowering<'ctx>>>,
     lambda_captures: HashMap<usize, Vec<String>>,
     lambda_signatures: HashMap<usize, LambdaSignature>,
     function_instances_tc: HashMap<String, Vec<FunctionInstance>>,
     struct_instances_tc: HashMap<String, Vec<StructInstance>>,
     function_call_metadata_tc: HashMap<SourceSpan, (String, FunctionInstance)>,
     struct_call_metadata_tc: HashMap<SourceSpan, (String, StructInstance)>,
+    binding_types_tc: HashMap<SourceSpan, Type>,
+    type_test_metadata_tc: HashMap<SourceSpan, Type>,
     struct_field_variants: HashMap<String, Vec<ValueType>>,
     struct_variant_bases: HashMap<String, String>,
     struct_definitions_tc: HashMap<String, StructDefinition>,
+    error_definitions_tc: HashMap<String, ErrorDefinition>,
     generic_binding_stack: Vec<HashMap<String, (Type, ValueType)>>,
     lambda_functions: HashMap<usize, FunctionValue<'ctx>>,
     lambda_capture_types: HashMap<usize, Vec<ValueType>>,
@@ -499,6 +569,7 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_print_dict: Option<FunctionValue<'ctx>>,
     builtin_print_closure: Option<FunctionValue<'ctx>>,
     builtin_print_struct: Option<FunctionValue<'ctx>>,
+    builtin_print_error: Option<FunctionValue<'ctx>>,
     builtin_assert_fn: Option<FunctionValue<'ctx>>,
     builtin_assert_eq_fn: Option<FunctionValue<'ctx>>,
     builtin_assert_ne_fn: Option<FunctionValue<'ctx>>,
@@ -514,6 +585,7 @@ struct LlvmCodeGenerator<'ctx> {
     util_is_string_fn: Option<FunctionValue<'ctx>>,
     util_is_list_fn: Option<FunctionValue<'ctx>>,
     util_is_struct_fn: Option<FunctionValue<'ctx>>,
+    util_is_error_fn: Option<FunctionValue<'ctx>>,
     env_get_fn: Option<FunctionValue<'ctx>>,
     env_get_or_fn: Option<FunctionValue<'ctx>>,
     env_has_fn: Option<FunctionValue<'ctx>>,
@@ -580,6 +652,13 @@ struct LlvmCodeGenerator<'ctx> {
     list_get_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
     struct_get_fn: Option<FunctionValue<'ctx>>,
+    error_alloc_fn: Option<FunctionValue<'ctx>>,
+    error_set_fn: Option<FunctionValue<'ctx>>,
+    error_get_fn: Option<FunctionValue<'ctx>>,
+    error_current_fn: Option<FunctionValue<'ctx>>,
+    error_set_current_fn: Option<FunctionValue<'ctx>>,
+    error_clear_current_fn: Option<FunctionValue<'ctx>>,
+    error_get_template_fn: Option<FunctionValue<'ctx>>,
     value_from_int_fn: Option<FunctionValue<'ctx>>,
     value_from_float_fn: Option<FunctionValue<'ctx>>,
     value_from_bool_fn: Option<FunctionValue<'ctx>>,
@@ -587,6 +666,7 @@ struct LlvmCodeGenerator<'ctx> {
     value_from_list_fn: Option<FunctionValue<'ctx>>,
     value_from_dict_fn: Option<FunctionValue<'ctx>>,
     value_from_struct_fn: Option<FunctionValue<'ctx>>,
+    value_from_error_fn: Option<FunctionValue<'ctx>>,
     value_from_closure_fn: Option<FunctionValue<'ctx>>,
     value_nil_fn: Option<FunctionValue<'ctx>>,
     value_as_int_fn: Option<FunctionValue<'ctx>>,
@@ -596,6 +676,7 @@ struct LlvmCodeGenerator<'ctx> {
     value_as_list_fn: Option<FunctionValue<'ctx>>,
     value_as_dict_fn: Option<FunctionValue<'ctx>>,
     value_as_struct_fn: Option<FunctionValue<'ctx>>,
+    value_as_error_fn: Option<FunctionValue<'ctx>>,
     value_as_closure_fn: Option<FunctionValue<'ctx>>,
     string_equal_fn: Option<FunctionValue<'ctx>>,
     list_equal_fn: Option<FunctionValue<'ctx>>,
@@ -618,6 +699,8 @@ struct LlvmCodeGenerator<'ctx> {
     json_decode_fn: Option<FunctionValue<'ctx>>,
     yaml_encode_fn: Option<FunctionValue<'ctx>>,
     yaml_decode_fn: Option<FunctionValue<'ctx>>,
+    error_mode_stack: Vec<ErrorHandlingMode>,
+    function_return_stack: Vec<ValueType>,
 }
 
 impl<'ctx> LlvmCodeGenerator<'ctx> {
@@ -631,10 +714,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             lambda_captures,
             lambda_signatures,
             struct_definitions,
+            error_definitions,
             function_instances,
             struct_instances,
             function_call_metadata,
             struct_call_metadata,
+            binding_types,
+            type_test_metadata,
         } = metadata;
 
         let tea_string = context.opaque_struct_type("TeaString");
@@ -642,6 +728,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let tea_value = context.opaque_struct_type("TeaValue");
         let tea_struct_template = context.opaque_struct_type("TeaStructTemplate");
         let tea_struct_instance = context.opaque_struct_type("TeaStructInstance");
+        let tea_error_template = context.opaque_struct_type("TeaErrorTemplate");
         let tea_closure = context.opaque_struct_type("TeaClosure");
 
         let i64 = context.i64_type();
@@ -654,6 +741,15 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         tea_list.set_body(&[i64.into(), i64.into(), ptr_type.into()], false);
         tea_struct_template.set_body(&[ptr_type.into(), i64.into(), ptr_type.into()], false);
         tea_struct_instance.set_body(&[ptr_type.into(), ptr_type.into()], false);
+        tea_error_template.set_body(
+            &[
+                ptr_type.into(),
+                ptr_type.into(),
+                i64.into(),
+                ptr_type.into(),
+            ],
+            false,
+        );
         tea_closure.set_body(&[ptr_type.into(), ptr_type.into(), i64.into()], false);
 
         Self {
@@ -664,18 +760,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ptr_type,
             tea_value,
             tea_struct_template,
+            tea_error_template,
             tea_closure,
             string_counter: 0,
             structs: HashMap::new(),
+            errors: HashMap::new(),
             lambda_captures,
             lambda_signatures,
             function_instances_tc: function_instances,
             struct_instances_tc: struct_instances,
             function_call_metadata_tc: function_call_metadata,
             struct_call_metadata_tc: struct_call_metadata,
+            binding_types_tc: binding_types,
+            type_test_metadata_tc: type_test_metadata,
             struct_field_variants: HashMap::new(),
             struct_variant_bases: HashMap::new(),
             struct_definitions_tc: struct_definitions,
+            error_definitions_tc: error_definitions,
             generic_binding_stack: Vec::new(),
             lambda_functions: HashMap::new(),
             lambda_capture_types: HashMap::new(),
@@ -689,6 +790,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_print_dict: None,
             builtin_print_closure: None,
             builtin_print_struct: None,
+            builtin_print_error: None,
             builtin_assert_fn: None,
             builtin_assert_eq_fn: None,
             builtin_assert_ne_fn: None,
@@ -704,6 +806,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             util_is_string_fn: None,
             util_is_list_fn: None,
             util_is_struct_fn: None,
+            util_is_error_fn: None,
             env_get_fn: None,
             env_get_or_fn: None,
             env_has_fn: None,
@@ -770,6 +873,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_get_fn: None,
             struct_set_fn: None,
             struct_get_fn: None,
+            error_alloc_fn: None,
+            error_set_fn: None,
+            error_get_fn: None,
             value_from_int_fn: None,
             value_from_float_fn: None,
             value_from_bool_fn: None,
@@ -777,6 +883,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             value_from_list_fn: None,
             value_from_dict_fn: None,
             value_from_struct_fn: None,
+            value_from_error_fn: None,
             value_from_closure_fn: None,
             value_nil_fn: None,
             value_as_int_fn: None,
@@ -786,6 +893,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             value_as_list_fn: None,
             value_as_dict_fn: None,
             value_as_struct_fn: None,
+            value_as_error_fn: None,
             value_as_closure_fn: None,
             string_equal_fn: None,
             list_equal_fn: None,
@@ -808,6 +916,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             json_decode_fn: None,
             yaml_encode_fn: None,
             yaml_decode_fn: None,
+            error_current_fn: None,
+            error_set_current_fn: None,
+            error_clear_current_fn: None,
+            error_get_template_fn: None,
+            error_mode_stack: vec![ErrorHandlingMode::Propagate],
+            function_return_stack: Vec::new(),
         }
     }
 
@@ -835,12 +949,110 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         self.ptr_type
     }
 
+    fn error_template_ptr_type(&self) -> PointerType<'ctx> {
+        self.ptr_type
+    }
+
+    fn error_ptr_type(&self) -> PointerType<'ctx> {
+        self.ptr_type
+    }
+
     fn closure_ptr_type(&self) -> PointerType<'ctx> {
         self.ptr_type
     }
 
     fn value_type(&self) -> inkwell::types::StructType<'ctx> {
         self.tea_value
+    }
+
+    fn current_error_mode(&self) -> ErrorHandlingMode {
+        *self
+            .error_mode_stack
+            .last()
+            .expect("error mode stack should not be empty")
+    }
+
+    fn push_error_mode(&mut self, mode: ErrorHandlingMode) {
+        self.error_mode_stack.push(mode);
+    }
+
+    fn pop_error_mode(&mut self) {
+        self.error_mode_stack
+            .pop()
+            .expect("error mode stack underflow");
+    }
+
+    fn push_function_return(&mut self, ty: ValueType) {
+        self.function_return_stack.push(ty);
+    }
+
+    fn pop_function_return(&mut self) {
+        self.function_return_stack
+            .pop()
+            .expect("function return stack underflow");
+    }
+
+    fn current_function_return_type(&self) -> &ValueType {
+        self.function_return_stack
+            .last()
+            .expect("function return stack should not be empty")
+    }
+
+    fn pointer_equals(
+        &mut self,
+        left: PointerValue<'ctx>,
+        right: PointerValue<'ctx>,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let lhs = map_builder_error(self.builder.build_ptr_to_int(
+            left,
+            self.int_type(),
+            &format!("{name}_lhs"),
+        ))?;
+        let rhs = map_builder_error(self.builder.build_ptr_to_int(
+            right,
+            self.int_type(),
+            &format!("{name}_rhs"),
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_int_compare(IntPredicate::EQ, lhs, rhs, name),
+        )
+    }
+
+    fn handle_possible_error(&mut self, function: FunctionValue<'ctx>) -> Result<()> {
+        if matches!(self.current_error_mode(), ErrorHandlingMode::Capture) {
+            return Ok(());
+        }
+
+        let error_fn = self.ensure_error_current();
+        let call = self.call_function(error_fn, &[], "error_current")?;
+        let pointer = call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_error_current returned no value"))?
+            .into_pointer_value();
+        let is_null = map_builder_error(self.builder.build_is_null(pointer, "error_is_null"))?;
+        let success_block = self.context.append_basic_block(function, "error_ok");
+        let error_block = self.context.append_basic_block(function, "error_propagate");
+        map_builder_error(self.builder.build_conditional_branch(
+            is_null,
+            success_block,
+            error_block,
+        ))?;
+
+        self.builder.position_at_end(error_block);
+        let return_type = self.current_function_return_type().clone();
+        self.emit_error_return(function, &return_type)?;
+
+        self.builder.position_at_end(success_block);
+        Ok(())
+    }
+
+    fn clear_error_state(&mut self) -> Result<()> {
+        let clear_fn = self.ensure_error_clear_current();
+        self.call_function(clear_fn, &[], "error_clear")?;
+        Ok(())
     }
 
     fn call_function(
@@ -1203,6 +1415,153 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(template_ptr)
     }
 
+    fn ensure_error_variant_metadata(
+        &mut self,
+        error_name: &str,
+        variant_name: &str,
+    ) -> Result<&mut ErrorVariantLowering<'ctx>> {
+        let needs_init = self
+            .errors
+            .get(error_name)
+            .and_then(|variants| variants.get(variant_name))
+            .map(|entry| entry.field_names.is_empty())
+            .unwrap_or(true);
+
+        if needs_init {
+            let definition = self
+                .error_definitions_tc
+                .get(error_name)
+                .ok_or_else(|| anyhow!(format!("unknown error '{error_name}'")))?;
+            let variant_def = definition.variants.get(variant_name).ok_or_else(|| {
+                anyhow!(format!(
+                    "error '{error_name}' has no variant '{variant_name}'"
+                ))
+            })?;
+
+            let field_specs: Vec<(String, Type)> = variant_def
+                .fields
+                .iter()
+                .map(|field| (field.name.clone(), field.ty.clone()))
+                .collect();
+
+            let mut field_names = Vec::with_capacity(field_specs.len());
+            let mut field_types = Vec::with_capacity(field_specs.len());
+            for (name, ty) in field_specs {
+                field_names.push(name);
+                field_types.push(self.resolve_type_with_bindings_to_value(&ty)?);
+            }
+
+            let variants_entry = self
+                .errors
+                .entry(error_name.to_string())
+                .or_insert_with(HashMap::new);
+            let entry = variants_entry
+                .entry(variant_name.to_string())
+                .or_insert_with(ErrorVariantLowering::new);
+            entry.field_names = field_names;
+            entry.field_types = field_types;
+        }
+
+        let variants_entry = self
+            .errors
+            .entry(error_name.to_string())
+            .or_insert_with(HashMap::new);
+        let entry = variants_entry
+            .entry(variant_name.to_string())
+            .or_insert_with(ErrorVariantLowering::new);
+        Ok(entry)
+    }
+
+    fn ensure_error_template(
+        &mut self,
+        error_name: &str,
+        variant_name: &str,
+    ) -> Result<PointerValue<'ctx>> {
+        self.ensure_error_variant_metadata(error_name, variant_name)?;
+
+        if let Some(ptr) = self
+            .errors
+            .get(error_name)
+            .and_then(|variants| variants.get(variant_name))
+            .and_then(|entry| entry.template_pointer)
+        {
+            return Ok(ptr);
+        }
+
+        let error_name_ptr = self.create_c_string_constant(error_name);
+        let variant_name_ptr = self.create_c_string_constant(variant_name);
+
+        let (field_names, existing_names_global) = {
+            let entry = self
+                .errors
+                .get(error_name)
+                .and_then(|variants| variants.get(variant_name))
+                .ok_or_else(|| {
+                    anyhow!(format!(
+                        "missing metadata for '{}.{}'",
+                        error_name, variant_name
+                    ))
+                })?;
+            (entry.field_names.clone(), entry.field_names_global)
+        };
+
+        let field_count_value = self.int_type().const_int(field_names.len() as u64, false);
+
+        let char_ptr_type = self.ptr_type;
+        let mut field_names_global = existing_names_global;
+        let field_names_ptr = if field_names.is_empty() {
+            char_ptr_type.const_null()
+        } else {
+            let field_ptrs: Vec<_> = field_names
+                .iter()
+                .map(|field_name| self.create_c_string_constant(field_name))
+                .collect();
+            let const_array = char_ptr_type.const_array(&field_ptrs);
+            let array_type = const_array.get_type();
+            let global_name = format!(".error.fields.{}.{}", error_name, variant_name);
+            let fields_global = self.module.add_global(array_type, None, &global_name);
+            fields_global.set_initializer(&const_array);
+            fields_global.set_constant(true);
+            fields_global.set_linkage(Linkage::Private);
+            field_names_global = Some(fields_global);
+            let zero = self.context.i32_type().const_zero();
+            unsafe {
+                fields_global
+                    .as_pointer_value()
+                    .const_in_bounds_gep(array_type, &[zero, zero])
+            }
+        };
+
+        let template_value = self.tea_error_template.const_named_struct(&[
+            error_name_ptr.into(),
+            variant_name_ptr.into(),
+            field_count_value.into(),
+            field_names_ptr.into(),
+        ]);
+        let template_name = format!(".error.template.{}.{}", error_name, variant_name);
+        let template_global = self
+            .module
+            .add_global(self.tea_error_template, None, &template_name);
+        template_global.set_initializer(&template_value);
+        template_global.set_constant(true);
+        template_global.set_linkage(Linkage::Private);
+        let template_ptr = template_global.as_pointer_value();
+
+        if let Some(entry) = self
+            .errors
+            .get_mut(error_name)
+            .and_then(|variants| variants.get_mut(variant_name))
+        {
+            entry.template_global = Some(template_global);
+            entry.template_pointer = Some(template_ptr);
+            if entry.field_names_global.is_none() {
+                entry.field_names_global = field_names_global;
+            }
+        }
+
+        Ok(template_ptr)
+    }
+
     fn create_c_string_constant(&mut self, value: &str) -> PointerValue<'ctx> {
         let bytes = value.as_bytes();
         let total_len = bytes.len() + 1;
@@ -1239,6 +1598,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 Some(expr) => self.parse_type(expr)?,
                 None => ValueType::Void,
             };
+            let can_throw = function.error_annotation.is_some();
 
             let mut params = Vec::with_capacity(function.parameters.len());
             for param in &function.parameters {
@@ -1257,6 +1617,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: fn_value,
                     return_type,
                     param_types: params,
+                    can_throw,
                 },
             );
             return Ok(());
@@ -1277,6 +1638,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.ensure_struct_variant_metadata(struct_ty)?;
             }
             let return_type = type_to_value_type(&instance.return_type)?;
+            let can_throw = function.error_annotation.is_some();
             let mut params = Vec::with_capacity(instance.param_types.len());
             for param_ty in &instance.param_types {
                 if let Type::Struct(struct_ty) = param_ty {
@@ -1294,6 +1656,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: fn_value,
                     return_type,
                     param_types: params,
+                    can_throw,
                 },
             );
         }
@@ -1357,6 +1720,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let entry = self.context.append_basic_block(signature.value, "entry");
         self.builder.position_at_end(entry);
+        self.push_function_return(signature.return_type.clone());
 
         let mut locals: HashMap<String, LocalVariable<'ctx>> = HashMap::new();
         for (index, param) in function.parameters.iter().enumerate() {
@@ -1391,6 +1755,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             if !terminated {
                 match &signature.return_type {
                     ValueType::Void => {
+                        self.clear_error_state()?;
                         map_builder_error(self.builder.build_return(None))?;
                     }
                     ValueType::Int => {
@@ -1435,6 +1800,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             function.name
                         )
                     }
+                    ValueType::Error { .. } => {
+                        bail!(
+                            "function '{}' may exit without returning Error value",
+                            function.name
+                        )
+                    }
                     ValueType::Function(_, _) => {
                         bail!(
                             "function '{}' may exit without returning function value",
@@ -1456,6 +1827,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if pushed_generics {
             self.generic_binding_stack.pop();
         }
+        self.pop_function_return();
 
         result
     }
@@ -1468,6 +1840,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let mut locals: HashMap<String, LocalVariable<'ctx>> = HashMap::new();
         let return_type = ValueType::Int;
+        self.push_function_return(return_type.clone());
         for statement in statements {
             match statement {
                 Statement::Use(_)
@@ -1493,11 +1866,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .and_then(|b| b.get_terminator())
             .is_none()
         {
+            self.clear_error_state()?;
             map_builder_error(
                 self.builder
                     .build_return(Some(&self.context.i32_type().const_int(0, false))),
             )?;
         }
+
+        self.pop_function_return();
 
         Ok(())
     }
@@ -1541,6 +1917,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if is_last && !matches!(return_type, ValueType::Void) && value.ty() == *return_type
                 {
                     if let Some(basic) = value.into_basic_value() {
+                        self.clear_error_state()?;
                         map_builder_error(self.builder.build_return(Some(&basic)))?;
                         return Ok(true);
                     }
@@ -1570,6 +1947,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             Statement::Use(_) | Statement::Function(_) => {
                 bail!("unsupported statement in function body")
+            }
+            Statement::Error(_) => Ok(false),
+            Statement::Throw(throw_stmt) => {
+                self.compile_throw(throw_stmt, function, locals, return_type)?;
+                Ok(true)
             }
         }
     }
@@ -1639,6 +2021,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         match (&statement.expression, return_type) {
             (Some(_), ValueType::Void) => bail!("return with value in void function"),
             (None, ValueType::Void) => {
+                self.clear_error_state()?;
                 map_builder_error(self.builder.build_return(None))?;
                 return Ok(());
             }
@@ -1651,13 +2034,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if let Some(ret_ty) = function.get_type().get_return_type() {
                     if let BasicTypeEnum::IntType(int_ty) = ret_ty {
                         let zero = int_ty.const_zero();
+                        self.clear_error_state()?;
                         map_builder_error(self.builder.build_return(Some(&zero)))?;
                     } else {
                         let zero = self.int_type().const_int(0, false);
+                        self.clear_error_state()?;
                         map_builder_error(self.builder.build_return(Some(&zero)))?;
                     }
                 } else {
                     let zero = self.int_type().const_int(0, false);
+                    self.clear_error_state()?;
                     map_builder_error(self.builder.build_return(Some(&zero)))?;
                 }
                 Ok(())
@@ -1669,6 +2055,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             (None, ValueType::Function(_, _)) => bail!("missing return value"),
             _ => bail!("missing return value"),
         }
+    }
+
+    fn compile_throw(
+        &mut self,
+        statement: &ThrowStatement,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        return_type: &ValueType,
+    ) -> Result<()> {
+        let value = self.compile_expression(&statement.expression, function, locals)?;
+        let ExprValue::Error { pointer, .. } = value else {
+            bail!("throw expression must evaluate to an error value");
+        };
+        let set_fn = self.ensure_error_set_current();
+        self.call_function(set_fn, &[pointer.into()], "error_set_current")?;
+        self.emit_error_return(function, return_type)
     }
 
     fn compile_conditional(
@@ -2071,6 +2473,52 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .into_struct_value();
                 self.tea_value_to_expr(tea_value, *value_type)
             }
+            ExprValue::Error {
+                pointer,
+                error_name,
+                variant_name,
+            } => {
+                let variant = variant_name.clone().ok_or_else(|| {
+                    anyhow!(
+                        "cannot access field '{}' on error '{}' without a specific variant",
+                        member.property,
+                        error_name
+                    )
+                })?;
+                let variant_entry = self.ensure_error_variant_metadata(&error_name, &variant)?;
+                let index = variant_entry
+                    .field_names
+                    .iter()
+                    .position(|field| field == &member.property)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "error '{}.{}' has no field '{}'",
+                            error_name,
+                            variant,
+                            member.property
+                        )
+                    })?;
+                let field_type = variant_entry
+                    .field_types
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("missing field type metadata for error field"))?;
+                let get_fn = self.ensure_error_get();
+                let tea_value = self
+                    .call_function(
+                        get_fn,
+                        &[
+                            pointer.into(),
+                            self.int_type().const_int(index as u64, false).into(),
+                        ],
+                        "error_get_field",
+                    )?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected TeaValue from error_get_field"))?
+                    .into_struct_value();
+                self.tea_value_to_expr(tea_value, field_type)
+            }
             _ => bail!("member access expects a struct value"),
         }
     }
@@ -2173,6 +2621,339 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         })
     }
 
+    fn compile_try_expression(
+        &mut self,
+        expression: &TryExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        let Some(clause) = &expression.catch else {
+            return self.compile_expression(&expression.expression, function, locals);
+        };
+
+        self.push_error_mode(ErrorHandlingMode::Capture);
+        let success_value = self.compile_expression(&expression.expression, function, locals)?;
+        self.pop_error_mode();
+
+        let result_type = success_value.ty();
+        let needs_storage = !matches!(result_type, ValueType::Void);
+        let result_alloca = if needs_storage {
+            Some(self.create_entry_alloca(
+                function,
+                "try_result",
+                self.basic_type(&result_type)?,
+            )?)
+        } else {
+            None
+        };
+
+        let error_fn = self.ensure_error_current();
+        let call = self.call_function(error_fn, &[], "error_current")?;
+        let error_ptr = call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_error_current returned no value"))?
+            .into_pointer_value();
+
+        let is_null =
+            map_builder_error(self.builder.build_is_null(error_ptr, "try_error_is_null"))?;
+        let success_block = self.context.append_basic_block(function, "try_success");
+        let catch_block = self.context.append_basic_block(function, "try_catch");
+        let merge_block = self.context.append_basic_block(function, "try_merge");
+
+        map_builder_error(self.builder.build_conditional_branch(
+            is_null,
+            success_block,
+            catch_block,
+        ))?;
+
+        self.builder.position_at_end(success_block);
+        if let Some(alloca) = result_alloca {
+            self.store_expr_in_pointer(alloca, &result_type, success_value, "try_result")?;
+        } else if !matches!(result_type, ValueType::Void) {
+            bail!("try expression expected to produce a value");
+        }
+        map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+        self.builder.position_at_end(catch_block);
+        match &clause.kind {
+            CatchKind::Fallback(fallback) => {
+                let clear_fn = self.ensure_error_clear_current();
+                self.call_function(clear_fn, &[], "error_clear_current")?;
+                let fallback_value = self.compile_expression(fallback, function, locals)?;
+                if let Some(alloca) = result_alloca {
+                    self.store_expr_in_pointer(alloca, &result_type, fallback_value, "try_result")?;
+                } else if !matches!(fallback_value.ty(), ValueType::Void) {
+                    bail!("catch fallback must evaluate to a Void value");
+                }
+                map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+            }
+            CatchKind::Arms(arms) => {
+                let template_fn = self.ensure_error_get_template();
+                let template_ptr = self
+                    .call_function(template_fn, &[error_ptr.into()], "error_template")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_error_get_template returned no value"))?
+                    .into_pointer_value();
+
+                let mut catch_locals_base = locals.clone();
+                let binding_info = if let Some(binding) = &clause.binding {
+                    let binding_type = self
+                        .binding_types_tc
+                        .get(&binding.span)
+                        .ok_or_else(|| {
+                            anyhow!(format!(
+                                "missing type metadata for catch binding '{}'",
+                                binding.name
+                            ))
+                        })?
+                        .clone();
+                    let binding_value_type =
+                        self.resolve_type_with_bindings_to_value(&binding_type)?;
+                    if !matches!(binding_value_type, ValueType::Error { .. }) {
+                        bail!(format!(
+                            "catch binding '{}' must resolve to an error type",
+                            binding.name
+                        ));
+                    }
+                    let alloca = self.create_entry_alloca(
+                        function,
+                        &binding.name,
+                        self.basic_type(&binding_value_type)?,
+                    )?;
+                    catch_locals_base.insert(
+                        binding.name.clone(),
+                        LocalVariable {
+                            pointer: alloca,
+                            ty: binding_value_type.clone(),
+                            mutable: true,
+                        },
+                    );
+                    Some((binding.name.clone(), alloca, binding_value_type))
+                } else {
+                    None
+                };
+
+                for (index, arm) in arms.iter().enumerate() {
+                    let cond = self.build_catch_pattern_condition(template_ptr, &arm.patterns)?;
+                    let arm_block = self
+                        .context
+                        .append_basic_block(function, &format!("catch_arm_{index}"));
+                    let next_block = self
+                        .context
+                        .append_basic_block(function, &format!("catch_next_{index}"));
+                    map_builder_error(
+                        self.builder
+                            .build_conditional_branch(cond, arm_block, next_block),
+                    )?;
+
+                    self.builder.position_at_end(arm_block);
+                    let mut arm_locals = catch_locals_base.clone();
+                    if let Some((ref binding_name, binding_alloca, ref binding_base_type)) =
+                        binding_info
+                    {
+                        let arm_binding_type =
+                            self.determine_binding_type_for_arm(binding_base_type, &arm.patterns)?;
+                        arm_locals.insert(
+                            binding_name.clone(),
+                            LocalVariable {
+                                pointer: binding_alloca,
+                                ty: arm_binding_type.clone(),
+                                mutable: true,
+                            },
+                        );
+                        if let ValueType::Error {
+                            error_name,
+                            variant_name,
+                        } = &arm_binding_type
+                        {
+                            let binding_value = ExprValue::Error {
+                                pointer: error_ptr,
+                                error_name: error_name.clone(),
+                                variant_name: variant_name.clone(),
+                            };
+                            self.store_expr_in_pointer(
+                                binding_alloca,
+                                &arm_binding_type,
+                                binding_value,
+                                binding_name,
+                            )?;
+                        }
+                    }
+
+                    let clear_fn = self.ensure_error_clear_current();
+                    self.call_function(clear_fn, &[], "error_clear_current")?;
+                    let arm_value =
+                        self.compile_expression(&arm.expression, function, &mut arm_locals)?;
+                    if let Some(alloca) = result_alloca {
+                        self.store_expr_in_pointer(alloca, &result_type, arm_value, "try_result")?;
+                    } else if !matches!(arm_value.ty(), ValueType::Void) {
+                        bail!("catch arm expression must evaluate to a Void value");
+                    }
+                    map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+
+                    self.builder.position_at_end(next_block);
+                }
+
+                self.emit_error_return(function, &result_type)?;
+            }
+        }
+        self.builder.position_at_end(merge_block);
+
+        if let Some(alloca) = result_alloca {
+            let result_var = LocalVariable {
+                pointer: alloca,
+                ty: result_type.clone(),
+                mutable: true,
+            };
+            self.load_local_variable("try_result", &result_var)
+        } else {
+            Ok(ExprValue::Void)
+        }
+    }
+
+    fn build_catch_pattern_condition(
+        &mut self,
+        template_ptr: PointerValue<'ctx>,
+        patterns: &[MatchPattern],
+    ) -> Result<IntValue<'ctx>> {
+        if patterns.is_empty() {
+            return Ok(self.bool_type().const_zero());
+        }
+
+        let mut condition: Option<IntValue<'ctx>> = None;
+        for (index, pattern) in patterns.iter().enumerate() {
+            let cond = match pattern {
+                MatchPattern::Wildcard { .. } => self.bool_type().const_int(1, false),
+                MatchPattern::Type(_, span) => {
+                    let ty = self
+                        .type_test_metadata_tc
+                        .get(span)
+                        .ok_or_else(|| anyhow!("missing type metadata for catch pattern"))?
+                        .clone();
+                    let value_type = self.resolve_type_with_bindings_to_value(&ty)?;
+                    self.build_error_type_condition(template_ptr, &value_type)?
+                }
+                _ => {
+                    bail!("catch patterns may only match error variants or use '_'");
+                }
+            };
+            condition = Some(match condition {
+                Some(existing) => map_builder_error(self.builder.build_or(
+                    existing,
+                    cond,
+                    &format!("catch_pattern_or_{index}"),
+                ))?,
+                None => cond,
+            });
+        }
+
+        condition.ok_or_else(|| anyhow!("failed to build catch pattern condition"))
+    }
+
+    fn build_error_type_condition(
+        &mut self,
+        template_ptr: PointerValue<'ctx>,
+        pattern_type: &ValueType,
+    ) -> Result<IntValue<'ctx>> {
+        let ValueType::Error {
+            error_name,
+            variant_name,
+        } = pattern_type
+        else {
+            bail!("catch pattern must resolve to an error type");
+        };
+
+        if let Some(variant) = variant_name {
+            let expected = self.ensure_error_template(error_name, variant)?;
+            self.pointer_equals(template_ptr, expected, "catch_variant_match")
+        } else {
+            let definition = self
+                .error_definitions_tc
+                .get(error_name)
+                .ok_or_else(|| anyhow!(format!("unknown error '{}'", error_name)))?;
+            let variant_names: Vec<String> = definition.variants.keys().cloned().collect();
+            let mut combined: Option<IntValue<'ctx>> = None;
+            for variant in variant_names {
+                let expected = self.ensure_error_template(error_name, &variant)?;
+                let cmp = self.pointer_equals(template_ptr, expected, "catch_variant_match")?;
+                combined = Some(match combined {
+                    Some(existing) => map_builder_error(self.builder.build_or(
+                        existing,
+                        cmp,
+                        "catch_variant_any",
+                    ))?,
+                    None => cmp,
+                });
+            }
+            combined.ok_or_else(|| anyhow!(format!("error '{}' has no variants", error_name)))
+        }
+    }
+
+    fn determine_binding_type_for_arm(
+        &mut self,
+        binding_base: &ValueType,
+        patterns: &[MatchPattern],
+    ) -> Result<ValueType> {
+        let ValueType::Error {
+            error_name: base_name,
+            variant_name: base_variant,
+        } = binding_base
+        else {
+            return Ok(binding_base.clone());
+        };
+
+        let mut current_variant = base_variant.clone();
+        let mut saw_type_pattern = false;
+
+        for pattern in patterns {
+            match pattern {
+                MatchPattern::Type(_, span) => {
+                    let ty = self
+                        .type_test_metadata_tc
+                        .get(span)
+                        .ok_or_else(|| anyhow!("missing type metadata for catch pattern"))?
+                        .clone();
+                    let value_type = self.resolve_type_with_bindings_to_value(&ty)?;
+                    let ValueType::Error {
+                        error_name: pattern_name,
+                        variant_name: pattern_variant,
+                    } = value_type
+                    else {
+                        bail!("catch pattern must resolve to an error variant");
+                    };
+                    if pattern_name != *base_name {
+                        return Ok(binding_base.clone());
+                    }
+                    saw_type_pattern = true;
+                    current_variant = match (&current_variant, pattern_variant.clone()) {
+                        (Some(existing), Some(pattern_variant)) if existing == &pattern_variant => {
+                            Some(existing.clone())
+                        }
+                        (Some(_), Some(_)) => None,
+                        (None, Some(pattern_variant)) => Some(pattern_variant),
+                        (_, None) => None,
+                    };
+                }
+                MatchPattern::Wildcard { .. } => {
+                    return Ok(binding_base.clone());
+                }
+                _ => {
+                    return Ok(binding_base.clone());
+                }
+            }
+        }
+
+        if !saw_type_pattern {
+            return Ok(binding_base.clone());
+        }
+
+        Ok(ValueType::Error {
+            error_name: base_name.clone(),
+            variant_name: current_variant,
+        })
+    }
+
     fn ensure_lambda_function(
         &mut self,
         lambda: &LambdaExpression,
@@ -2200,6 +2981,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::List(_) => self.list_ptr_type().fn_type(&param_types, false),
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&param_types, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&param_types, false),
+            ValueType::Error { .. } => self.error_ptr_type().fn_type(&param_types, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&param_types, false),
             ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
         };
@@ -2210,6 +2992,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let entry = self.context.append_basic_block(lambda_fn, "entry");
         self.builder.position_at_end(entry);
+        self.push_function_return(signature.return_type.clone());
+        self.push_error_mode(ErrorHandlingMode::Propagate);
 
         let closure_param = lambda_fn
             .get_nth_param(0)
@@ -2279,6 +3063,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             LambdaBody::Expression(expr) => {
                 let value = self.compile_expression(expr, lambda_fn, &mut locals)?;
                 if matches!(signature.return_type, ValueType::Void) {
+                    self.clear_error_state()?;
                     map_builder_error(self.builder.build_return(None))?;
                 } else {
                     let converted = self.convert_expr_to_type(value, &signature.return_type)?;
@@ -2296,6 +3081,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if !terminated {
                     match signature.return_type {
                         ValueType::Void => {
+                            self.clear_error_state()?;
                             map_builder_error(self.builder.build_return(None))?;
                         }
                         _ => bail!("lambda is missing a return value"),
@@ -2304,6 +3090,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
 
+        self.pop_error_mode();
+        self.pop_function_return();
         self.lambda_functions.insert(lambda.id, lambda_fn);
         Ok(lambda_fn)
     }
@@ -2524,6 +3312,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     _ => bail!("unwrap expects an optional value"),
                 }
             }
+            ExpressionKind::Try(try_expr) => {
+                self.compile_try_expression(try_expr, function, locals)
+            }
             ExpressionKind::Range(_) => bail!("unsupported expression"),
         }
     }
@@ -2599,6 +3390,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     struct_name: struct_name.clone(),
                 })
             }
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => {
+                let loaded = map_builder_error(self.builder.build_load(
+                    self.error_ptr_type(),
+                    variable.pointer,
+                    name,
+                ))?;
+                Ok(ExprValue::Error {
+                    pointer: loaded.into_pointer_value(),
+                    error_name: error_name.clone(),
+                    variant_name: variant_name.clone(),
+                })
+            }
             ValueType::Function(param_types, return_type) => {
                 let loaded = map_builder_error(self.builder.build_load(
                     self.closure_ptr_type(),
@@ -2652,6 +3458,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 return self.compile_builtin_call(kind, call, function, locals);
             }
 
+            if let Some(expr) = self.try_compile_error_constructor(
+                &identifier.name,
+                None,
+                call,
+                span,
+                function,
+                locals,
+            )? {
+                return Ok(expr);
+            }
+
             if !locals.contains_key(identifier.name.as_str()) {
                 let (target_name, display_name) = if let Some((_, instance)) =
                     self.function_call_metadata_tc.get(&span)
@@ -2697,6 +3514,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
                     let call_site = self.call_function(signature.value, &args, &target_name)?;
                     if matches!(signature.return_type, ValueType::Void) {
+                        if signature.can_throw {
+                            self.handle_possible_error(function)?;
+                        }
                         return Ok(ExprValue::Void);
                     }
 
@@ -2704,34 +3524,46 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         anyhow!(format!("function '{}' returned no value", display_name))
                     })?;
 
-                    return match signature.return_type {
-                        ValueType::Int => Ok(ExprValue::Int(result.into_int_value())),
-                        ValueType::Float => Ok(ExprValue::Float(result.into_float_value())),
-                        ValueType::Bool => Ok(ExprValue::Bool(result.into_int_value())),
-                        ValueType::String => Ok(ExprValue::String(result.into_pointer_value())),
-                        ValueType::List(inner) => Ok(ExprValue::List {
+                    let expr = match signature.return_type {
+                        ValueType::Int => ExprValue::Int(result.into_int_value()),
+                        ValueType::Float => ExprValue::Float(result.into_float_value()),
+                        ValueType::Bool => ExprValue::Bool(result.into_int_value()),
+                        ValueType::String => ExprValue::String(result.into_pointer_value()),
+                        ValueType::List(inner) => ExprValue::List {
                             pointer: result.into_pointer_value(),
                             element_type: inner,
-                        }),
-                        ValueType::Dict(inner) => Ok(ExprValue::Dict {
+                        },
+                        ValueType::Dict(inner) => ExprValue::Dict {
                             pointer: result.into_pointer_value(),
                             value_type: inner,
-                        }),
-                        ValueType::Struct(struct_name) => Ok(ExprValue::Struct {
+                        },
+                        ValueType::Struct(struct_name) => ExprValue::Struct {
                             pointer: result.into_pointer_value(),
                             struct_name,
-                        }),
-                        ValueType::Function(params, ret) => Ok(ExprValue::Closure {
+                        },
+                        ValueType::Error {
+                            error_name,
+                            variant_name,
+                        } => ExprValue::Error {
+                            pointer: result.into_pointer_value(),
+                            error_name,
+                            variant_name,
+                        },
+                        ValueType::Function(params, ret) => ExprValue::Closure {
                             pointer: result.into_pointer_value(),
                             param_types: params,
                             return_type: ret,
-                        }),
-                        ValueType::Optional(inner) => Ok(ExprValue::Optional {
+                        },
+                        ValueType::Optional(inner) => ExprValue::Optional {
                             value: result.into_struct_value(),
                             inner,
-                        }),
+                        },
                         ValueType::Void => unreachable!(),
                     };
+                    if signature.can_throw {
+                        self.handle_possible_error(function)?;
+                    }
+                    return Ok(expr);
                 }
 
                 if self.structs.contains_key(&identifier.name) {
@@ -2745,6 +3577,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
 
                 bail!(format!("undefined function '{}'", identifier.name));
+            }
+        }
+
+        if let ExpressionKind::Member(member) = &call.callee.kind {
+            if let ExpressionKind::Identifier(base) = &member.object.kind {
+                if let Some(expr) = self.try_compile_error_constructor(
+                    &base.name,
+                    Some(&member.property),
+                    call,
+                    span,
+                    function,
+                    locals,
+                )? {
+                    return Ok(expr);
+                }
             }
         }
 
@@ -2808,7 +3655,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             | StdFunctionKind::UtilIsFloat
             | StdFunctionKind::UtilIsString
             | StdFunctionKind::UtilIsList
-            | StdFunctionKind::UtilIsStruct => {
+            | StdFunctionKind::UtilIsStruct
+            | StdFunctionKind::UtilIsError => {
                 self.compile_util_predicate_call(&call.arguments, function, locals, kind)
             }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
@@ -3237,6 +4085,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::UtilIsStruct => {
                 (self.ensure_util_is_struct_fn(), "tea_util_is_struct")
             }
+            StdFunctionKind::UtilIsError => (self.ensure_util_is_error_fn(), "tea_util_is_error"),
             _ => bail!("unsupported util predicate"),
         };
         let raw = self
@@ -5325,6 +6174,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::List(_) => self.list_ptr_type().fn_type(&llvm_params, false),
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&llvm_params, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Error { .. } => self.error_ptr_type().fn_type(&llvm_params, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&llvm_params, false),
             ValueType::Optional(_) => self.value_type().fn_type(&llvm_params, false),
         };
@@ -5350,6 +6200,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         ))?;
 
         if matches!(return_type, ValueType::Void) {
+            self.handle_possible_error(function)?;
             return Ok(ExprValue::Void);
         }
 
@@ -5375,6 +6226,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 pointer: result.into_pointer_value(),
                 struct_name: struct_name.clone(),
             },
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => ExprValue::Error {
+                pointer: result.into_pointer_value(),
+                error_name: error_name.clone(),
+                variant_name: variant_name.clone(),
+            },
             ValueType::Function(params, ret) => ExprValue::Closure {
                 pointer: result.into_pointer_value(),
                 param_types: params.clone(),
@@ -5386,6 +6245,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             },
             ValueType::Void => unreachable!(),
         };
+        self.handle_possible_error(function)?;
 
         Ok(expr)
     }
@@ -5565,6 +6425,115 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         })
     }
 
+    fn try_compile_error_constructor(
+        &mut self,
+        error_name: &str,
+        variant: Option<&str>,
+        call: &CallExpression,
+        _span: SourceSpan,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<Option<ExprValue<'ctx>>> {
+        let definition = match self.error_definitions_tc.get(error_name) {
+            Some(def) => def,
+            None => return Ok(None),
+        };
+
+        let (variant_name, variant_def) = match variant {
+            Some(name) => match definition.variants.get(name) {
+                Some(def) => (name.to_string(), def),
+                None => return Ok(None),
+            },
+            None => {
+                if definition.variants.len() == 1 {
+                    let (name, def) = definition
+                        .variants
+                        .iter()
+                        .next()
+                        .expect("error with single variant");
+                    (name.clone(), def)
+                } else {
+                    return Ok(None);
+                }
+            }
+        };
+
+        if call.arguments.len() != variant_def.fields.len() {
+            bail!(format!(
+                "error variant '{}.{}' expects {} argument(s) but {} provided",
+                error_name,
+                variant_name,
+                variant_def.fields.len(),
+                call.arguments.len()
+            ));
+        }
+
+        self.ensure_error_variant_metadata(error_name, &variant_name)?;
+        let field_types = self
+            .errors
+            .get(error_name)
+            .and_then(|variants| variants.get(&variant_name))
+            .map(|entry| entry.field_types.clone())
+            .ok_or_else(|| {
+                anyhow!(
+                    "missing field metadata for error '{}.{}'",
+                    error_name,
+                    variant_name
+                )
+            })?;
+        let template_ptr = self.ensure_error_template(error_name, &variant_name)?;
+
+        let alloc_fn = self.ensure_error_alloc();
+        let call_site = self.call_function(alloc_fn, &[template_ptr.into()], "error_alloc")?;
+        let error_ptr = call_site
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("expected error pointer"))?
+            .into_pointer_value();
+
+        let set_fn = self.ensure_error_set();
+        for (index, argument) in call.arguments.iter().enumerate() {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for error constructors");
+            }
+            let value = self.compile_expression(&argument.expression, function, locals)?;
+            let expected = field_types.get(index).ok_or_else(|| {
+                anyhow!(
+                    "missing field metadata for error '{}.{}'",
+                    error_name,
+                    variant_name
+                )
+            })?;
+            let converted = self
+                .convert_expr_to_type(value, expected)
+                .map_err(|error| {
+                    anyhow!(
+                        "argument {} for error '{}.{}' has mismatched type: {}",
+                        index + 1,
+                        error_name,
+                        variant_name,
+                        error
+                    )
+                })?;
+            let tea_value = self.expr_to_tea_value(converted)?;
+            self.call_function(
+                set_fn,
+                &[
+                    error_ptr.into(),
+                    self.int_type().const_int(index as u64, false).into(),
+                    tea_value.into(),
+                ],
+                "error_set",
+            )?;
+        }
+
+        Ok(Some(ExprValue::Error {
+            pointer: error_ptr,
+            error_name: error_name.to_string(),
+            variant_name: Some(variant_name),
+        }))
+    }
+
     fn compile_print_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -5605,6 +6574,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 ExprValue::Struct { pointer, .. } => {
                     let func = self.ensure_print_struct();
                     self.call_function(func, &[pointer.into()], "print_struct")?;
+                }
+                ExprValue::Error { pointer, .. } => {
+                    let func = self.ensure_print_error();
+                    self.call_function(func, &[pointer.into()], "print_error")?;
                 }
                 ExprValue::Closure { pointer, .. } => {
                     let func = self.ensure_print_closure();
@@ -6237,6 +7210,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .left()
                     .ok_or_else(|| anyhow!("expected TeaValue"))?)
             }
+            ExprValue::Error { pointer, .. } => {
+                let func = self.ensure_value_from_error();
+                let call = self.call_function(func, &[pointer.into()], "val_error")?;
+                Ok(call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+            }
             ExprValue::Closure { pointer, .. } => {
                 let func = self.ensure_value_from_closure();
                 let call = self.call_function(func, &[pointer.into()], "val_closure")?;
@@ -6293,16 +7274,64 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
                 ExprValue::Void => self.optional_nil(inner),
                 other => {
-                    if other.ty() != **inner {
-                        bail!("expected optional[{:?}] but found {:?}", inner, other.ty());
-                    }
-                    let tea_value = self.expr_to_tea_value(other)?;
+                    let converted = self.convert_expr_to_type(other, inner)?;
+                    let tea_value = self.expr_to_tea_value(converted)?;
                     let struct_value = tea_value.into_struct_value();
                     Ok(ExprValue::Optional {
                         value: struct_value,
                         inner: inner.clone(),
                     })
                 }
+            },
+            ValueType::Error {
+                error_name: target_name,
+                variant_name: target_variant,
+            } => match value {
+                ExprValue::Error {
+                    pointer,
+                    error_name,
+                    variant_name,
+                } => {
+                    if error_name != *target_name {
+                        bail!(
+                            "error type mismatch: expected error '{}', found '{}'",
+                            target_name,
+                            error_name
+                        );
+                    }
+                    if let Some(target_variant) = target_variant {
+                        match &variant_name {
+                            Some(actual) if actual == target_variant => {}
+                            Some(actual) => {
+                                bail!(
+                                    "error variant mismatch: expected '{}.{}', found '{}.{}'",
+                                    target_name,
+                                    target_variant,
+                                    error_name,
+                                    actual
+                                );
+                            }
+                            None => {
+                                bail!(
+                                    "error variant mismatch: expected '{}.{}', found '{}'",
+                                    target_name,
+                                    target_variant,
+                                    error_name
+                                );
+                            }
+                        }
+                    }
+                    Ok(ExprValue::Error {
+                        pointer,
+                        error_name,
+                        variant_name,
+                    })
+                }
+                other => bail!(
+                    "expected error value '{}', found {:?}",
+                    target_name,
+                    other.ty()
+                ),
             },
             _ => {
                 if value.ty() == *target {
@@ -6339,6 +7368,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     }
 
     fn emit_return_value(&mut self, value: ExprValue<'ctx>, ty: &ValueType) -> Result<()> {
+        self.clear_error_state()?;
         let value_ty = value.ty();
         match (ty, value) {
             (ValueType::Int, ExprValue::Int(v)) => {
@@ -6369,6 +7399,49 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 map_builder_error(self.builder.build_return(Some(&pointer)))?;
                 Ok(())
             }
+            (
+                ValueType::Error {
+                    error_name: expected_name,
+                    variant_name: expected_variant,
+                },
+                ExprValue::Error {
+                    pointer,
+                    error_name,
+                    variant_name,
+                },
+            ) => {
+                if error_name != *expected_name {
+                    bail!(
+                        "return type mismatch: expected error '{}', found '{}'",
+                        expected_name,
+                        error_name
+                    );
+                }
+                if let Some(expected_variant) = expected_variant {
+                    match &variant_name {
+                        Some(actual) if actual == expected_variant => {}
+                        Some(actual) => {
+                            bail!(
+                                "return type mismatch: expected '{}.{}', found '{}.{}'",
+                                expected_name,
+                                expected_variant,
+                                error_name,
+                                actual
+                            );
+                        }
+                        None => {
+                            bail!(
+                                "return type mismatch: expected '{}.{}', found '{}' without variant",
+                                expected_name,
+                                expected_variant,
+                                error_name
+                            );
+                        }
+                    }
+                }
+                map_builder_error(self.builder.build_return(Some(&pointer)))?;
+                Ok(())
+            }
             (ValueType::Function(_, _), ExprValue::Closure { pointer, .. }) => {
                 map_builder_error(self.builder.build_return(Some(&pointer)))?;
                 Ok(())
@@ -6396,6 +7469,59 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 );
             }
         }
+    }
+
+    fn emit_error_return(&mut self, _function: FunctionValue<'ctx>, ty: &ValueType) -> Result<()> {
+        match ty {
+            ValueType::Void => {
+                map_builder_error(self.builder.build_return(None))?;
+            }
+            ValueType::Int => {
+                let zero = self.int_type().const_zero();
+                map_builder_error(self.builder.build_return(Some(&zero)))?;
+            }
+            ValueType::Float => {
+                let zero = self.float_type().const_float(0.0);
+                map_builder_error(self.builder.build_return(Some(&zero)))?;
+            }
+            ValueType::Bool => {
+                let zero = self.bool_type().const_zero();
+                map_builder_error(self.builder.build_return(Some(&zero)))?;
+            }
+            ValueType::String => {
+                let null = self.string_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::List(_) => {
+                let null = self.list_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::Dict(_) => {
+                let null = self.dict_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::Struct(_) => {
+                let null = self.struct_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::Error { .. } => {
+                let null = self.error_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::Function(_, _) => {
+                let null = self.closure_ptr_type().const_null();
+                map_builder_error(self.builder.build_return(Some(&null)))?;
+            }
+            ValueType::Optional(inner) => {
+                let nil_value = self.optional_nil(inner)?;
+                if let ExprValue::Optional { value, .. } = nil_value {
+                    map_builder_error(self.builder.build_return(Some(&value)))?;
+                } else {
+                    unreachable!("optional_nil did not produce optional value");
+                }
+            }
+        }
+        Ok(())
     }
 
     fn compile_optional_unwrap(
@@ -6635,6 +7761,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     struct_name,
                 })
             }
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => {
+                let func = self.ensure_value_as_error();
+                let ptr = self
+                    .call_function(func, &[value.into()], "val_as_error")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected Error value"))?
+                    .into_pointer_value();
+                Ok(ExprValue::Error {
+                    pointer: ptr,
+                    error_name,
+                    variant_name,
+                })
+            }
             ValueType::Function(param_types, return_type) => {
                 let func = self.ensure_value_as_closure();
                 let ptr = self
@@ -6845,6 +7988,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => self.dict_ptr_type().fn_type(&param_types, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&param_types, false),
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&param_types, false),
+            ValueType::Error { .. } => self.error_ptr_type().fn_type(&param_types, false),
             ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
         };
         Ok(fn_type)
@@ -6860,6 +8004,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Dict(_) => Ok(self.dict_ptr_type().into()),
             ValueType::Function(_, _) => Ok(self.closure_ptr_type().into()),
             ValueType::Struct(_) => Ok(self.struct_ptr_type().into()),
+            ValueType::Error { .. } => Ok(self.error_ptr_type().into()),
             ValueType::Optional(_) => Ok(self.value_type().into()),
             ValueType::Void => bail!("void type is not a value"),
         }
@@ -7015,6 +8160,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_print_struct", fn_type, Some(Linkage::External));
         self.builtin_print_struct = Some(func);
+        func
+    }
+
+    fn ensure_print_error(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_print_error {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.error_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_print_error", fn_type, Some(Linkage::External));
+        self.builtin_print_error = Some(func);
         func
     }
 
@@ -7252,6 +8412,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_util_is_struct", fn_type, Some(Linkage::External));
         self.util_is_struct_fn = Some(func);
+        func
+    }
+
+    fn ensure_util_is_error_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.util_is_error_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .i32_type()
+            .fn_type(&[self.value_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_util_is_error", fn_type, Some(Linkage::External));
+        self.util_is_error_fn = Some(func);
         func
     }
 
@@ -8094,6 +9269,107 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_error_alloc(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_alloc_fn {
+            return func;
+        }
+        let fn_type = self
+            .error_ptr_type()
+            .fn_type(&[self.error_template_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_alloc_error", fn_type, Some(Linkage::External));
+        self.error_alloc_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_set(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_set_fn {
+            return func;
+        }
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                self.error_ptr_type().into(),
+                self.int_type().into(),
+                self.value_type().into(),
+            ],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_error_set_field", fn_type, Some(Linkage::External));
+        self.error_set_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_get(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_get_fn {
+            return func;
+        }
+        let fn_type = self.value_type().fn_type(
+            &[self.error_ptr_type().into(), self.int_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_error_get_field", fn_type, Some(Linkage::External));
+        self.error_get_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_current(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_current_fn {
+            return func;
+        }
+        let fn_type = self.error_ptr_type().fn_type(&[], false);
+        let func = self
+            .module
+            .add_function("tea_error_current", fn_type, Some(Linkage::External));
+        self.error_current_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_set_current(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_set_current_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.error_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_error_set_current", fn_type, Some(Linkage::External));
+        self.error_set_current_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_clear_current(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_clear_current_fn {
+            return func;
+        }
+        let fn_type = self.context.void_type().fn_type(&[], false);
+        let func =
+            self.module
+                .add_function("tea_error_clear_current", fn_type, Some(Linkage::External));
+        self.error_clear_current_fn = Some(func);
+        func
+    }
+
+    fn ensure_error_get_template(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.error_get_template_fn {
+            return func;
+        }
+        let fn_type = self
+            .error_template_ptr_type()
+            .fn_type(&[self.error_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_error_get_template", fn_type, Some(Linkage::External));
+        self.error_get_template_fn = Some(func);
+        func
+    }
+
     fn ensure_value_from_int(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.value_from_int_fn {
             return func;
@@ -8187,6 +9463,20 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_value_from_struct", fn_type, Some(Linkage::External));
         self.value_from_struct_fn = Some(func);
+        func
+    }
+
+    fn ensure_value_from_error(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.value_from_error_fn {
+            return func;
+        }
+        let fn_type = self
+            .value_type()
+            .fn_type(&[self.error_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_value_from_error", fn_type, Some(Linkage::External));
+        self.value_from_error_fn = Some(func);
         func
     }
 
@@ -8310,6 +9600,20 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_value_as_struct", fn_type, Some(Linkage::External));
         self.value_as_struct_fn = Some(func);
+        func
+    }
+
+    fn ensure_value_as_error(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.value_as_error_fn {
+            return func;
+        }
+        let fn_type = self
+            .error_ptr_type()
+            .fn_type(&[self.value_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_value_as_error", fn_type, Some(Linkage::External));
+        self.value_as_error_fn = Some(func);
         func
     }
 

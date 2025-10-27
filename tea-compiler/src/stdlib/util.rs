@@ -71,6 +71,13 @@ const UTIL_FUNCTIONS: &[StdFunction] = &[
         &[StdType::Any],
         StdType::Bool,
     ),
+    std_function(
+        "is_error",
+        StdFunctionKind::UtilIsError,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Bool,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

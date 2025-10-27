@@ -8,6 +8,7 @@ use path_clean::PathClean;
 use pathdiff::diff_paths;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::{c_void, CStr};
@@ -16,6 +17,7 @@ use std::io::{BufReader, Read, Write};
 use std::os::raw::{c_char, c_double, c_int, c_longlong};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::ptr;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
@@ -60,6 +62,22 @@ pub struct TeaStructInstance {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct TeaErrorTemplate {
+    pub error_name: *const c_char,
+    pub variant_name: *const c_char,
+    pub field_count: c_longlong,
+    pub field_names: *const *const c_char,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TeaErrorInstance {
+    pub template: *const TeaErrorTemplate,
+    pub fields: *mut TeaValue,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct TeaClosure {
     pub function: *const c_void,
     pub captures: *mut TeaValue,
@@ -94,6 +112,25 @@ static NEXT_PROCESS_HANDLE: AtomicI64 = AtomicI64::new(1);
 
 fn process_handles() -> &'static Mutex<HashMap<i64, ProcessHandleEntry>> {
     PROCESS_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+thread_local! {
+    static CURRENT_ERROR: Cell<*mut TeaErrorInstance> = Cell::new(ptr::null_mut());
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_current() -> *const TeaErrorInstance {
+    CURRENT_ERROR.with(|cell| cell.get() as *const TeaErrorInstance)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_set_current(error: *const TeaErrorInstance) {
+    CURRENT_ERROR.with(|cell| cell.set(error as *mut TeaErrorInstance));
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_clear_current() {
+    CURRENT_ERROR.with(|cell| cell.set(ptr::null_mut()));
 }
 
 fn alloc_tea_string(text: &str) -> *mut TeaString {
@@ -175,6 +212,7 @@ pub enum TeaValueTag {
     List,
     Dict,
     Struct,
+    Error,
     Closure,
     Nil,
 }
@@ -189,6 +227,7 @@ pub union TeaValuePayload {
     pub list_value: *const TeaList,
     pub dict_value: *const TeaDict,
     pub struct_value: *const TeaStructInstance,
+    pub error_value: *const TeaErrorInstance,
     pub closure_value: *const TeaClosure,
 }
 
@@ -275,6 +314,7 @@ fn print_value(value: TeaValue) {
             TeaValueTag::List => tea_print_list(value.payload.list_value),
             TeaValueTag::Dict => tea_print_dict(value.payload.dict_value),
             TeaValueTag::Struct => tea_print_struct(value.payload.struct_value),
+            TeaValueTag::Error => tea_print_error(value.payload.error_value),
             TeaValueTag::Closure => tea_print_closure(value.payload.closure_value),
         }
     }
@@ -785,6 +825,45 @@ unsafe fn tea_value_to_string(value: TeaValue) -> String {
             result.push(')');
             result
         }
+        TeaValueTag::Error => {
+            let error_ptr = value.payload.error_value;
+            if error_ptr.is_null() {
+                return "<error>".to_string();
+            }
+            let instance = &*error_ptr;
+            if instance.template.is_null() {
+                return "<error>".to_string();
+            }
+            let template = &*instance.template;
+            let error_name =
+                tea_cstr_to_rust(template.error_name).unwrap_or_else(|| "Error".to_string());
+            let variant_name =
+                tea_cstr_to_rust(template.variant_name).unwrap_or_else(|| "Variant".to_string());
+            let mut result = String::new();
+            result.push_str(&error_name);
+            result.push('.');
+            result.push_str(&variant_name);
+            result.push('(');
+            let field_count = template.field_count.max(0) as usize;
+            for index in 0..field_count {
+                if index > 0 {
+                    result.push_str(", ");
+                }
+                let field_name_ptr = if template.field_names.is_null() {
+                    std::ptr::null()
+                } else {
+                    *template.field_names.add(index)
+                };
+                let field_name =
+                    tea_cstr_to_rust(field_name_ptr).unwrap_or_else(|| format!("field{index}"));
+                result.push_str(&field_name);
+                result.push_str(": ");
+                let field_value = *instance.fields.add(index);
+                result.push_str(&tea_value_to_string(field_value));
+            }
+            result.push(')');
+            result
+        }
         TeaValueTag::Closure => "<closure>".to_string(),
     }
 }
@@ -856,6 +935,7 @@ fn tea_value_to_json(value: TeaValue) -> Result<JsonValue, String> {
                 }
                 Ok(JsonValue::Object(object))
             }
+            TeaValueTag::Error => Ok(JsonValue::String(tea_value_to_string(value))),
             TeaValueTag::Closure => Err("cannot encode closures as JSON".to_string()),
         }
     }
@@ -1030,6 +1110,149 @@ pub extern "C" fn tea_struct_equal(
 }
 
 #[no_mangle]
+pub extern "C" fn tea_error_template_new(
+    error_name: *const c_char,
+    variant_name: *const c_char,
+    field_count: c_longlong,
+    field_names: *const *const c_char,
+) -> *mut TeaErrorTemplate {
+    if field_count < 0 {
+        panic!("field count must be non-negative");
+    }
+
+    unsafe {
+        let count = field_count as usize;
+        let mut names: Vec<*const c_char> = Vec::with_capacity(count.max(1));
+        for index in 0..count {
+            names.push(*field_names.add(index));
+        }
+        let names_ptr = names.as_ptr();
+        std::mem::forget(names);
+        Box::into_raw(Box::new(TeaErrorTemplate {
+            error_name,
+            variant_name,
+            field_count,
+            field_names: names_ptr,
+        }))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_alloc_error(template: *const TeaErrorTemplate) -> *mut TeaErrorInstance {
+    unsafe {
+        if template.is_null() {
+            panic!("null error template");
+        }
+        let template_ref = &*template;
+        if template_ref.field_count < 0 {
+            panic!("field count must be non-negative");
+        }
+        let count = template_ref.field_count as usize;
+        let mut fields = Vec::with_capacity(count.max(1));
+        fields.resize_with(count, || tea_value_nil());
+        let instance = TeaErrorInstance {
+            template,
+            fields: fields.as_mut_ptr(),
+        };
+        let raw = Box::into_raw(Box::new(instance));
+        std::mem::forget(fields);
+        raw
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_set_field(
+    instance: *mut TeaErrorInstance,
+    index: c_longlong,
+    value: TeaValue,
+) {
+    unsafe {
+        if instance.is_null() {
+            panic!("null error instance");
+        }
+        let instance_ref = &mut *instance;
+        if instance_ref.template.is_null() {
+            panic!("error instance has null template");
+        }
+        let template_ref = &*instance_ref.template;
+        if index < 0 || index >= template_ref.field_count {
+            panic!("error field index out of bounds");
+        }
+        *instance_ref.fields.add(index as usize) = value;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_get_field(
+    instance: *const TeaErrorInstance,
+    index: c_longlong,
+) -> TeaValue {
+    unsafe {
+        if instance.is_null() {
+            panic!("null error instance");
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            panic!("error instance has null template");
+        }
+        let template_ref = &*instance_ref.template;
+        if index < 0 || index >= template_ref.field_count {
+            panic!("error field index out of bounds");
+        }
+        *instance_ref.fields.add(index as usize)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_error_equal(
+    left: *const TeaErrorInstance,
+    right: *const TeaErrorInstance,
+) -> c_int {
+    if left == right {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_print_error(instance: *const TeaErrorInstance) {
+    unsafe {
+        if instance.is_null() {
+            println!("<error nil>");
+            return;
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            println!("<error nil>");
+            return;
+        }
+        let template = &*instance_ref.template;
+        let error_name =
+            tea_cstr_to_rust(template.error_name).unwrap_or_else(|| "Error".to_string());
+        let variant_name =
+            tea_cstr_to_rust(template.variant_name).unwrap_or_else(|| "Variant".to_string());
+        print!("{}.{}(", error_name, variant_name);
+        let count = template.field_count.max(0) as usize;
+        for index in 0..count {
+            if index > 0 {
+                print!(", ");
+            }
+            let field_name_ptr = if template.field_names.is_null() {
+                std::ptr::null()
+            } else {
+                *template.field_names.add(index)
+            };
+            let field_name =
+                tea_cstr_to_rust(field_name_ptr).unwrap_or_else(|| format!("field{index}"));
+            let field_value = *instance_ref.fields.add(index);
+            print!("{field_name}: {}", tea_value_to_string(field_value));
+        }
+        println!(")");
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_print_struct(instance: *const TeaStructInstance) {
     unsafe {
         if instance.is_null() {
@@ -1169,6 +1392,19 @@ pub extern "C" fn tea_assert_eq(left: TeaValue, right: TeaValue) {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_error_get_template(
+    instance: *const TeaErrorInstance,
+) -> *const TeaErrorTemplate {
+    unsafe {
+        if instance.is_null() {
+            ptr::null()
+        } else {
+            (*instance).template
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_assert_ne(left: TeaValue, right: TeaValue) {
     unsafe {
         if tea_value_equals(left, right) {
@@ -1288,6 +1524,15 @@ pub extern "C" fn tea_util_is_list(value: TeaValue) -> c_int {
 #[no_mangle]
 pub extern "C" fn tea_util_is_struct(value: TeaValue) -> c_int {
     if matches!(value.tag, TeaValueTag::Struct) {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_util_is_error(value: TeaValue) -> c_int {
+    if matches!(value.tag, TeaValueTag::Error) {
         1
     } else {
         0
@@ -1935,7 +2180,7 @@ fn runtime_value_from_tea(value: TeaValue) -> Result<RuntimeValue> {
                 let map = tea_dict_to_runtime(value.payload.dict_value)?;
                 Ok(RuntimeValue::Dict(map))
             }
-            TeaValueTag::Struct | TeaValueTag::Closure => {
+            TeaValueTag::Struct | TeaValueTag::Error | TeaValueTag::Closure => {
                 Err(anyhow!("cli spec does not support struct values"))
             }
         }
@@ -2594,6 +2839,16 @@ pub extern "C" fn tea_value_as_struct(value: TeaValue) -> *const TeaStructInstan
 }
 
 #[no_mangle]
+pub extern "C" fn tea_value_as_error(value: TeaValue) -> *const TeaErrorInstance {
+    unsafe {
+        match value.tag {
+            TeaValueTag::Error => value.payload.error_value,
+            _ => panic!("tea_value_as_error: value is not an Error"),
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_value_as_closure(value: TeaValue) -> *const TeaClosure {
     unsafe {
         match value.tag {
@@ -2660,6 +2915,14 @@ pub extern "C" fn tea_value_from_struct(value: *const TeaStructInstance) -> TeaV
         payload: TeaValuePayload {
             struct_value: value,
         },
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_value_from_error(value: *const TeaErrorInstance) -> TeaValue {
+    TeaValue {
+        tag: TeaValueTag::Error,
+        payload: TeaValuePayload { error_value: value },
     }
 }
 

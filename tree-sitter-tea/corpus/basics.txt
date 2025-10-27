@@ -27,3 +27,71 @@ end
           left: (identifier)
           right: (number)))) 
     "end"))
+
+================================================================================
+Error Declarations
+================================================================================
+
+error InvalidText
+
+error FsError {
+  NotFound(path: String)
+  Permission
+}
+--------------------------------------------------------------------------------
+(source_file
+  (error_definition
+    name: (identifier))
+  (error_definition
+    name: (identifier)
+    variants: (error_variant_block
+      (error_variant
+        name: (identifier)
+      (error_field
+        name: (identifier)
+        type: (type_annotation (identifier))))
+      (error_variant
+        name: (identifier)))))
+
+================================================================================
+Try Catch
+================================================================================
+
+var fallback = open(path) catch "fallback"
+
+try open(path) catch err
+  case is FsError.NotFound => "missing"
+  case _ => "unknown"
+end
+--------------------------------------------------------------------------------
+(source_file
+  (var_declaration
+    name: (identifier)
+    value: (catch_expression
+      value: (call_expression
+        function: (identifier)
+        arguments: (argument_list
+          (argument (identifier))))
+      handler: (catch_clause
+        fallback: (string))))
+  (expression_statement
+    (try_expression
+      value: (call_expression
+        function: (identifier)
+        arguments: (argument_list
+          (argument (identifier))))
+      handler: (catch_clause
+        binding: (identifier)
+        (catch_case
+          patterns: (match_patterns
+            (match_pattern
+              type: (type_annotation
+                (identifier)
+                "."
+                (identifier))))
+          value: (string))
+        (catch_case
+          patterns: (match_patterns
+            (match_pattern))
+          value: (string))
+        "end"))))

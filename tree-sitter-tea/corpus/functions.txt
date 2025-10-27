@@ -62,3 +62,57 @@ end
           arguments: (argument_list
             (argument (identifier)))))))
   "end")
+
+================================================================================
+Error Annotations
+================================================================================
+
+def risky(text: String) -> String ! InvalidText
+  throw InvalidText()
+end
+
+def get_file(path: String) -> String ! { FsError.NotFound, FsError.Permission }
+  try open(path) catch "fallback"
+end
+--------------------------------------------------------------------------------
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type_annotation (identifier))))
+    return_type: (type_annotation (identifier))
+    error_annotation: (error_annotation
+      error: (error_type
+        name: (identifier)))
+    body: (block
+      (throw_statement
+        value: (call_expression
+          function: (identifier)
+          arguments: (argument_list)))))
+  "end"
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type_annotation (identifier))))
+    return_type: (type_annotation (identifier))
+    error_annotation: (error_annotation
+      (error_type
+        name: (identifier)
+        variant: (identifier))
+      (error_type
+        name: (identifier)
+        variant: (identifier)))
+    body: (block
+      (expression_statement
+        (try_expression
+          value: (call_expression
+            function: (identifier)
+            arguments: (argument_list
+              (argument (identifier))))
+          handler: (catch_clause
+            fallback: (string))))))
+  "end")

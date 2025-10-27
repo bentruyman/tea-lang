@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, ConditionalKind,
-    ConditionalStatement, DictLiteral, Expression, ExpressionKind, FunctionStatement, Identifier,
-    IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal,
-    LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
-    ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TypeExpression,
-    TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
+    BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, CatchKind,
+    ConditionalKind, ConditionalStatement, DictLiteral, ErrorAnnotation, ErrorTypeSpecifier,
+    Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
+    InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
+    LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
+    ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TryExpression,
+    TypeExpression, TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Keyword, Token, TokenKind};
@@ -22,6 +23,7 @@ pub(crate) enum Type {
     String,
     Nil,
     Void,
+    Error(ErrorType),
     Optional(Box<Type>),
     List(Box<Type>),
     Dict(Box<Type>),
@@ -73,6 +75,10 @@ impl Type {
             }
             Type::Enum(enum_type) => enum_type.name.clone(),
             Type::Union(union_type) => union_type.name.clone(),
+            Type::Error(error_type) => match &error_type.variant {
+                Some(variant) => format!("{}.{}", error_type.name, variant),
+                None => error_type.name.clone(),
+            },
             Type::GenericParameter(name) => name.clone(),
             Type::Unknown => "Unknown".to_string(),
         }
@@ -86,6 +92,12 @@ impl Type {
 pub(crate) struct StructType {
     pub name: String,
     pub type_arguments: Vec<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ErrorType {
+    pub name: String,
+    pub variant: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -137,6 +149,26 @@ pub(crate) struct EnumDefinition {
     pub variants: Vec<EnumVariantDefinition>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ErrorDefinition {
+    pub variants: HashMap<String, ErrorVariantDefinition>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ErrorVariantDefinition {
+    pub name: String,
+    pub fields: Vec<ErrorFieldDefinition>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ErrorFieldDefinition {
+    pub name: String,
+    pub ty: Type,
+    pub span: SourceSpan,
+}
+
 impl EnumDefinition {
     fn variant(&self, name: &str) -> Option<&EnumVariantDefinition> {
         self.variants.iter().find(|variant| variant.name == name)
@@ -160,6 +192,52 @@ pub(crate) struct EnumVariantMetadata {
 struct UnionMemberSource {
     type_expression: TypeExpression,
     span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+struct ErrorFieldSource {
+    name: String,
+    type_expression: TypeExpression,
+    span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ErrorTag {
+    name: String,
+    variant: Option<String>,
+}
+
+impl ErrorTag {
+    fn new(name: impl Into<String>, variant: Option<impl Into<String>>) -> Self {
+        Self {
+            name: name.into(),
+            variant: variant.map(Into::into),
+        }
+    }
+
+    fn matches(&self, other: &ErrorTag) -> bool {
+        self.name == other.name
+            && (self.variant.is_none() || other.variant.is_none() || self.variant == other.variant)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ErrorSet {
+    tags: HashSet<ErrorTag>,
+}
+
+impl ErrorSet {
+    fn empty() -> Self {
+        Self::default()
+    }
+
+    fn insert(&mut self, tag: ErrorTag) {
+        self.tags.insert(tag);
+    }
+
+    fn contains(&self, tag: &ErrorTag) -> bool {
+        self.tags.iter().any(|candidate| candidate.matches(tag))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +294,7 @@ impl OptionalGuard {
 #[derive(Debug, Clone)]
 struct FunctionContext {
     return_type: Type,
+    allowed_errors: ErrorSet,
     saw_explicit_return: bool,
     last_expression_type: Option<Type>,
     explicit_return_types: Vec<Type>,
@@ -231,6 +310,8 @@ pub struct TypeChecker {
     union_name_spans: HashMap<String, SourceSpan>,
     union_member_sources: HashMap<String, Vec<UnionMemberSource>>,
     enums: HashMap<String, EnumDefinition>,
+    errors: HashMap<String, ErrorDefinition>,
+    error_variant_sources: HashMap<String, HashMap<String, Vec<ErrorFieldSource>>>,
     type_parameters: Vec<HashSet<String>>,
     builtins: HashMap<String, StdFunctionKind>,
     module_aliases: HashMap<String, ModuleBinding>,
@@ -261,6 +342,8 @@ impl TypeChecker {
             union_name_spans: HashMap::new(),
             union_member_sources: HashMap::new(),
             enums: HashMap::new(),
+            errors: HashMap::new(),
+            error_variant_sources: HashMap::new(),
             type_parameters: Vec::new(),
             builtins: HashMap::new(),
             module_aliases: HashMap::new(),
@@ -286,7 +369,9 @@ impl TypeChecker {
         self.collect_unions(&module.statements);
         self.collect_enums(&module.statements);
         self.collect_structs(&module.statements);
+        self.collect_errors(&module.statements);
         self.populate_unions();
+        self.populate_errors();
         self.check_statements(&module.statements);
     }
 
@@ -336,6 +421,10 @@ impl TypeChecker {
 
     pub(crate) fn enum_definitions(&self) -> HashMap<String, EnumDefinition> {
         self.enums.clone()
+    }
+
+    pub(crate) fn error_definitions(&self) -> HashMap<String, ErrorDefinition> {
+        self.errors.clone()
     }
 
     pub(crate) fn enum_variant_metadata(&self) -> &HashMap<SourceSpan, EnumVariantMetadata> {
@@ -522,6 +611,66 @@ impl TypeChecker {
 
                 self.enums
                     .insert(enum_stmt.name.clone(), EnumDefinition { variants });
+            }
+        }
+    }
+
+    fn collect_errors(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            if let Statement::Error(error_stmt) = statement {
+                if self.errors.contains_key(&error_stmt.name) {
+                    self.report_error(
+                        format!("duplicate error definition '{}'", error_stmt.name),
+                        Some(error_stmt.name_span),
+                    );
+                    continue;
+                }
+
+                let mut variants = HashMap::new();
+                let mut sources: HashMap<String, Vec<ErrorFieldSource>> = HashMap::new();
+
+                for variant in &error_stmt.variants {
+                    if variants.contains_key(&variant.name) {
+                        self.report_error(
+                            format!(
+                                "duplicate variant '{}' in error '{}'",
+                                variant.name, error_stmt.name
+                            ),
+                            Some(variant.name_span),
+                        );
+                        continue;
+                    }
+
+                    variants.insert(
+                        variant.name.clone(),
+                        ErrorVariantDefinition {
+                            name: variant.name.clone(),
+                            fields: Vec::new(),
+                            span: variant.span,
+                        },
+                    );
+
+                    let field_sources = variant
+                        .fields
+                        .iter()
+                        .map(|field| ErrorFieldSource {
+                            name: field.name.clone(),
+                            type_expression: field.type_annotation.clone(),
+                            span: field.name_span,
+                        })
+                        .collect();
+                    sources.insert(variant.name.clone(), field_sources);
+                }
+
+                self.errors.insert(
+                    error_stmt.name.clone(),
+                    ErrorDefinition {
+                        variants,
+                        span: error_stmt.span,
+                    },
+                );
+                self.error_variant_sources
+                    .insert(error_stmt.name.clone(), sources);
             }
         }
     }
@@ -713,6 +862,121 @@ impl TypeChecker {
         }
     }
 
+    fn populate_errors(&mut self) {
+        let error_names: Vec<String> = self.error_variant_sources.keys().cloned().collect();
+        for error_name in error_names {
+            let Some(variant_sources) = self.error_variant_sources.remove(&error_name) else {
+                continue;
+            };
+
+            for (variant_name, sources) in variant_sources {
+                let snapshot = self
+                    .errors
+                    .get(&error_name)
+                    .and_then(|definition| definition.variants.get(&variant_name).cloned());
+
+                let Some(mut variant_def) = snapshot else {
+                    continue;
+                };
+
+                let mut fields = Vec::new();
+                let mut seen = HashSet::new();
+                for field in sources {
+                    if !seen.insert(field.name.clone()) {
+                        self.report_error(
+                            format!(
+                                "duplicate field '{}' in error '{}.{}'",
+                                field.name, error_name, variant_name
+                            ),
+                            Some(field.span),
+                        );
+                        continue;
+                    }
+
+                    let field_type = self.parse_type(&field.type_expression).unwrap_or_else(|| {
+                        self.report_error(
+                            format!(
+                                "could not resolve type for field '{}' in error '{}.{}'",
+                                field.name, error_name, variant_name
+                            ),
+                            Some(field.span),
+                        );
+                        Type::Unknown
+                    });
+
+                    fields.push(ErrorFieldDefinition {
+                        name: field.name,
+                        ty: field_type,
+                        span: field.span,
+                    });
+                }
+
+                variant_def.fields = fields;
+
+                if let Some(definition) = self.errors.get_mut(&error_name) {
+                    definition
+                        .variants
+                        .insert(variant_name.clone(), variant_def);
+                }
+            }
+        }
+    }
+
+    fn resolve_error_annotation(&mut self, annotation: &ErrorAnnotation) -> ErrorSet {
+        let mut set = ErrorSet::empty();
+        for spec in &annotation.types {
+            if let Some(tags) = self.resolve_error_specifier(spec) {
+                for tag in tags {
+                    set.insert(tag);
+                }
+            }
+        }
+        set
+    }
+
+    fn resolve_error_specifier(&mut self, spec: &ErrorTypeSpecifier) -> Option<Vec<ErrorTag>> {
+        if spec.path.is_empty() {
+            return None;
+        }
+
+        let error_name = &spec.path[0];
+        let definition = match self.errors.get(error_name) {
+            Some(definition) => definition,
+            None => {
+                self.report_error(format!("unknown error '{}'", error_name), Some(spec.span));
+                return None;
+            }
+        };
+
+        if spec.path.len() == 1 {
+            return Some(vec![ErrorTag::new(error_name.clone(), None::<String>)]);
+        }
+
+        if spec.path.len() == 2 {
+            let variant_name = &spec.path[1];
+            if !definition.variants.contains_key(variant_name) {
+                self.report_error(
+                    format!("error '{}': unknown variant '{}'", error_name, variant_name),
+                    Some(spec.span),
+                );
+                return None;
+            }
+            return Some(vec![ErrorTag::new(
+                error_name.clone(),
+                Some(variant_name.clone()),
+            )]);
+        }
+
+        self.report_error(
+            format!(
+                "invalid error specifier '{}'; expected 'Error' or 'Error.Variant'",
+                spec.path.join(".")
+            ),
+            Some(spec.span),
+        );
+        None
+    }
+
     fn union_contains_type(
         &self,
         union_name: &str,
@@ -899,6 +1163,27 @@ impl TypeChecker {
             Statement::Struct(_) => {}
             Statement::Union(_) => {}
             Statement::Enum(_) => {}
+            Statement::Error(_) => {}
+            Statement::Throw(throw_stmt) => {
+                let value_type = self.infer_expression(&throw_stmt.expression);
+                match value_type {
+                    Type::Error(error_type) => {
+                        let tag =
+                            ErrorTag::new(error_type.name.clone(), error_type.variant.clone());
+                        self.register_forwarded_error(tag, throw_stmt.span);
+                    }
+                    Type::Unknown => {}
+                    other => {
+                        self.report_error(
+                            format!(
+                                "throw expression must evaluate to an error, found {}",
+                                other.describe()
+                            ),
+                            Some(throw_stmt.span),
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1584,6 +1869,12 @@ impl TypeChecker {
         }
         .unwrap_or(Type::Unknown);
 
+        let allowed_errors = function
+            .error_annotation
+            .as_ref()
+            .map(|annotation| self.resolve_error_annotation(annotation))
+            .unwrap_or_else(ErrorSet::empty);
+
         let signature = FunctionSignature {
             params: param_types.clone(),
             return_type: declared_return_type.clone(),
@@ -1607,6 +1898,7 @@ impl TypeChecker {
         self.push_scope();
         self.contexts.push(FunctionContext {
             return_type: declared_return_type.clone(),
+            allowed_errors: allowed_errors.clone(),
             saw_explicit_return: false,
             last_expression_type: None,
             explicit_return_types: Vec::new(),
@@ -1643,7 +1935,10 @@ impl TypeChecker {
                     );
                 }
                 None => {
-                    if declared_return_type != Type::Unknown && declared_return_type != Type::Void {
+                    if declared_return_type != Type::Unknown
+                        && declared_return_type != Type::Void
+                        && declared_return_type != Type::Nil
+                    {
                         self.report_error(
                             format!(
                                 "function '{}' may exit without returning a value of type {}",
@@ -1743,6 +2038,61 @@ impl TypeChecker {
                     false
                 }
             }
+            (Type::Error(expected_error), Type::Error(actual_error)) => {
+                if expected_error.name == actual_error.name {
+                    if expected_error.variant.is_none()
+                        || expected_error.variant == actual_error.variant
+                    {
+                        true
+                    } else {
+                        self.report_error(
+                            format!(
+                                "{}: expected {}, found {}",
+                                context,
+                                expected.describe(),
+                                actual.describe()
+                            ),
+                            span,
+                        );
+                        false
+                    }
+                } else {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    false
+                }
+            }
+            (Type::Error(expected_error), actual_type) => {
+                self.report_error(
+                    format!(
+                        "{}: expected {}, found {}",
+                        context,
+                        Type::Error(expected_error.clone()).describe(),
+                        actual_type.describe()
+                    ),
+                    span,
+                );
+                false
+            }
+            (expected_type, Type::Error(actual_error)) => {
+                self.report_error(
+                    format!(
+                        "{}: expected {}, found {}",
+                        context,
+                        expected_type.describe(),
+                        Type::Error(actual_error.clone()).describe()
+                    ),
+                    span,
+                );
+                false
+            }
             (
                 Type::Function(expected_params, expected_ret),
                 Type::Function(actual_params, actual_ret),
@@ -1791,6 +2141,62 @@ impl TypeChecker {
                 false
             }
         }
+    }
+
+    fn register_forwarded_error(&mut self, tag: ErrorTag, span: SourceSpan) {
+        if let Some(context) = self.contexts.last() {
+            if !context.allowed_errors.contains(&tag) {
+                let display = if let Some(variant) = &tag.variant {
+                    format!("{}.{}", tag.name, variant)
+                } else {
+                    tag.name.clone()
+                };
+                self.report_error(
+                    format!(
+                        "error '{}' is not declared in the function's error annotation",
+                        display
+                    ),
+                    Some(span),
+                );
+            }
+        } else {
+            self.report_error(
+                "throw statements are only allowed inside functions",
+                Some(span),
+            );
+        }
+    }
+
+    fn infer_binding_error_type(&mut self, patterns: &[MatchPattern]) -> Option<ErrorType> {
+        let mut result: Option<ErrorType> = None;
+        for pattern in patterns {
+            match pattern {
+                MatchPattern::Type(type_expr, pattern_span) => {
+                    let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+                    if let Type::Error(pattern_error) = ty {
+                        if let Some(existing) = &mut result {
+                            if existing.name != pattern_error.name {
+                                return None;
+                            }
+                            if existing.variant != pattern_error.variant {
+                                existing.variant = None;
+                            }
+                        } else {
+                            result = Some(pattern_error);
+                        }
+                    } else {
+                        self.report_error(
+                            "catch case types must be error variants",
+                            Some(*pattern_span),
+                        );
+                        return None;
+                    }
+                }
+                MatchPattern::Wildcard { .. } => return None,
+                _ => return None,
+            }
+        }
+        result
     }
 
     fn clear_non_nil_fact(&mut self, name: &str) {
@@ -2251,6 +2657,7 @@ impl TypeChecker {
             &self.structs,
             &self.unions,
             &self.enums,
+            &self.errors,
         );
         match parser.parse_type() {
             Ok(ty) => {
@@ -2359,6 +2766,7 @@ impl TypeChecker {
             ExpressionKind::Dict(dict) => self.type_from_dict(dict, expression.span),
             ExpressionKind::Member(member) => self.type_from_member(member, expression.span),
             ExpressionKind::Match(match_expr) => self.type_from_match(match_expr, expression.span),
+            ExpressionKind::Try(try_expr) => self.type_from_try(try_expr, expression.span),
             ExpressionKind::Index(index) => self.type_from_index(index, expression.span),
             ExpressionKind::Unwrap(inner) => self.type_from_unwrap(inner, expression.span),
             ExpressionKind::Range(_) => Type::Unknown,
@@ -2842,6 +3250,54 @@ impl TypeChecker {
                     Type::Unknown
                 }
             }
+            Type::Error(ref error_type) => {
+                let Some(definition) = self.errors.get(&error_type.name) else {
+                    self.report_error(
+                        format!("unknown error '{}'", error_type.name),
+                        Some(member.property_span),
+                    );
+                    return Type::Unknown;
+                };
+
+                let Some(variant_name) = error_type.variant.as_ref() else {
+                    self.report_error(
+                        format!(
+                            "cannot access field '{}' without matching a specific variant",
+                            member.property
+                        ),
+                        Some(member.property_span),
+                    );
+                    return Type::Unknown;
+                };
+
+                if let Some(variant) = definition.variants.get(variant_name) {
+                    if let Some(field) = variant
+                        .fields
+                        .iter()
+                        .find(|field| field.name == member.property)
+                    {
+                        return field.ty.clone();
+                    } else {
+                        self.report_error(
+                            format!(
+                                "error variant '{}.{}' has no field named '{}'",
+                                error_type.name, variant_name, member.property
+                            ),
+                            Some(member.property_span),
+                        );
+                        return Type::Unknown;
+                    }
+                } else {
+                    self.report_error(
+                        format!(
+                            "error '{}' has no variant named '{}'",
+                            error_type.name, variant_name
+                        ),
+                        Some(member.property_span),
+                    );
+                    return Type::Unknown;
+                }
+            }
             Type::Enum(ref enum_type) => {
                 if let ExpressionKind::Identifier(identifier) = &member.object.kind {
                     if identifier.name == enum_type.name {
@@ -2946,6 +3402,93 @@ impl TypeChecker {
                 Type::Bool
             }
         }
+    }
+
+    fn type_from_try(&mut self, expression: &TryExpression, _span: SourceSpan) -> Type {
+        let inner_type = self.infer_expression(&expression.expression);
+        if let Some(clause) = &expression.catch {
+            match &clause.kind {
+                CatchKind::Fallback(expr) => {
+                    let fallback_type = self.infer_expression(expr);
+                    if inner_type != Type::Unknown && fallback_type != Type::Unknown {
+                        self.ensure_compatible(
+                            &inner_type,
+                            &fallback_type,
+                            "catch fallback expression",
+                            Some(expr.span),
+                        );
+                    }
+                }
+                CatchKind::Arms(arms) => {
+                    if let Some(binding) = &clause.binding {
+                        for arm in arms {
+                            self.push_scope();
+                            if let Some(error_type) = self.infer_binding_error_type(&arm.patterns) {
+                                let ty = Type::Error(error_type.clone());
+                                self.insert(binding.name.clone(), ty.clone(), true);
+                                self.binding_types.insert(binding.span, ty);
+                            } else {
+                                let mut existing = self
+                                    .binding_types
+                                    .get(&binding.span)
+                                    .cloned()
+                                    .unwrap_or(Type::Unknown);
+                                if let Type::Error(error_type) = &mut existing {
+                                    error_type.variant = None;
+                                }
+                                self.insert(binding.name.clone(), existing.clone(), true);
+                                self.binding_types.insert(binding.span, existing);
+                            }
+                            for pattern in &arm.patterns {
+                                if let MatchPattern::Expression(expr) = pattern {
+                                    self.infer_expression(expr);
+                                }
+                                if let MatchPattern::Type(type_expr, pattern_span) = pattern {
+                                    let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+                                    if !matches!(ty, Type::Unknown) {
+                                        self.type_test_metadata.insert(*pattern_span, ty);
+                                    }
+                                }
+                            }
+                            let arm_type = self.infer_expression(&arm.expression);
+                            if inner_type != Type::Unknown && arm_type != Type::Unknown {
+                                self.ensure_compatible(
+                                    &inner_type,
+                                    &arm_type,
+                                    "catch arm expression",
+                                    Some(arm.expression.span),
+                                );
+                            }
+                            self.pop_scope();
+                        }
+                    } else {
+                        for arm in arms {
+                            for pattern in &arm.patterns {
+                                if let MatchPattern::Expression(expr) = pattern {
+                                    self.infer_expression(expr);
+                                }
+                                if let MatchPattern::Type(type_expr, pattern_span) = pattern {
+                                    let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
+                                    if !matches!(ty, Type::Unknown) {
+                                        self.type_test_metadata.insert(*pattern_span, ty);
+                                    }
+                                }
+                            }
+                            let arm_type = self.infer_expression(&arm.expression);
+                            if inner_type != Type::Unknown && arm_type != Type::Unknown {
+                                self.ensure_compatible(
+                                    &inner_type,
+                                    &arm_type,
+                                    "catch arm expression",
+                                    Some(arm.expression.span),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        inner_type
     }
 
     fn type_from_binary(&mut self, binary: &BinaryExpression, span: SourceSpan) -> Type {
@@ -3057,8 +3600,61 @@ impl TypeChecker {
 
     fn type_from_call(&mut self, call: &crate::ast::CallExpression, span: SourceSpan) -> Type {
         if let ExpressionKind::Identifier(identifier) = &call.callee.kind {
+            if let Some(error_def) = self.errors.get(&identifier.name) {
+                if error_def.variants.len() == 1 {
+                    if let Some((variant_name, variant_def)) = error_def
+                        .variants
+                        .iter()
+                        .next()
+                        .map(|(name, def)| (name.clone(), def.clone()))
+                    {
+                        return self.type_from_error_constructor(
+                            &identifier.name,
+                            &variant_name,
+                            &variant_def,
+                            call,
+                            span,
+                        );
+                    }
+                } else {
+                    self.report_error(
+                        format!(
+                            "error '{}' has multiple variants; call a specific variant like '{}.<variant>'",
+                            identifier.name, identifier.name
+                        ),
+                        Some(identifier.span),
+                    );
+                    return Type::Unknown;
+                }
+            }
+
             if let Some(struct_def) = self.structs.get(&identifier.name).cloned() {
                 return self.type_from_struct_call(identifier, struct_def, call, span);
+            }
+        }
+
+        if let ExpressionKind::Member(member) = &call.callee.kind {
+            if let ExpressionKind::Identifier(error_ident) = &member.object.kind {
+                if let Some(error_def) = self.errors.get(&error_ident.name) {
+                    if let Some(variant_def) = error_def.variants.get(&member.property).cloned() {
+                        return self.type_from_error_constructor(
+                            &error_ident.name,
+                            &member.property,
+                            &variant_def,
+                            call,
+                            span,
+                        );
+                    } else {
+                        self.report_error(
+                            format!(
+                                "error '{}' has no variant named '{}'",
+                                error_ident.name, member.property
+                            ),
+                            Some(member.property_span),
+                        );
+                        return Type::Unknown;
+                    }
+                }
             }
         }
 
@@ -3572,6 +4168,71 @@ impl TypeChecker {
         })
     }
 
+    fn type_from_error_constructor(
+        &mut self,
+        error_name: &str,
+        variant_name: &str,
+        variant_def: &ErrorVariantDefinition,
+        call: &CallExpression,
+        span: SourceSpan,
+    ) -> Type {
+        if call.arguments.iter().any(|arg| arg.name.is_some()) {
+            if let Some(argument) = call.arguments.iter().find(|arg| arg.name.is_some()) {
+                let arg_span = argument.name_span.unwrap_or(argument.expression.span);
+                self.report_error(
+                    format!(
+                        "error variant '{}.{}' does not accept named arguments",
+                        error_name, variant_name
+                    ),
+                    Some(arg_span),
+                );
+            }
+            return Type::Unknown;
+        }
+
+        if call.arguments.len() != variant_def.fields.len() {
+            self.report_error(
+                format!(
+                    "error variant '{}.{}' expects {} argument{}, found {}",
+                    error_name,
+                    variant_name,
+                    variant_def.fields.len(),
+                    if variant_def.fields.len() == 1 {
+                        ""
+                    } else {
+                        "s"
+                    },
+                    call.arguments.len()
+                ),
+                Some(span),
+            );
+            return Type::Unknown;
+        }
+
+        for (index, field) in variant_def.fields.iter().enumerate() {
+            let argument = &call.arguments[index];
+            let value_type = self.infer_expression(&argument.expression);
+            self.argument_expected_types
+                .insert(argument.expression.span, field.ty.clone());
+            self.ensure_compatible(
+                &field.ty,
+                &value_type,
+                &format!(
+                    "argument {} to error '{}.{}'",
+                    index + 1,
+                    error_name,
+                    variant_name
+                ),
+                Some(argument.expression.span),
+            );
+        }
+
+        Type::Error(ErrorType {
+            name: error_name.to_string(),
+            variant: Some(variant_name.to_string()),
+        })
+    }
+
     fn type_from_json_decode(
         &mut self,
         call: &CallExpression,
@@ -3757,6 +4418,7 @@ impl TypeChecker {
             LambdaBody::Block(block) => {
                 self.contexts.push(FunctionContext {
                     return_type: Type::Unknown,
+                    allowed_errors: ErrorSet::empty(),
                     saw_explicit_return: false,
                     last_expression_type: None,
                     explicit_return_types: Vec::new(),
@@ -3894,6 +4556,7 @@ struct TypeAnnotationParser<'a> {
     structs: &'a HashMap<String, StructDefinition>,
     unions: &'a HashMap<String, UnionDefinition>,
     enums: &'a HashMap<String, EnumDefinition>,
+    errors: &'a HashMap<String, ErrorDefinition>,
 }
 
 struct TypeError {
@@ -3927,6 +4590,7 @@ impl<'a> TypeAnnotationParser<'a> {
         structs: &'a HashMap<String, StructDefinition>,
         unions: &'a HashMap<String, UnionDefinition>,
         enums: &'a HashMap<String, EnumDefinition>,
+        errors: &'a HashMap<String, ErrorDefinition>,
     ) -> Self {
         Self {
             tokens,
@@ -3935,6 +4599,7 @@ impl<'a> TypeAnnotationParser<'a> {
             structs,
             unions,
             enums,
+            errors,
         }
     }
 
@@ -4017,6 +4682,51 @@ impl<'a> TypeAnnotationParser<'a> {
                         Ok(Type::Enum(EnumType {
                             name: other.to_string(),
                         }))
+                    } else if self.errors.contains_key(other) {
+                        if matches!(self.peek_kind(), Some(TokenKind::Dot)) {
+                            let _dot = self.advance().cloned().unwrap();
+                            let variant_token = self
+                                .advance()
+                                .cloned()
+                                .ok_or_else(|| TypeError::at_eof("expected error variant name"))?;
+                            match variant_token.kind {
+                                TokenKind::Identifier => {
+                                    if let Some(definition) = self.errors.get(other) {
+                                        if definition.variants.contains_key(&variant_token.lexeme) {
+                                            Ok(Type::Error(ErrorType {
+                                                name: other.to_string(),
+                                                variant: Some(variant_token.lexeme),
+                                            }))
+                                        } else {
+                                            Err(TypeError::at(
+                                                &variant_token,
+                                                format!(
+                                                    "error '{}' has no variant named '{}'",
+                                                    other, variant_token.lexeme
+                                                ),
+                                            ))
+                                        }
+                                    } else {
+                                        Err(TypeError::at(
+                                            &variant_token,
+                                            format!("unknown error '{}'", other),
+                                        ))
+                                    }
+                                }
+                                _ => Err(TypeError::at(
+                                    &variant_token,
+                                    format!(
+                                        "expected variant name after '{}.', found '{}'",
+                                        other, variant_token.lexeme
+                                    ),
+                                )),
+                            }
+                        } else {
+                            Ok(Type::Error(ErrorType {
+                                name: other.to_string(),
+                                variant: None,
+                            }))
+                        }
                     } else {
                         Err(TypeError::at(
                             &ident_token,

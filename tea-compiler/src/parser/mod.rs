@@ -130,6 +130,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
             TokenKind::Keyword(Keyword::Union) => self.parse_union(docstring),
             TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring),
+            TokenKind::Keyword(Keyword::Error) => self.parse_error(docstring),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
             TokenKind::Keyword(Keyword::Unless) => self.parse_conditional(ConditionalKind::Unless),
             TokenKind::Keyword(Keyword::For) => self.parse_for_loop(),
@@ -137,6 +138,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Until) => self.parse_loop(LoopKind::Until),
             TokenKind::Keyword(Keyword::Return) => self.parse_return(),
             TokenKind::Keyword(Keyword::Match) => self.parse_match_statement(),
+            TokenKind::Keyword(Keyword::Throw) => self.parse_throw(),
             _ => self.parse_expression_statement(),
         }
     }
@@ -354,6 +356,13 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let error_annotation = if matches!(self.peek_kind(), TokenKind::Bang) {
+            self.advance();
+            Some(self.parse_error_annotation(&name)?)
+        } else {
+            None
+        };
+
         self.expect_newline("expected newline after function signature")?;
 
         let body = self.parse_block_until(&[Keyword::End])?;
@@ -367,6 +376,7 @@ impl<'a> Parser<'a> {
             type_parameters,
             parameters,
             return_type,
+            error_annotation,
             body,
             docstring,
         }))
@@ -813,6 +823,341 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    fn parse_error(&mut self, docstring: Option<String>) -> Result<Statement> {
+        let keyword_token = self.advance().clone();
+        let keyword_span = Self::span_from_token(&keyword_token);
+
+        let name_token = self.peek().clone();
+        let name_span = Self::span_from_token(&name_token);
+        let name = match &name_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                name_token.lexeme
+            }
+            _ => bail!(
+                "expected error name at line {}, column {}",
+                name_token.line,
+                name_token.column
+            ),
+        };
+
+        let mut span = Self::union_spans(&keyword_span, &name_span);
+        let variants = if matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.advance(); // consume '{'
+            self.expect_newline("expected newline after '{' in error declaration")?;
+            let mut variants = Vec::new();
+            loop {
+                self.skip_newlines();
+                match self.peek_kind() {
+                    TokenKind::Identifier => {
+                        let variant = self.parse_error_variant(&name)?;
+                        span = Self::union_spans(&span, &variant.span);
+                        variants.push(variant);
+                    }
+                    TokenKind::RBrace => {
+                        let closing = self.advance().clone();
+                        span = Self::union_spans(&span, &Self::span_from_token(&closing));
+                        break;
+                    }
+                    TokenKind::Eof => {
+                        self.diagnostics.push_error_with_span(
+                            format!("unterminated error '{}', missing '}}'", name),
+                            Some(name_span),
+                        );
+                        bail!("unterminated error declaration");
+                    }
+                    other => {
+                        let token = self.peek().clone();
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "unexpected token {:?} in error declaration '{}'",
+                                other, name
+                            ),
+                            Some(Self::span_from_token(&token)),
+                        );
+                        bail!("invalid token in error declaration");
+                    }
+                }
+            }
+
+            if variants.is_empty() {
+                self.diagnostics.push_error_with_span(
+                    format!("error '{}' must declare at least one variant", name),
+                    Some(name_span),
+                );
+                bail!("error must declare variants");
+            }
+
+            self.expect_newline("expected newline after error declaration")?;
+            variants
+        } else {
+            self.expect_newline("expected newline after error declaration")?;
+            span = Self::union_spans(&span, &name_span);
+            vec![ErrorVariant {
+                name: name.clone(),
+                name_span,
+                fields: Vec::new(),
+                span: name_span,
+            }]
+        };
+
+        Ok(Statement::Error(ErrorStatement {
+            name,
+            name_span,
+            variants,
+            docstring,
+            span,
+        }))
+    }
+
+    fn parse_error_variant(&mut self, error_name: &str) -> Result<ErrorVariant> {
+        let name_token = self.peek().clone();
+        let name_span = Self::span_from_token(&name_token);
+        let name = match &name_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                name_token.lexeme
+            }
+            _ => bail!(
+                "expected variant name in error '{}' at line {}, column {}",
+                error_name,
+                name_token.line,
+                name_token.column
+            ),
+        };
+
+        let mut span = name_span;
+        let mut fields = Vec::new();
+        if matches!(self.peek_kind(), TokenKind::LParen) {
+            let open_token = self.advance().clone();
+            span = Self::union_spans(&span, &Self::span_from_token(&open_token));
+
+            loop {
+                self.skip_newlines();
+                let field_token = self.peek().clone();
+                let field_span = Self::span_from_token(&field_token);
+                let field_name = match &field_token.kind {
+                    TokenKind::Identifier => {
+                        self.advance();
+                        field_token.lexeme
+                    }
+                    _ => bail!(
+                        "expected field name in error variant '{}.{}' at line {}, column {}",
+                        error_name,
+                        name,
+                        field_token.line,
+                        field_token.column
+                    ),
+                };
+
+                if !matches!(self.peek_kind(), TokenKind::Colon) {
+                    let token = self.peek().clone();
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected ':' after field '{}' in error variant '{}.{}'",
+                            field_name, error_name, name
+                        ),
+                        Some(Self::span_from_token(&token)),
+                    );
+                    bail!("missing ':' in error variant field");
+                }
+                self.advance(); // consume ':'
+
+                let type_tokens = self.collect_type_tokens();
+                if type_tokens.is_empty() {
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "missing type annotation for field '{}' in error variant '{}.{}'",
+                            field_name, error_name, name
+                        ),
+                        Some(field_span),
+                    );
+                    bail!("missing error variant field type");
+                }
+
+                fields.push(ErrorField {
+                    name: field_name,
+                    name_span: field_span,
+                    type_annotation: TypeExpression {
+                        tokens: type_tokens,
+                    },
+                });
+
+                self.skip_newlines();
+                match self.peek_kind() {
+                    TokenKind::Comma => {
+                        self.advance();
+                    }
+                    TokenKind::RParen => break,
+                    other => {
+                        let token = self.peek().clone();
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "unexpected token {:?} in fields for error variant '{}.{}'",
+                                other, error_name, name
+                            ),
+                            Some(Self::span_from_token(&token)),
+                        );
+                        bail!("invalid token in error variant fields");
+                    }
+                }
+            }
+
+            let close_token = self.peek().clone();
+            self.expect_token(
+                TokenKind::RParen,
+                "expected ')' to close error variant fields",
+            )?;
+            span = Self::union_spans(&span, &Self::span_from_token(&close_token));
+        }
+
+        self.expect_newline("expected newline after error variant")?;
+
+        Ok(ErrorVariant {
+            name,
+            name_span,
+            fields,
+            span,
+        })
+    }
+
+    fn parse_error_annotation(&mut self, function_name: &str) -> Result<ErrorAnnotation> {
+        if matches!(self.peek_kind(), TokenKind::LBrace) {
+            let open_token = self.advance().clone();
+            let open_span = Self::span_from_token(&open_token);
+
+            let mut types = Vec::new();
+            loop {
+                self.skip_newlines();
+                match self.peek_kind() {
+                    TokenKind::Identifier => {
+                        let spec = self.parse_error_type_specifier(function_name)?;
+                        types.push(spec);
+                        self.skip_newlines();
+                        match self.peek_kind() {
+                            TokenKind::Comma => {
+                                self.advance();
+                                self.skip_newlines();
+                            }
+                            TokenKind::RBrace => {}
+                            other => {
+                                let token = self.peek().clone();
+                                self.diagnostics.push_error_with_span(
+                                    format!(
+                                        "unexpected token {:?} in error list for function '{}'",
+                                        other, function_name
+                                    ),
+                                    Some(Self::span_from_token(&token)),
+                                );
+                                bail!("invalid token in error annotation");
+                            }
+                        }
+                    }
+                    TokenKind::RBrace => {
+                        let closing = self.advance().clone();
+                        if types.is_empty() {
+                            self.diagnostics.push_error_with_span(
+                                format!(
+                                    "function '{}' must list at least one error after '!'",
+                                    function_name
+                                ),
+                                Some(Self::span_from_token(&closing)),
+                            );
+                            bail!("empty error annotation");
+                        }
+                        let mut span = open_span;
+                        for spec in &types {
+                            span = Self::union_spans(&span, &spec.span);
+                        }
+                        span = Self::union_spans(&span, &Self::span_from_token(&closing));
+                        return Ok(ErrorAnnotation { types, span });
+                    }
+                    TokenKind::Eof => {
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "unterminated error list in function '{}' after '!'",
+                                function_name
+                            ),
+                            Some(open_span),
+                        );
+                        bail!("unterminated error list");
+                    }
+                    other => {
+                        let token = self.peek().clone();
+                        self.diagnostics.push_error_with_span(
+                            format!(
+                                "unexpected token {:?} in error list for function '{}'",
+                                other, function_name
+                            ),
+                            Some(Self::span_from_token(&token)),
+                        );
+                        bail!("invalid token in error annotation");
+                    }
+                }
+            }
+        } else {
+            let spec = self.parse_error_type_specifier(function_name)?;
+            let span = spec.span;
+            Ok(ErrorAnnotation {
+                types: vec![spec],
+                span,
+            })
+        }
+    }
+
+    fn parse_error_type_specifier(&mut self, function_name: &str) -> Result<ErrorTypeSpecifier> {
+        let first_token = self.peek().clone();
+        let mut span = Self::span_from_token(&first_token);
+        let mut path = Vec::new();
+        let ident = match &first_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                first_token.lexeme
+            }
+            _ => bail!(
+                "expected error type after '!' in function '{}' at line {}, column {}",
+                function_name,
+                first_token.line,
+                first_token.column
+            ),
+        };
+        path.push(ident);
+
+        while matches!(self.peek_kind(), TokenKind::Dot) {
+            let dot_token = self.advance().clone();
+            let segment_token = self.peek().clone();
+            match &segment_token.kind {
+                TokenKind::Identifier => {
+                    self.advance();
+                    span = Self::union_spans(&span, &Self::span_from_token(&segment_token));
+                    path.push(segment_token.lexeme);
+                }
+                other => {
+                    self.diagnostics.push_error_with_span(
+                        format!(
+                            "expected identifier after '.' in error specifier for function '{}', found {:?}",
+                            function_name, other
+                        ),
+                        Some(Self::span_from_token(&segment_token)),
+                    );
+                    bail!("invalid error specifier");
+                }
+            }
+            span = Self::union_spans(&span, &Self::span_from_token(&dot_token));
+        }
+
+        Ok(ErrorTypeSpecifier { path, span })
+    }
+
+    fn parse_throw(&mut self) -> Result<Statement> {
+        let throw_token = self.advance().clone();
+        let throw_span = Self::span_from_token(&throw_token);
+        let expression = self.parse_expression_with(default_expression_terminator)?;
+        let span = Self::union_spans(&throw_span, &expression.span);
+        self.expect_newline("expected newline after throw expression")?;
+        Ok(Statement::Throw(ThrowStatement { expression, span }))
+    }
+
     fn consume_doc_comments(&mut self) -> Option<String> {
         let mut parts = Vec::new();
         let mut consumed_any = false;
@@ -1006,6 +1351,10 @@ impl<'a> Parser<'a> {
                     expr = Self::make_expression(span, ExpressionKind::Unwrap(Box::new(expr)));
                     continue;
                 }
+                TokenKind::Keyword(Keyword::Catch) => {
+                    expr = self.finish_catch(expr, terminator)?;
+                    continue;
+                }
                 TokenKind::Newline => {
                     // Newlines act as terminators unless explicitly allowed by the caller.
                     if terminator(&TokenKind::Newline) {
@@ -1069,6 +1418,17 @@ impl<'a> Parser<'a> {
                 ExpressionKind::Literal(Literal::Nil),
             )),
             TokenKind::Keyword(Keyword::Match) => self.parse_match_expression(token_span),
+            TokenKind::Keyword(Keyword::Try) => {
+                let expression = self.parse_expression_prec(Precedence::Unary, terminator)?;
+                let span = Self::union_spans(&token_span, &expression.span);
+                Ok(Self::make_expression(
+                    span,
+                    ExpressionKind::Try(TryExpression {
+                        expression: Box::new(expression),
+                        catch: None,
+                    }),
+                ))
+            }
             TokenKind::Minus => {
                 let operand = self.parse_expression_prec(Precedence::Unary, terminator)?;
                 let span = Self::union_spans(&token_span, &operand.span);
@@ -1841,6 +2201,7 @@ impl<'a> Parser<'a> {
                 | TokenKind::Newline
                 | TokenKind::RBrace
                 | TokenKind::Semicolon
+                | TokenKind::Bang
                 | TokenKind::Pipe
                 | TokenKind::FatArrow => depth == 0,
                 TokenKind::Comma | TokenKind::RParen => depth == 0,
@@ -2256,6 +2617,130 @@ impl<'a> Parser<'a> {
                 property_span,
             }),
         ))
+    }
+
+    fn finish_catch(
+        &mut self,
+        expression: Expression,
+        terminator: fn(&TokenKind) -> bool,
+    ) -> Result<Expression> {
+        let catch_token = self.advance().clone();
+        let clause = self.parse_catch_clause(catch_token, terminator)?;
+        let total_span = Self::union_spans(&expression.span, &clause.span);
+
+        match expression.kind {
+            ExpressionKind::Try(mut try_expr) => {
+                if try_expr.catch.is_some() {
+                    self.diagnostics.push_error_with_span(
+                        "try expression already has a catch clause",
+                        Some(clause.span),
+                    );
+                    bail!("duplicate catch clause");
+                }
+                try_expr.catch = Some(clause);
+                Ok(Self::make_expression(
+                    total_span,
+                    ExpressionKind::Try(try_expr),
+                ))
+            }
+            kind => Ok(Self::make_expression(
+                total_span,
+                ExpressionKind::Try(TryExpression {
+                    expression: Box::new(Expression {
+                        span: expression.span,
+                        kind,
+                    }),
+                    catch: Some(clause),
+                }),
+            )),
+        }
+    }
+
+    fn parse_catch_clause(
+        &mut self,
+        catch_token: Token,
+        terminator: fn(&TokenKind) -> bool,
+    ) -> Result<CatchClause> {
+        let catch_span = Self::span_from_token(&catch_token);
+
+        if matches!(self.peek_kind(), TokenKind::Identifier) {
+            let binding_token = self.peek().clone();
+            let mut lookahead = 1usize;
+            while matches!(self.peek_kind_at(lookahead), Some(TokenKind::Newline)) {
+                lookahead += 1;
+            }
+
+            if matches!(
+                self.peek_kind_at(lookahead),
+                Some(TokenKind::Keyword(Keyword::Case))
+            ) {
+                let binding_name = binding_token.lexeme.clone();
+                let binding_span = Self::span_from_token(&binding_token);
+                self.advance();
+                let binding = Identifier {
+                    name: binding_name,
+                    span: binding_span,
+                };
+                self.expect_newline("expected newline after catch binding")?;
+                let arms = self.parse_catch_arms()?;
+                if arms.is_empty() {
+                    self.diagnostics.push_error_with_span(
+                        "catch block requires at least one case",
+                        Some(binding.span),
+                    );
+                    bail!("missing catch cases");
+                }
+                let end_token = self.peek().clone();
+                self.expect_keyword(Keyword::End, "expected 'end' to close catch block")?;
+                let end_span = Self::span_from_token(&end_token);
+                let mut span = Self::union_spans(&catch_span, &binding.span);
+                for arm in &arms {
+                    span = Self::union_spans(&span, &arm.span);
+                }
+                span = Self::union_spans(&span, &end_span);
+                return Ok(CatchClause {
+                    binding: Some(binding),
+                    kind: CatchKind::Arms(arms),
+                    span,
+                });
+            }
+        }
+
+        let expression = self.parse_expression_prec(Precedence::Assignment, terminator)?;
+        let span = Self::union_spans(&catch_span, &expression.span);
+        Ok(CatchClause {
+            binding: None,
+            kind: CatchKind::Fallback(Box::new(expression)),
+            span,
+        })
+    }
+
+    fn parse_catch_arms(&mut self) -> Result<Vec<MatchArm>> {
+        let mut arms = Vec::new();
+        loop {
+            self.skip_newlines();
+            match self.peek_kind() {
+                TokenKind::Keyword(Keyword::Case) => {
+                    let arm = self.parse_match_arm()?;
+                    arms.push(arm);
+                }
+                TokenKind::Keyword(Keyword::End) => break,
+                TokenKind::Eof => {
+                    self.diagnostics
+                        .push_error_with_span("unterminated catch block", None);
+                    bail!("unterminated catch block");
+                }
+                other => {
+                    let token = self.peek().clone();
+                    self.diagnostics.push_error_with_span(
+                        format!("unexpected token {:?} in catch block", other),
+                        Some(Self::span_from_token(&token)),
+                    );
+                    bail!("invalid catch block");
+                }
+            }
+        }
+        Ok(arms)
     }
 
     fn skip_newlines(&mut self) {

@@ -18,7 +18,9 @@ use walkdir::WalkDir;
 
 use super::bytecode::{Instruction, Program, TypeCheck};
 use super::cli::{parse_cli, CliParseOutcome, CliScopeOutcome};
-use super::value::{ClosureInstance, StructInstance, StructTemplate, Value};
+use super::value::{
+    ClosureInstance, ErrorTemplate, ErrorVariantValue, StructInstance, StructTemplate, Value,
+};
 use crate::ast::SourceSpan;
 use crate::stdlib::StdFunctionKind;
 use serde_json::Value as JsonValue;
@@ -80,6 +82,7 @@ pub struct Vm {
     stack: Vec<Value>,
     globals: Vec<Value>,
     frames: Vec<Frame>,
+    catch_stack: Vec<CatchFrame>,
     next_fs_handle: i64,
     fs_handles: HashMap<i64, FsReadHandle>,
     next_process_handle: i64,
@@ -88,6 +91,7 @@ pub struct Vm {
     cli_result_template: Rc<StructTemplate>,
     cli_parse_result_template: Rc<StructTemplate>,
     process_result_template: Rc<StructTemplate>,
+    error_templates: Vec<Rc<ErrorTemplate>>,
     cli_args: Vec<String>,
     program_name: Option<String>,
 }
@@ -115,6 +119,14 @@ struct ProcessEntry {
     stderr: Option<BufReader<ChildStderr>>,
     stdin: Option<ChildStdin>,
     command: String,
+}
+
+#[derive(Clone)]
+struct CatchFrame {
+    frame_index: usize,
+    stack_len: usize,
+    chunk: ChunkRef,
+    handler_ip: usize,
 }
 
 fn vm_write_atomic(path: &Path, data: &[u8]) -> Result<(), VmError> {
@@ -255,6 +267,7 @@ impl Vm {
                 ip: 0,
                 stack_start: 0,
             }],
+            catch_stack: Vec::new(),
             next_fs_handle: 1,
             fs_handles: HashMap::new(),
             next_process_handle: 1,
@@ -263,6 +276,7 @@ impl Vm {
             cli_result_template: cli_template,
             cli_parse_result_template: cli_parse_template,
             process_result_template: process_template,
+            error_templates: program.errors.clone(),
             cli_args: Vec::new(),
             program_name: None,
         }
@@ -566,6 +580,39 @@ impl Vm {
                                 )));
                             }
                         }
+                        (Value::Error(error), Value::String(field)) => {
+                            let template = self
+                                .error_templates
+                                .iter()
+                                .find(|template| {
+                                    template.error_name == error.error_name
+                                        && template.variant_name == error.variant_name
+                                })
+                                .cloned()
+                                .ok_or_else(|| {
+                                    VmError::Runtime(format!(
+                                        "missing template for error '{}.{}'",
+                                        error.error_name, error.variant_name
+                                    ))
+                                })?;
+                            if let Some(index) =
+                                template.field_names.iter().position(|name| name == &field)
+                            {
+                                if let Some(value) = error.fields.get(index) {
+                                    self.stack.push(value.clone());
+                                } else {
+                                    bail!(VmError::Runtime(format!(
+                                        "error '{}.{}' missing field value '{}'",
+                                        template.error_name, template.variant_name, field
+                                    )));
+                                }
+                            } else {
+                                bail!(VmError::Runtime(format!(
+                                    "error '{}.{}' has no field '{}'",
+                                    template.error_name, template.variant_name, field
+                                )));
+                            }
+                        }
                         (Value::Dict(_), _) => {
                             bail!(VmError::Runtime(
                                 "dictionary field access requires string key".to_string()
@@ -685,6 +732,97 @@ impl Vm {
                         fields: values,
                     };
                     self.stack.push(Value::Struct(Rc::new(instance)));
+                }
+                Instruction::MakeError {
+                    error_index,
+                    field_count,
+                } => {
+                    if self.stack.len() < field_count {
+                        bail!(VmError::Runtime(
+                            "not enough values to build error".to_string()
+                        ));
+                    }
+                    let mut fields = Vec::with_capacity(field_count);
+                    for _ in 0..field_count {
+                        fields.push(self.pop()?);
+                    }
+                    fields.reverse();
+                    let template =
+                        self.error_templates
+                            .get(error_index)
+                            .cloned()
+                            .ok_or_else(|| {
+                                VmError::Runtime(format!("unknown error index {}", error_index))
+                            })?;
+                    let error_value = ErrorVariantValue {
+                        error_name: template.error_name.clone(),
+                        variant_name: template.variant_name.clone(),
+                        fields,
+                    };
+                    self.stack.push(Value::Error(Rc::new(error_value)));
+                }
+                Instruction::PushCatch { handler_ip } => {
+                    self.catch_stack.push(CatchFrame {
+                        frame_index,
+                        stack_len: self.stack.len(),
+                        chunk: chunk_ref.clone(),
+                        handler_ip,
+                    });
+                }
+                Instruction::PopCatch => {
+                    if self.catch_stack.pop().is_none() {
+                        bail!(VmError::Runtime(
+                            "attempted to pop catch frame but none are active".to_string()
+                        ));
+                    }
+                }
+                Instruction::Throw => {
+                    let value = self.pop()?;
+                    let error = match value {
+                        Value::Error(error) => error,
+                        other => {
+                            bail!(VmError::Runtime(format!(
+                                "throw expects an error value, found {:?}",
+                                other
+                            )))
+                        }
+                    };
+
+                    let catch_frame = loop {
+                        match self.catch_stack.pop() {
+                            Some(frame) if frame.frame_index < self.frames.len() => break frame,
+                            Some(_) => continue,
+                            None => {
+                                let message =
+                                    format!("uncaught error {}", Value::Error(error.clone()));
+                                return Err(VmError::Runtime(message).into());
+                            }
+                        }
+                    };
+
+                    while self.frames.len() - 1 > catch_frame.frame_index {
+                        let frame = self.frames.pop().ok_or_else(|| {
+                            VmError::Runtime("call frame stack underflow during throw".to_string())
+                        })?;
+                        self.stack.truncate(frame.stack_start);
+                    }
+
+                    if let Some(frame) = self.frames.get_mut(catch_frame.frame_index) {
+                        frame.chunk = catch_frame.chunk.clone();
+                        frame.ip = catch_frame.handler_ip;
+                    } else {
+                        bail!(VmError::Runtime(
+                            "missing call frame for catch handler".to_string()
+                        ));
+                    }
+
+                    if self.stack.len() < catch_frame.stack_len {
+                        bail!(VmError::Runtime(
+                            "stack underflow while unwinding throw".to_string()
+                        ));
+                    }
+                    self.stack.truncate(catch_frame.stack_len);
+                    self.stack.push(Value::Error(error));
                 }
                 Instruction::MakeClosure {
                     function_index,
@@ -1094,6 +1232,16 @@ impl Vm {
                 }
                 self.stack
                     .push(Value::Bool(matches!(args[0], Value::Struct(_))));
+            }
+            StdFunctionKind::UtilIsError => {
+                if args.len() != 1 {
+                    bail!(VmError::Runtime(format!(
+                        "is_error expected 1 argument but got {}",
+                        args.len()
+                    ),));
+                }
+                self.stack
+                    .push(Value::Bool(matches!(args[0], Value::Error(_))));
             }
             StdFunctionKind::EnvGet => {
                 if args.len() != 1 {
@@ -3053,6 +3201,22 @@ impl Vm {
                 Value::EnumVariant(variant) => variant.enum_name == *name,
                 _ => false,
             },
+            TypeCheck::Error {
+                error_name,
+                variant_name,
+            } => match value {
+                Value::Error(error) => {
+                    if &error.error_name != error_name {
+                        false
+                    } else {
+                        match variant_name {
+                            Some(name) => &error.variant_name == name,
+                            None => true,
+                        }
+                    }
+                }
+                _ => false,
+            },
             TypeCheck::Optional(inner) => {
                 matches!(value, Value::Nil) || self.value_matches_type(value, inner)
             }
@@ -3250,6 +3414,7 @@ fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
         Value::EnumVariant(variant) => {
             JsonValue::String(format!("{}.{}", variant.enum_name, variant.variant_name))
         }
+        Value::Error(error) => JsonValue::String(Value::Error(error.clone()).to_string()),
         Value::Function(_) | Value::Closure(_) => {
             return Err(VmError::Runtime(
                 "json encode does not support functions or closures".to_string(),

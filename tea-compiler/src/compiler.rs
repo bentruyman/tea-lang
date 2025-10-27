@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{
-    Block, Expression, ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody, LoopHeader,
-    MatchPattern, Module, SourceSpan, Statement, TypeExpression,
+    Block, CatchKind, Expression, ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody,
+    LoopHeader, MatchPattern, Module, SourceSpan, Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
@@ -176,6 +176,7 @@ impl Compiler {
         let type_test_metadata = type_checker.type_test_metadata().clone();
         let enum_definitions = type_checker.enum_definitions();
         let enum_variant_metadata = type_checker.enum_variant_metadata().clone();
+        let error_definitions = type_checker.error_definitions();
         let mut type_diagnostics = type_checker.into_diagnostics();
         let type_errors = type_diagnostics.has_errors();
         if !alias_export_renames.is_empty() {
@@ -271,6 +272,7 @@ impl Compiler {
             enum_variant_metadata,
             enum_definitions,
             type_test_metadata,
+            error_definitions,
         };
         let generator = CodeGenerator::new(lambda_captures, metadata);
         let program = generator.compile_module(&expanded_module)?;
@@ -660,6 +662,7 @@ impl ModuleExpander {
                 }
             }
             Statement::Enum(_) => {}
+            Statement::Error(_) => {}
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_identifiers(&mut cond_stmt.condition, rename_map);
                 self.rewrite_block_identifiers(&mut cond_stmt.consequent, rename_map);
@@ -683,6 +686,9 @@ impl ModuleExpander {
                 if let Some(expression) = &mut ret_stmt.expression {
                     self.rewrite_expression_identifiers(expression, rename_map);
                 }
+            }
+            Statement::Throw(throw_stmt) => {
+                self.rewrite_expression_identifiers(&mut throw_stmt.expression, rename_map);
             }
             Statement::Match(match_stmt) => {
                 self.rewrite_expression_identifiers(&mut match_stmt.scrutinee, rename_map);
@@ -787,6 +793,32 @@ impl ModuleExpander {
                     self.rewrite_expression_identifiers(&mut arm.expression, rename_map);
                 }
             }
+            ExpressionKind::Try(try_expr) => {
+                self.rewrite_expression_identifiers(&mut try_expr.expression, rename_map);
+                if let Some(clause) = &mut try_expr.catch {
+                    match &mut clause.kind {
+                        CatchKind::Fallback(expr) => {
+                            self.rewrite_expression_identifiers(expr, rename_map);
+                        }
+                        CatchKind::Arms(arms) => {
+                            for arm in arms {
+                                for pattern in &mut arm.patterns {
+                                    if let MatchPattern::Expression(pattern_expr) = pattern {
+                                        self.rewrite_expression_identifiers(
+                                            pattern_expr,
+                                            rename_map,
+                                        );
+                                    }
+                                }
+                                self.rewrite_expression_identifiers(
+                                    &mut arm.expression,
+                                    rename_map,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             ExpressionKind::Unwrap(inner) => {
                 self.rewrite_expression_identifiers(inner, rename_map);
             }
@@ -841,6 +873,7 @@ impl ModuleExpander {
                 }
             }
             Statement::Enum(_) => {}
+            Statement::Error(_) => {}
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_alias(&mut cond_stmt.condition, alias_maps);
                 self.rewrite_block_alias(&mut cond_stmt.consequent, alias_maps);
@@ -864,6 +897,9 @@ impl ModuleExpander {
                 if let Some(expression) = &mut ret_stmt.expression {
                     self.rewrite_expression_alias(expression, alias_maps);
                 }
+            }
+            Statement::Throw(throw_stmt) => {
+                self.rewrite_expression_alias(&mut throw_stmt.expression, alias_maps);
             }
             Statement::Match(match_stmt) => {
                 self.rewrite_expression_alias(&mut match_stmt.scrutinee, alias_maps);
@@ -988,6 +1024,26 @@ impl ModuleExpander {
                         }
                     }
                     self.rewrite_expression_alias(&mut arm.expression, alias_maps);
+                }
+            }
+            ExpressionKind::Try(try_expr) => {
+                self.rewrite_expression_alias(&mut try_expr.expression, alias_maps);
+                if let Some(clause) = &mut try_expr.catch {
+                    match &mut clause.kind {
+                        CatchKind::Fallback(expr) => {
+                            self.rewrite_expression_alias(expr, alias_maps);
+                        }
+                        CatchKind::Arms(arms) => {
+                            for arm in arms {
+                                for pattern in &mut arm.patterns {
+                                    if let MatchPattern::Expression(pattern_expr) = pattern {
+                                        self.rewrite_expression_alias(pattern_expr, alias_maps);
+                                    }
+                                }
+                                self.rewrite_expression_alias(&mut arm.expression, alias_maps);
+                            }
+                        }
+                    }
                 }
             }
             ExpressionKind::Grouping(expr) => {

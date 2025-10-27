@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-use super::value::{StructTemplate, Value};
+use super::value::{ErrorTemplate, StructTemplate, Value};
 use crate::ast::SourceSpan;
 use crate::stdlib::StdFunctionKind;
 
@@ -11,6 +11,7 @@ pub struct Program {
     pub functions: Vec<Function>,
     pub globals: Vec<String>,
     pub structs: Vec<Rc<StructTemplate>>,
+    pub errors: Vec<Rc<ErrorTemplate>>,
     pub tests: Vec<TestCase>,
 }
 
@@ -20,6 +21,7 @@ impl Program {
         functions: Vec<Function>,
         globals: Vec<String>,
         structs: Vec<StructTemplate>,
+        errors: Vec<ErrorTemplate>,
         tests: Vec<TestCase>,
     ) -> Self {
         Self {
@@ -27,6 +29,7 @@ impl Program {
             functions,
             globals,
             structs: structs.into_iter().map(Rc::new).collect(),
+            errors: errors.into_iter().map(Rc::new).collect(),
             tests,
         }
     }
@@ -71,6 +74,10 @@ pub enum TypeCheck {
     Nil,
     Struct(String),
     Enum(String),
+    Error {
+        error_name: String,
+        variant_name: Option<String>,
+    },
     Optional(Box<TypeCheck>),
     Union(Vec<TypeCheck>),
 }
@@ -112,6 +119,15 @@ pub enum Instruction {
     GetField,
     MakeStructPositional(usize),
     MakeStructNamed(usize),
+    MakeError {
+        error_index: usize,
+        field_count: usize,
+    },
+    PushCatch {
+        handler_ip: usize,
+    },
+    PopCatch,
+    Throw,
     MakeClosure {
         function_index: usize,
         capture_count: usize,
@@ -160,6 +176,13 @@ impl fmt::Display for Instruction {
                 write!(f, "MAKE_STRUCT_POS {index}")
             }
             Instruction::MakeStructNamed(index) => write!(f, "MAKE_STRUCT_NAMED {index}"),
+            Instruction::MakeError {
+                error_index,
+                field_count,
+            } => write!(f, "MAKE_ERROR {error_index} {field_count}"),
+            Instruction::PushCatch { handler_ip } => write!(f, "PUSH_CATCH {handler_ip}"),
+            Instruction::PopCatch => write!(f, "POP_CATCH"),
+            Instruction::Throw => write!(f, "THROW"),
             Instruction::MakeClosure {
                 function_index,
                 capture_count,

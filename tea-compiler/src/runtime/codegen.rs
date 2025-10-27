@@ -4,8 +4,8 @@ use std::rc::Rc;
 use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, ConditionalKind, ConditionalStatement, DictLiteral,
-    Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
+    BinaryExpression, BinaryOperator, Block, CatchKind, ConditionalKind, ConditionalStatement,
+    DictLiteral, Expression, ExpressionKind, FunctionParameter, FunctionStatement, IndexExpression,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
     ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern,
     MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
@@ -13,11 +13,11 @@ use crate::ast::{
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase, TypeCheck};
-use super::value::{EnumVariantValue, StructTemplate, Value};
+use super::value::{EnumVariantValue, ErrorTemplate, StructTemplate, Value};
 use crate::stdlib::{self, StdFunctionKind};
 use crate::typechecker::{
-    EnumDefinition, EnumVariantMetadata, FunctionInstance, StructDefinition, StructInstance,
-    StructType, Type, UnionDefinition,
+    EnumDefinition, EnumVariantMetadata, ErrorDefinition, ErrorVariantDefinition, FunctionInstance,
+    StructDefinition, StructInstance, StructType, Type, UnionDefinition,
 };
 
 fn format_type_name(ty: &Type) -> String {
@@ -47,6 +47,10 @@ fn format_type_name(ty: &Type) -> String {
         Type::Struct(struct_type) => format_struct_type_name(struct_type),
         Type::Enum(enum_type) => enum_type.name.clone(),
         Type::Union(union_type) => union_type.name.clone(),
+        Type::Error(error_type) => match &error_type.variant {
+            Some(variant) => format!("{}.{}", error_type.name, variant),
+            None => error_type.name.clone(),
+        },
         Type::GenericParameter(name) => name.clone(),
         Type::Unknown => "Unknown".to_string(),
     }
@@ -99,6 +103,7 @@ pub struct VmSemanticMetadata {
     pub enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     pub enum_definitions: HashMap<String, EnumDefinition>,
     pub type_test_metadata: HashMap<SourceSpan, Type>,
+    pub error_definitions: HashMap<String, ErrorDefinition>,
 }
 
 #[derive(Debug)]
@@ -131,6 +136,7 @@ pub struct CodeGenerator {
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     struct_definitions: HashMap<String, StructDefinition>,
     union_definitions: HashMap<String, UnionDefinition>,
+    error_definitions: HashMap<String, ErrorDefinition>,
     functions_by_name: HashMap<String, FunctionStatement>,
     base_function_indices: HashMap<String, usize>,
     function_specializations: HashMap<String, HashMap<Vec<Type>, usize>>,
@@ -138,6 +144,8 @@ pub struct CodeGenerator {
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     enum_definitions: HashMap<String, EnumDefinition>,
     type_test_metadata: HashMap<SourceSpan, Type>,
+    error_variant_templates: Vec<ErrorTemplate>,
+    error_indices: HashMap<String, usize>,
     temp_name_counter: usize,
     next_global_temp_slot: usize,
 }
@@ -159,6 +167,7 @@ impl CodeGenerator {
             struct_call_metadata: metadata.struct_call_metadata,
             struct_definitions: metadata.struct_definitions,
             union_definitions: metadata.union_definitions,
+            error_definitions: metadata.error_definitions,
             functions_by_name: HashMap::new(),
             base_function_indices: HashMap::new(),
             function_specializations: HashMap::new(),
@@ -166,6 +175,8 @@ impl CodeGenerator {
             enum_variant_metadata: metadata.enum_variant_metadata,
             enum_definitions: metadata.enum_definitions,
             type_test_metadata: metadata.type_test_metadata,
+            error_variant_templates: Vec::new(),
+            error_indices: HashMap::new(),
             temp_name_counter: 0,
             next_global_temp_slot: 0,
         }
@@ -215,6 +226,10 @@ impl CodeGenerator {
                 visited.remove(&union_type.name);
                 Ok(TypeCheck::Union(members))
             }
+            Type::Error(error_type) => Ok(TypeCheck::Error {
+                error_name: error_type.name.clone(),
+                variant_name: error_type.variant.clone(),
+            }),
             Type::GenericParameter(name) => Err(anyhow!(
                 "generic parameter '{}' cannot be used in a type test",
                 name
@@ -229,6 +244,7 @@ impl CodeGenerator {
     pub fn compile_module(mut self, module: &Module) -> Result<Program> {
         self.collect_functions(&module.statements);
         self.collect_structs(&module.statements);
+        self.collect_errors(&module.statements)?;
         let mut resolver = GlobalResolver;
         let mut chunk = Chunk::new();
         self.compile_statements(&module.statements, &mut chunk, &mut resolver)?;
@@ -245,6 +261,7 @@ impl CodeGenerator {
             self.functions,
             globals,
             self.structs,
+            self.error_variant_templates.clone(),
             self.tests,
         ))
     }
@@ -259,6 +276,22 @@ impl CodeGenerator {
                 let _ = self.ensure_struct_template(&struct_type);
             }
         }
+    }
+
+    fn collect_errors(&mut self, statements: &[Statement]) -> Result<()> {
+        for statement in statements {
+            if let Statement::Error(error_stmt) = statement {
+                for variant in &error_stmt.variants {
+                    let variant_name = if error_stmt.variants.len() == 1 {
+                        variant.name.clone()
+                    } else {
+                        variant.name.clone()
+                    };
+                    let _ = self.ensure_error_template(&error_stmt.name, &variant_name)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn collect_functions(&mut self, statements: &[Statement]) {
@@ -309,6 +342,39 @@ impl CodeGenerator {
             field_names,
         });
         self.struct_indices.insert(variant_name.clone(), index);
+        Ok(index)
+    }
+
+    fn ensure_error_template(&mut self, error_name: &str, variant_name: &str) -> Result<usize> {
+        let key = format!("{}.{}", error_name, variant_name);
+        if let Some(&index) = self.error_indices.get(&key) {
+            return Ok(index);
+        }
+
+        let definition = self
+            .error_definitions
+            .get(error_name)
+            .ok_or_else(|| anyhow!(format!("unknown error '{}'", error_name)))?;
+        let variant = definition.variants.get(variant_name).ok_or_else(|| {
+            anyhow!(format!(
+                "error '{}' defined at line {} has no variant '{}'",
+                error_name, definition.span.line, variant_name
+            ))
+        })?;
+
+        let template = ErrorTemplate {
+            error_name: error_name.to_string(),
+            variant_name: variant_name.to_string(),
+            field_names: variant
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect(),
+        };
+
+        let index = self.error_variant_templates.len();
+        self.error_variant_templates.push(template);
+        self.error_indices.insert(key, index);
         Ok(index)
     }
 
@@ -525,6 +591,12 @@ impl CodeGenerator {
             Statement::Match(match_stmt) => {
                 self.compile_match_statement(match_stmt, chunk, resolver)
             }
+            Statement::Error(_) => Ok(()),
+            Statement::Throw(throw_stmt) => {
+                self.compile_expression(&throw_stmt.expression, chunk, resolver)?;
+                chunk.emit(Instruction::Throw);
+                Ok(())
+            }
         }
     }
 
@@ -722,7 +794,94 @@ impl CodeGenerator {
                 chunk.emit(Instruction::AssertNonNil);
                 Ok(())
             }
+            ExpressionKind::Try(try_expr) => self.compile_try_expression(try_expr, chunk, resolver),
             ExpressionKind::Range(_) => Err(CodegenError::Unsupported("expression").into()),
+        }
+    }
+
+    fn compile_try_expression<R: Resolver>(
+        &mut self,
+        expression: &crate::ast::TryExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        let Some(clause) = &expression.catch else {
+            return self.compile_expression(&expression.expression, chunk, resolver);
+        };
+
+        match &clause.kind {
+            CatchKind::Fallback(fallback) => {
+                let push_index = chunk.emit(Instruction::PushCatch { handler_ip: 0 });
+                self.compile_expression(&expression.expression, chunk, resolver)?;
+                chunk.emit(Instruction::PopCatch);
+                let skip_handler = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                let handler_ip = chunk.len();
+                if let Some(Instruction::PushCatch { handler_ip: slot }) =
+                    chunk.instructions.get_mut(push_index)
+                {
+                    *slot = handler_ip;
+                } else {
+                    bail!("invalid catch patch location");
+                }
+                chunk.emit(Instruction::Pop);
+                self.compile_expression(fallback, chunk, resolver)?;
+                self.patch_jump(chunk, skip_handler)?;
+                Ok(())
+            }
+            CatchKind::Arms(arms) => {
+                let push_index = chunk.emit(Instruction::PushCatch { handler_ip: 0 });
+                self.compile_expression(&expression.expression, chunk, resolver)?;
+                chunk.emit(Instruction::PopCatch);
+                let skip_handler = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                let handler_ip = chunk.len();
+                if let Some(Instruction::PushCatch { handler_ip: slot }) =
+                    chunk.instructions.get_mut(push_index)
+                {
+                    *slot = handler_ip;
+                } else {
+                    bail!("invalid catch patch location");
+                }
+
+                let temp_slot = self.allocate_temp_slot(resolver)?;
+                self.store_temp_slot(&temp_slot, chunk, resolver)?;
+                chunk.emit(Instruction::Pop);
+
+                if let Some(binding) = &clause.binding {
+                    let _ = resolver.declare_local(&binding.name, false);
+                    self.load_temp_slot(&temp_slot, chunk, resolver)?;
+                    resolver.store(self, chunk, &binding.name)?;
+                    chunk.emit(Instruction::Pop);
+                }
+
+                let mut end_jumps = Vec::new();
+
+                for arm in arms {
+                    let (matched_jumps, fallthroughs) =
+                        self.emit_match_arm_conditions(&temp_slot, &arm.patterns, chunk, resolver)?;
+
+                    for jump in matched_jumps {
+                        self.patch_jump(chunk, jump)?;
+                    }
+
+                    self.compile_expression(&arm.expression, chunk, resolver)?;
+                    let exit_jump = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+                    end_jumps.push(exit_jump);
+
+                    for jump in fallthroughs {
+                        self.patch_jump(chunk, jump)?;
+                    }
+                }
+
+                self.load_temp_slot(&temp_slot, chunk, resolver)?;
+                chunk.emit(Instruction::Throw);
+
+                for jump in end_jumps {
+                    self.patch_jump(chunk, jump)?;
+                }
+
+                self.patch_jump(chunk, skip_handler)?;
+                Ok(())
+            }
         }
     }
 
@@ -939,6 +1098,26 @@ impl CodeGenerator {
         chunk: &mut Chunk,
         resolver: &mut R,
     ) -> Result<()> {
+        if let ExpressionKind::Identifier(identifier) = &call.callee.kind {
+            if self.try_compile_error_constructor(&identifier.name, None, call, chunk, resolver)? {
+                return Ok(());
+            }
+        }
+
+        if let ExpressionKind::Member(member) = &call.callee.kind {
+            if let ExpressionKind::Identifier(base) = &member.object.kind {
+                if self.try_compile_error_constructor(
+                    &base.name,
+                    Some(&member.property),
+                    call,
+                    chunk,
+                    resolver,
+                )? {
+                    return Ok(());
+                }
+            }
+        }
+
         if let ExpressionKind::Member(member) = &call.callee.kind {
             if let ExpressionKind::Identifier(alias_ident) = &member.object.kind {
                 if let Some(functions) = self.module_builtins.get(&alias_ident.name) {
@@ -996,6 +1175,98 @@ impl CodeGenerator {
             self.compile_expression(&argument.expression, chunk, resolver)?;
         }
         chunk.emit(Instruction::Call(call.arguments.len()));
+        Ok(())
+    }
+
+    fn try_compile_error_constructor<R: Resolver>(
+        &mut self,
+        error_name: &str,
+        variant: Option<&str>,
+        call: &crate::ast::CallExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<bool> {
+        let definition = match self.error_definitions.get(error_name) {
+            Some(def) => def,
+            None => return Ok(false),
+        };
+
+        let (variant_name, variant_def) = match variant {
+            Some(name) => match definition.variants.get(name) {
+                Some(def) => (name.to_string(), def.clone()),
+                None => return Ok(false),
+            },
+            None => {
+                if definition.variants.len() == 1 {
+                    let (name, def) = definition
+                        .variants
+                        .iter()
+                        .next()
+                        .map(|(name, def)| (name.clone(), def.clone()))
+                        .unwrap();
+                    (name, def)
+                } else {
+                    return Ok(false);
+                }
+            }
+        };
+
+        self.compile_error_constructor(
+            error_name,
+            &variant_name,
+            &variant_def,
+            call,
+            chunk,
+            resolver,
+        )?;
+        Ok(true)
+    }
+
+    fn compile_error_constructor<R: Resolver>(
+        &mut self,
+        error_name: &str,
+        variant_name: &str,
+        variant_def: &ErrorVariantDefinition,
+        call: &crate::ast::CallExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        if call.arguments.len() != variant_def.fields.len() {
+            let field_summary = if variant_def.fields.is_empty() {
+                "no fields".to_string()
+            } else {
+                variant_def
+                    .fields
+                    .iter()
+                    .map(|field| format!("{} (line {})", field.name, field.span.line))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            bail!(format!(
+                "error variant '{}.{}' defined at line {} expects {} argument{} ({}) but {} provided",
+                error_name,
+                variant_def.name,
+                variant_def.span.line,
+                variant_def.fields.len(),
+                if variant_def.fields.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+                field_summary,
+                call.arguments.len()
+            ));
+        }
+
+        for argument in &call.arguments {
+            self.compile_expression(&argument.expression, chunk, resolver)?;
+        }
+
+        let template_index = self.ensure_error_template(error_name, variant_name)?;
+        chunk.emit(Instruction::MakeError {
+            error_index: template_index,
+            field_count: variant_def.fields.len(),
+        });
         Ok(())
     }
 

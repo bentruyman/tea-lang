@@ -172,3 +172,93 @@ main()
     assert!(bundle_path.exists(), "bundle should exist");
     assert!(checksum_path.exists(), "checksum should exist");
 }
+
+#[cfg(feature = "llvm-aot")]
+#[test]
+fn build_errors_script_runs_successfully() {
+    let tmp = tempdir().expect("tempdir");
+    let target_root = tmp.path().join("target");
+    fs::create_dir_all(&target_root).expect("create target dir for build");
+
+    let source_path = tmp.path().join("errors.tea");
+    fs::write(
+        &source_path,
+        r#"
+use io = "std.io"
+
+error DataError {
+  Missing(path: String)
+  Permission
+}
+
+def read(path: String) -> String ! { DataError.Missing, DataError.Permission }
+  if path == "missing"
+    throw DataError.Missing(path)
+  end
+  if path == "secret"
+    throw DataError.Permission()
+  end
+  return "content"
+end
+
+def describe(path: String) -> String
+  try read(path) catch err
+    case is DataError.Missing => `missing:${err.path}`
+    case is DataError.Permission => "denied"
+    case _ => "unexpected"
+  end
+end
+
+var from_cases = describe("missing")
+io.write(from_cases)
+io.write("\n")
+
+var passthrough = read("notes.txt") catch "fallback"
+io.write(passthrough)
+io.write("\n")
+
+var fallback = try read("secret") catch "handled"
+io.write(fallback)
+io.flush()
+"#,
+    )
+    .expect("write errors script");
+
+    let binary_name = if cfg!(windows) {
+        "errors.exe"
+    } else {
+        "errors"
+    };
+    let binary_path = tmp.path().join(binary_name);
+
+    let status = Command::new(tea_cli_binary())
+        .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
+        .arg("build")
+        .arg(&source_path)
+        .arg("--backend")
+        .arg("llvm")
+        .arg("--output")
+        .arg(&binary_path)
+        .status()
+        .expect("run tea build");
+
+    assert!(status.success(), "tea build should succeed");
+    assert!(binary_path.exists(), "binary should exist");
+
+    let output = Command::new(&binary_path)
+        .current_dir(tmp.path())
+        .output()
+        .expect("execute compiled binary");
+
+    assert!(
+        output.status.success(),
+        "compiled program should exit successfully"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout, "missing:missing\ncontent\nhandled",
+        "compiled program should produce expected output"
+    );
+}

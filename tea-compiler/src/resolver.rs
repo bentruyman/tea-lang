@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    AssignmentExpression, BinaryExpression, Block, CallExpression, ConditionalStatement,
-    DictLiteral, EnumStatement, Expression, ExpressionKind, FunctionParameter, FunctionStatement,
-    Identifier, IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral,
-    LoopHeader, LoopKind, LoopStatement, MatchPattern, MatchStatement, MemberExpression, Module,
-    ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, UnaryExpression,
-    UnionStatement, UseStatement, VarStatement,
+    AssignmentExpression, BinaryExpression, Block, CallExpression, CatchKind, ConditionalStatement,
+    DictLiteral, EnumStatement, ErrorStatement, Expression, ExpressionKind, FunctionParameter,
+    FunctionStatement, Identifier, IndexExpression, InterpolatedStringPart, LambdaBody,
+    LambdaExpression, ListLiteral, LoopHeader, LoopKind, LoopStatement, MatchArm, MatchPattern,
+    MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
+    StructStatement, TestStatement, ThrowStatement, TryExpression, UnaryExpression, UnionStatement,
+    UseStatement, VarStatement,
 };
 use crate::diagnostics::Diagnostics;
 use crate::stdlib;
@@ -37,6 +38,7 @@ enum BindingKind {
     Union,
     Module,
     Enum,
+    Error,
 }
 
 impl BindingKind {
@@ -50,6 +52,7 @@ impl BindingKind {
             BindingKind::Union => "union",
             BindingKind::Module => "module alias",
             BindingKind::Enum => "enum",
+            BindingKind::Error => "error",
         }
     }
 }
@@ -114,8 +117,10 @@ impl Resolver {
             Statement::Struct(struct_stmt) => self.resolve_struct(struct_stmt),
             Statement::Union(union_stmt) => self.resolve_union(union_stmt),
             Statement::Enum(enum_stmt) => self.resolve_enum(enum_stmt),
+            Statement::Error(error_stmt) => self.resolve_error(error_stmt),
             Statement::Conditional(cond_stmt) => self.resolve_conditional(cond_stmt),
             Statement::Loop(loop_stmt) => self.resolve_loop(loop_stmt),
+            Statement::Throw(throw_stmt) => self.resolve_throw(throw_stmt),
             Statement::Return(ret_stmt) => self.resolve_return(ret_stmt),
             Statement::Match(match_stmt) => self.resolve_match_statement(match_stmt),
             Statement::Expression(expr_stmt) => self.resolve_expression(&expr_stmt.expression),
@@ -242,6 +247,15 @@ impl Resolver {
         );
     }
 
+    fn resolve_error(&mut self, error_stmt: &ErrorStatement) {
+        self.declare_binding(
+            &error_stmt.name,
+            error_stmt.name_span,
+            BindingKind::Error,
+            true,
+        );
+    }
+
     fn resolve_conditional(&mut self, cond_stmt: &ConditionalStatement) {
         self.resolve_expression(&cond_stmt.condition);
         self.resolve_block(&cond_stmt.consequent);
@@ -271,6 +285,10 @@ impl Resolver {
         if let Some(expr) = &return_stmt.expression {
             self.resolve_expression(expr);
         }
+    }
+
+    fn resolve_throw(&mut self, throw_stmt: &ThrowStatement) {
+        self.resolve_expression(&throw_stmt.expression);
     }
 
     fn resolve_block(&mut self, block: &Block) {
@@ -327,6 +345,7 @@ impl Resolver {
                     self.resolve_expression(&arm.expression);
                 }
             }
+            ExpressionKind::Try(try_expr) => self.resolve_try(try_expr),
             ExpressionKind::Grouping(inner) => self.resolve_expression(inner),
             ExpressionKind::Unwrap(inner) => self.resolve_expression(inner),
         }
@@ -458,6 +477,46 @@ impl Resolver {
         self.resolve_expression(&assignment.value);
     }
 
+    fn resolve_try(&mut self, try_expr: &TryExpression) {
+        self.resolve_expression(&try_expr.expression);
+        if let Some(clause) = &try_expr.catch {
+            match &clause.kind {
+                CatchKind::Fallback(expr) => self.resolve_expression(expr),
+                CatchKind::Arms(arms) => {
+                    if let Some(binding) = &clause.binding {
+                        self.push_scope();
+                        self.declare_binding(
+                            &binding.name,
+                            binding.span,
+                            BindingKind::Variable,
+                            false,
+                        );
+                        self.resolve_catch_arms(arms);
+                        if let Some(scope) = self.scopes.last_mut() {
+                            if let Some(entry) = scope.get_mut(&binding.name) {
+                                entry.used = true;
+                            }
+                        }
+                        self.pop_scope();
+                    } else {
+                        self.resolve_catch_arms(arms);
+                    }
+                }
+            }
+        }
+    }
+
+    fn resolve_catch_arms(&mut self, arms: &[MatchArm]) {
+        for arm in arms {
+            for pattern in &arm.patterns {
+                if let MatchPattern::Expression(expr) = pattern {
+                    self.resolve_expression(expr);
+                }
+            }
+            self.resolve_expression(&arm.expression);
+        }
+    }
+
     fn declare_binding(
         &mut self,
         name: &str,
@@ -579,7 +638,8 @@ impl Resolver {
                         BindingKind::Function
                         | BindingKind::Struct
                         | BindingKind::Union
-                        | BindingKind::Enum => continue,
+                        | BindingKind::Enum
+                        | BindingKind::Error => continue,
                         BindingKind::Module => {
                             format!("unused module alias '{}'", name)
                         }

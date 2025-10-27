@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use tea_compiler::{
-    CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
+    CatchKind, CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
     InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module, ModuleAliasBinding, SourceFile,
     SourceId, Statement, TokenKind,
 };
@@ -787,6 +787,7 @@ fn collect_symbols(
                         });
                     }
                 }
+                Statement::Error(_) => {}
                 Statement::Conditional(cond_stmt) => {
                     self.visit_expression(&cond_stmt.condition);
                     self.visit_statements(&cond_stmt.consequent.statements);
@@ -810,6 +811,9 @@ fn collect_symbols(
                     if let Some(expr) = &ret_stmt.expression {
                         self.visit_expression(expr);
                     }
+                }
+                Statement::Throw(throw_stmt) => {
+                    self.visit_expression(&throw_stmt.expression);
                 }
                 Statement::Match(match_stmt) => {
                     self.visit_expression(&match_stmt.scrutinee);
@@ -921,6 +925,26 @@ fn collect_symbols(
                             }
                         }
                         self.visit_expression(&arm.expression);
+                    }
+                }
+                ExpressionKind::Try(expr) => {
+                    self.visit_expression(&expr.expression);
+                    if let Some(clause) = &expr.catch {
+                        match &clause.kind {
+                            CatchKind::Fallback(fallback) => {
+                                self.visit_expression(fallback);
+                            }
+                            CatchKind::Arms(arms) => {
+                                for arm in arms {
+                                    for pattern in &arm.patterns {
+                                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                                            self.visit_expression(pattern_expr);
+                                        }
+                                    }
+                                    self.visit_expression(&arm.expression);
+                                }
+                            }
+                        }
                     }
                 }
                 ExpressionKind::Grouping(inner) => {

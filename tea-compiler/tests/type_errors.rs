@@ -257,6 +257,92 @@ fn rejects_struct_generics_closing_on_newline() {
 }
 
 #[test]
+fn rejects_try_without_error_annotation() {
+    let source = r#"
+error Example {
+  Failure
+}
+
+def always_fails() -> Int ! Example.Failure
+  throw Example.Failure()
+end
+
+def wrapper() -> Int
+  try always_fails()
+end
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("missing_error_annotation.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected compiler to require error annotation when using try"
+    );
+}
+
+#[test]
+fn rejects_catch_fallback_type_mismatch() {
+    let source = r#"
+error Example {
+  Failure
+}
+
+def maybe_fail(flag: Bool) -> Int ! Example.Failure
+  if flag
+    throw Example.Failure()
+  end
+  return 7
+end
+
+var value: Int = try maybe_fail(true) catch "fallback"
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("catch_fallback_type_mismatch.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected compiler to reject fallback that does not match try expression type"
+    );
+}
+
+#[test]
+fn rejects_catch_arm_for_unexpected_variant() {
+    let source = r#"
+error Example {
+  Failure
+}
+
+def always_fails() -> Int ! Example.Failure
+  throw Example.Failure()
+end
+
+var recovered = try always_fails() catch err
+  case is Example.Missing => 0
+end
+recovered
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("invalid_catch_arm.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected compiler to reject catch pattern for undefined error variant"
+    );
+}
+
+#[test]
 fn rejects_union_with_unsupported_member_type() {
     let source = r#"
 union Bad {

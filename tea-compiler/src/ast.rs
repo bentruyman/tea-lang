@@ -80,8 +80,10 @@ pub enum Statement {
     Struct(StructStatement),
     Union(UnionStatement),
     Enum(EnumStatement),
+    Error(ErrorStatement),
     Conditional(ConditionalStatement),
     Loop(LoopStatement),
+    Throw(ThrowStatement),
     Return(ReturnStatement),
     Match(MatchStatement),
     Expression(ExpressionStatement),
@@ -134,6 +136,7 @@ pub struct FunctionStatement {
     pub type_parameters: Vec<TypeParameter>,
     pub parameters: Vec<FunctionParameter>,
     pub return_type: Option<TypeExpression>,
+    pub error_annotation: Option<ErrorAnnotation>,
     pub body: Block,
     pub docstring: Option<String>,
 }
@@ -152,6 +155,18 @@ pub struct FunctionParameter {
     pub span: SourceSpan,
     pub type_annotation: Option<TypeExpression>,
     pub default_value: Option<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorAnnotation {
+    pub types: Vec<ErrorTypeSpecifier>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorTypeSpecifier {
+    pub path: Vec<String>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +197,30 @@ pub struct UnionStatement {
 pub struct UnionMember {
     pub type_expression: TypeExpression,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorStatement {
+    pub name: String,
+    pub name_span: SourceSpan,
+    pub variants: Vec<ErrorVariant>,
+    pub docstring: Option<String>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorVariant {
+    pub name: String,
+    pub name_span: SourceSpan,
+    pub fields: Vec<ErrorField>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorField {
+    pub name: String,
+    pub name_span: SourceSpan,
+    pub type_annotation: TypeExpression,
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +257,12 @@ pub struct LoopStatement {
     pub kind: LoopKind,
     pub header: LoopHeader,
     pub body: Block,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct ThrowStatement {
+    pub expression: Expression,
     pub span: SourceSpan,
 }
 
@@ -324,6 +369,7 @@ pub enum ExpressionKind {
     Assignment(AssignmentExpression),
     Match(MatchExpression),
     Unwrap(Box<Expression>),
+    Try(TryExpression),
     Grouping(Box<Expression>),
 }
 
@@ -432,6 +478,25 @@ pub struct AssignmentExpression {
 pub struct MatchExpression {
     pub scrutinee: Box<Expression>,
     pub arms: Vec<MatchArm>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TryExpression {
+    pub expression: Box<Expression>,
+    pub catch: Option<CatchClause>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CatchClause {
+    pub binding: Option<Identifier>,
+    pub kind: CatchKind,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub enum CatchKind {
+    Fallback(Box<Expression>),
+    Arms(Vec<MatchArm>),
 }
 
 #[derive(Debug, Clone)]

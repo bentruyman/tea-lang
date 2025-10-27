@@ -183,6 +183,7 @@ pub struct StructField {
     pub name: String,
     pub span: SourceSpan,
     pub type_annotation: TypeExpression,
+    pub docstring: Option<String>,
 }
 
 #[derive(Debug, Clone)]

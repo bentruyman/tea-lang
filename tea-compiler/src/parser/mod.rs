@@ -624,6 +624,7 @@ impl<'a> Parser<'a> {
                 bail!("unterminated struct");
             }
 
+            let field_docstring = self.consume_doc_comments();
             let field_name_token = self.peek().clone();
             let field_span = Self::span_from_token(&field_name_token);
             let field_name = match &field_name_token.kind {
@@ -654,6 +655,7 @@ impl<'a> Parser<'a> {
                 type_annotation: TypeExpression {
                     tokens: type_tokens,
                 },
+                docstring: field_docstring,
             });
 
             self.expect_newline("expected newline after struct field")?;

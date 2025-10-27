@@ -91,6 +91,19 @@ struct DocumentAnalysis {
     module_aliases: HashMap<String, tea_compiler::ModuleAliasBinding>,
     argument_expectations: Vec<ArgumentExpectation>,
     match_exhaustiveness: HashMap<tea_compiler::SourceSpan, Vec<String>>,
+    structs: HashMap<String, StructInfo>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct StructInfo {
+    docstring: Option<String>,
+    fields: HashMap<String, FieldInfo>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct FieldInfo {
+    docstring: Option<String>,
+    type_desc: Option<String>,
 }
 
 #[cfg(test)]
@@ -178,6 +191,84 @@ end
             flag_symbol.docstring.as_deref(),
             Some("Enable this to see the flag"),
         );
+    }
+
+    #[test]
+    fn struct_field_docstrings_are_collected() {
+        let compilation = compile_source(
+            r#"## A football team
+struct Team {
+  ## A team in a football league
+  name: String
+}
+"#,
+        );
+
+        let analysis = collect_symbols(
+            &compilation.module,
+            &compilation.module_aliases,
+            &compilation.binding_types,
+            &compilation.argument_types,
+            &compilation.match_exhaustiveness,
+        );
+
+        let team_info = analysis
+            .structs
+            .get("Team")
+            .expect("Team struct info to be collected");
+        assert_eq!(team_info.docstring.as_deref(), Some("A football team"),);
+
+        let field_info = team_info
+            .fields
+            .get("name")
+            .expect("Team.name field info to be collected");
+        assert_eq!(
+            field_info.docstring.as_deref(),
+            Some("A team in a football league"),
+        );
+
+        let name_symbol = analysis
+            .symbols
+            .iter()
+            .find(|symbol| symbol.name == "name" && symbol.kind == SymbolKind::Field)
+            .expect("field symbol to be present");
+        assert_eq!(
+            name_symbol.docstring.as_deref(),
+            Some("A team in a football league"),
+        );
+        assert_eq!(name_symbol.type_desc.as_deref(), Some("String"),);
+    }
+
+    #[test]
+    fn parameter_docstring_falls_back_to_struct_doc() {
+        let compilation = compile_source(
+            r#"## A football team
+struct Team {
+  name: String
+}
+
+def format(team: Team) -> String
+  team.name
+end
+"#,
+        );
+
+        let analysis = collect_symbols(
+            &compilation.module,
+            &compilation.module_aliases,
+            &compilation.binding_types,
+            &compilation.argument_types,
+            &compilation.match_exhaustiveness,
+        );
+
+        let team_symbol = analysis
+            .symbols
+            .iter()
+            .find(|symbol| symbol.name == "team" && symbol.kind == SymbolKind::Parameter)
+            .expect("parameter symbol to be present");
+
+        let doc = symbol_docstring(team_symbol, &analysis);
+        assert_eq!(doc.as_deref(), Some("A football team"));
     }
 }
 
@@ -655,14 +746,15 @@ fn collect_symbols(
 
     struct Collector<'a> {
         symbols: Vec<SymbolInfo>,
+        structs: HashMap<String, StructInfo>,
         binding_types: &'a HashMap<tea_compiler::SourceSpan, String>,
         module_aliases: &'a HashMap<String, ModuleAliasBinding>,
     }
 
     impl<'a> Collector<'a> {
-        fn collect(mut self, module: &Module) -> Vec<SymbolInfo> {
+        fn collect(mut self, module: &Module) -> (Vec<SymbolInfo>, HashMap<String, StructInfo>) {
             self.visit_statements(&module.statements);
-            self.symbols
+            (self.symbols, self.structs)
         }
 
         fn visit_statements(&mut self, statements: &[Statement]) {
@@ -739,6 +831,8 @@ fn collect_symbols(
                 }
                 Statement::Struct(struct_stmt) => {
                     let range = range_from_span!(&struct_stmt.name_span);
+                    let struct_entry = self.structs.entry(struct_stmt.name.clone()).or_default();
+                    struct_entry.docstring = struct_stmt.docstring.clone();
                     self.symbols.push(SymbolInfo {
                         name: struct_stmt.name.clone(),
                         range,
@@ -748,12 +842,22 @@ fn collect_symbols(
                     });
                     for field in &struct_stmt.fields {
                         let range = range_from_span!(&field.span);
+                        let field_type = render_type_expression(&field.type_annotation);
+                        let entry = self
+                            .structs
+                            .entry(struct_stmt.name.clone())
+                            .or_default()
+                            .fields
+                            .entry(field.name.clone())
+                            .or_insert_with(FieldInfo::default);
+                        entry.docstring = field.docstring.clone();
+                        entry.type_desc = field_type.clone();
                         self.symbols.push(SymbolInfo {
                             name: field.name.clone(),
                             range,
                             kind: SymbolKind::Field,
-                            type_desc: None,
-                            docstring: None,
+                            type_desc: field_type,
+                            docstring: field.docstring.clone(),
                         });
                     }
                 }
@@ -970,11 +1074,12 @@ fn collect_symbols(
 
     let collector = Collector {
         symbols: Vec::new(),
+        structs: HashMap::new(),
         binding_types,
         module_aliases: &alias_bindings,
     };
 
-    let symbols = collector.collect(module);
+    let (symbols, structs) = collector.collect(module);
     let argument_expectations = argument_types
         .iter()
         .map(|(span, ty)| ArgumentExpectation {
@@ -988,7 +1093,70 @@ fn collect_symbols(
         module_aliases: alias_bindings,
         argument_expectations,
         match_exhaustiveness: match_exhaustiveness.clone(),
+        structs,
     }
+}
+
+fn render_type_expression(expr: &tea_compiler::TypeExpression) -> Option<String> {
+    if expr.tokens.is_empty() {
+        return None;
+    }
+    let mut rendered = String::new();
+    for token in &expr.tokens {
+        rendered.push_str(&token.lexeme);
+    }
+    if rendered.is_empty() {
+        None
+    } else {
+        Some(rendered)
+    }
+}
+
+fn extract_struct_name(type_desc: &str) -> Option<String> {
+    let mut name = type_desc.trim();
+    if name.is_empty() {
+        return None;
+    }
+    if name.starts_with("Func") {
+        return None;
+    }
+    name = name.trim_end_matches('?');
+    if let Some((base, _)) = name.split_once('[') {
+        name = base;
+    }
+    if name.is_empty() {
+        return None;
+    }
+    if name
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        Some(name.to_string())
+    } else {
+        None
+    }
+}
+
+fn symbol_docstring(symbol: &SymbolInfo, analysis: &DocumentAnalysis) -> Option<String> {
+    if let Some(doc) = symbol.docstring.as_ref() {
+        if !doc.is_empty() {
+            return Some(doc.clone());
+        }
+    }
+
+    if let Some(type_desc) = &symbol.type_desc {
+        if let Some(struct_name) = extract_struct_name(type_desc) {
+            if let Some(struct_info) = analysis.structs.get(&struct_name) {
+                if let Some(doc) = struct_info.docstring.as_ref() {
+                    if !doc.is_empty() {
+                        return Some(doc.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn symbol_at_position<'a>(
@@ -1263,11 +1431,9 @@ impl LanguageServer for TeaLanguageServer {
             if let Some(ref ty) = symbol.type_desc {
                 value.push_str(&format!(" : {}", ty));
             }
-            if let Some(ref doc) = symbol.docstring {
-                if !doc.is_empty() {
-                    value.push_str("\n\n");
-                    value.push_str(doc);
-                }
+            if let Some(doc) = symbol_docstring(symbol, analysis) {
+                value.push_str("\n\n");
+                value.push_str(&doc);
             }
             let contents = HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::PlainText,
@@ -1321,6 +1487,40 @@ impl LanguageServer for TeaLanguageServer {
                     contents,
                     range: None,
                 }));
+            } else if let Some(symbol) = symbol_by_name(analysis, &alias) {
+                if let Some(struct_name) = symbol
+                    .type_desc
+                    .as_ref()
+                    .and_then(|ty| extract_struct_name(ty))
+                {
+                    if let Some(struct_info) = analysis.structs.get(&struct_name) {
+                        if let Some(field_info) = struct_info.fields.get(&member) {
+                            let mut value = format!("field `{}.{}`", struct_name, member);
+                            if let Some(ref ty) = field_info.type_desc {
+                                value.push_str(&format!(" : {}", ty));
+                            }
+                            let mut doc =
+                                field_info.docstring.clone().filter(|doc| !doc.is_empty());
+                            if doc.is_none() {
+                                doc = struct_info.docstring.clone().filter(|doc| !doc.is_empty());
+                            }
+                            if let Some(doc) = doc {
+                                value.push_str("\n\n");
+                                value.push_str(&doc);
+                            }
+
+                            let contents = HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::PlainText,
+                                value,
+                            });
+
+                            return Ok(Some(Hover {
+                                contents,
+                                range: None,
+                            }));
+                        }
+                    }
+                }
             }
         }
 

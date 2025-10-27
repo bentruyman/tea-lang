@@ -21,14 +21,14 @@
   ],
   "license": "MIT",
   "scripts": {
-    "generate": "tree-sitter generate",
+    "generate": "tree-sitter generate --no-bindings",
     "test": "tree-sitter test",
     "install": "node-gyp-build",
     "prebuildify": "prebuildify --napi --strip"
   },
   "devDependencies": {
     "prebuildify": "^6.0.0",
-    "tree-sitter-cli": "^0.25.8"
+    "tree-sitter-cli": "^0.22.6"
   },
   "dependencies": {
     "node-gyp-build": "^4.8.0"

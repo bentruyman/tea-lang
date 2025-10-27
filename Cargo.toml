@@ -6,7 +6,6 @@ members = [
   "tea-lsp",
   "tea-runtime",
   "tea-support",
-  "tree-sitter-tea/bindings/rust"
 ]
 
 [workspace.package]

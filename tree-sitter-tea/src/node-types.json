@@ -688,6 +688,16 @@
     "type": "catch_case",
     "named": true,
     "fields": {
+      "body": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "block",
+            "named": true
+          }
+        ]
+      },
       "patterns": {
         "multiple": false,
         "required": true,
@@ -700,7 +710,7 @@
       },
       "value": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "assignment",
@@ -2871,7 +2881,6 @@
   {
     "type": "source_file",
     "named": true,
-    "root": true,
     "fields": {},
     "children": {
       "multiple": true,
@@ -3935,8 +3944,7 @@
   },
   {
     "type": "comment",
-    "named": true,
-    "extra": true
+    "named": true
   },
   {
     "type": "const",
@@ -3985,6 +3993,10 @@
   {
     "type": "nil",
     "named": true
+  },
+  {
+    "type": "not",
+    "named": false
   },
   {
     "type": "number",

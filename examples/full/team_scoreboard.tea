@@ -1,0 +1,42 @@
+# Expect: Team scoreboard, Ada: 7 wins / 3 losses, Grace: 9 wins / 1 loss, Linus: 5 wins / 5 losses, Top team: Grace
+use debug = "std.debug"
+use util = "std.util"
+
+struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
+
+def format(team: Team) -> String
+  return `${team.name}: ${team.wins} wins / ${team.losses} losses`
+end
+
+var teams = [
+  Team(name: "Ada", wins: 7, losses: 3),
+  Team(name: "Grace", wins: 9, losses: 1),
+  Team(name: "Linus", wins: 5, losses: 5)
+]
+
+debug.print("Team scoreboard")
+
+var index = 0
+while index < util.len(teams)
+  debug.print(format(teams[index]))
+  index = index + 1
+end
+
+var champion = teams[0]
+var next_index = 1
+
+while next_index < util.len(teams)
+  var contender = teams[next_index]
+
+  if contender.wins > champion.wins
+    champion = contender
+  end
+
+  next_index = next_index + 1
+end
+
+debug.print(`Top team: ${champion.name}`)

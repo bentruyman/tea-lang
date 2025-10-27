@@ -14,6 +14,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -36,5 +39,5 @@ jobs:
       - name: Run tea test harness
         run: cargo run -p tea-cli -- test --fail-fast
 
-      - name: Run LLVM e2e sanity checks
+      - name: Run e2e sanity checks
         run: scripts/e2e.sh

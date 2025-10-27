@@ -767,11 +767,57 @@ fn normalize_expression_spacing(input: &str) -> Cow<'_, str> {
                 }
 
                 if ch == '!' && !matches!(chars.peek(), Some('=')) {
-                    if trim_trailing_spaces(&mut result) {
-                        changed = true;
+                    let prev_is_type = last_non_space(&result)
+                        .map(|(_, c)| {
+                            is_identifier_char(c) || matches!(c, ']' | ')' | '}' | '>' | '?')
+                        })
+                        .unwrap_or(false);
+
+                    let mut lookahead = chars.clone();
+                    let mut next_non_ws = None;
+                    while let Some(next) = lookahead.next() {
+                        if next.is_whitespace() {
+                            continue;
+                        }
+                        next_non_ws = Some(next);
+                        break;
                     }
-                    result.push('!');
-                    continue;
+
+                    let next_is_typeish = next_non_ws
+                        .map(|c| is_identifier_char(c) || matches!(c, '{'))
+                        .unwrap_or(false);
+
+                    if prev_is_type && next_is_typeish {
+                        if trim_trailing_spaces(&mut result) {
+                            changed = true;
+                        }
+                        if !result.is_empty() && !result.ends_with(' ') {
+                            result.push(' ');
+                            changed = true;
+                        }
+                        result.push('!');
+
+                        let mut consumed_ws = false;
+                        while matches!(chars.peek(), Some(c) if c.is_whitespace()) {
+                            chars.next();
+                            consumed_ws = true;
+                        }
+                        if consumed_ws {
+                            changed = true;
+                        }
+
+                        if next_non_ws.is_some() {
+                            result.push(' ');
+                            changed = true;
+                        }
+                        continue;
+                    } else {
+                        if trim_trailing_spaces(&mut result) {
+                            changed = true;
+                        }
+                        result.push('!');
+                        continue;
+                    }
                 }
 
                 if finalize_comparison_operator(ch, &mut result, &mut chars) {
@@ -1649,6 +1695,10 @@ fn is_inline_match_expression(code: &str) -> bool {
     }
 
     false
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
 }
 
 fn line_starts_with_keyword(code: &str, keyword: &str) -> bool {

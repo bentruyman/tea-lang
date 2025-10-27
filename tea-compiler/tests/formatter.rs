@@ -238,6 +238,27 @@ end
 }
 
 #[test]
+fn spaces_error_return_separator() {
+    let input = r#"
+def validate(text: String) -> Nil! InvalidText
+end
+
+def open(path: String) -> String! { FsError.NotFound, FsError.Permission }
+end
+"#;
+
+    let expected = [
+        "def validate(text: String) -> Nil ! InvalidText",
+        "end",
+        "",
+        "def open(path: String) -> String ! { FsError.NotFound, FsError.Permission }",
+        "end",
+    ];
+
+    assert_lines(&format_source(input), &expected);
+}
+
+#[test]
 fn spaces_dict_entries() {
     let input = r#"
 var scores = {"alice":10,"bob":8}

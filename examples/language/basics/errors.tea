@@ -45,10 +45,10 @@ end
 # `catch` can map specific variants to fallback values
 def file_text(path: String) -> String
   try get_file(path) catch err
-    case is FsError.NotFound => `File not found: ${err.path}`
-    case is FsError.Permission => `Permission denied: ${err.reason}`
-    case _ => "Unknown error"
-  end
+  case is FsError.NotFound => `File not found: ${err.path}`
+  case is FsError.Permission => `Permission denied: ${err.reason}`
+  case _ => "Unknown error"
+end
 end
 
 # A short-form catch handles "any error" the same way

@@ -1,0 +1,66 @@
+# Conditionals: if-statements and if-expressions
+
+use debug = "std.debug"
+
+# ============================================
+# if-statements: Control flow without values
+# ============================================
+
+# Basic if-statement
+var count = 2
+
+if count == 2
+  debug.print("count is 2")
+end
+
+# If-else statement
+var score = 85
+
+if score >= 90
+  debug.print("Grade: A")
+else
+  debug.print("Grade: B")
+end
+
+# If-statement with side effects
+var maybe_name: String? = nil
+
+if maybe_name == nil
+  maybe_name = "tea"
+end
+
+debug.print(maybe_name!) # Expect: tea
+
+# ============================================
+# if-expressions: Ternary-like conditionals
+# ============================================
+
+# Basic if-expression (returns a value)
+const a = true
+const x = if(a) 1 else 2
+debug.print(x) # Expect: 1
+
+const b = false
+const y = if(b) 10 else 20
+debug.print(y) # Expect: 20
+
+# If-expression in compound assignment
+var z = 0
+z += if(a) 1 else 2
+debug.print(z) # Expect: 1
+
+# Nested if-expressions
+const nested = if(true) if(false) 1 else 2 else 3 # TODO: consider not allowing this
+debug.print(nested) # Expect: 2
+
+# If-expression with string values
+const greeting = if(a) "hello" else "goodbye"
+debug.print(greeting) # Expect: hello
+
+# If-expression with function calls
+def double(n: Int) -> Int
+  return n * 2
+end
+
+const result = if(true) double(5) else double(10)
+debug.print(result) # Expect: 10

@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, CatchHandler, CatchKind,
-    ConditionalKind, ConditionalStatement, DictLiteral, ErrorAnnotation, ErrorTypeSpecifier,
-    Expression, ExpressionKind, ForPattern, FunctionStatement, Identifier, IndexExpression,
-    InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
-    LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
+    ConditionalExpression, ConditionalKind, ConditionalStatement, DictLiteral, ErrorAnnotation,
+    ErrorTypeSpecifier, Expression, ExpressionKind, ForPattern, FunctionStatement, Identifier,
+    IndexExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal,
+    LoopHeader, LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
     ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TryExpression,
     TypeExpression, TypeParameter, UnaryExpression, UnaryOperator, VarStatement,
 };
@@ -2901,11 +2901,55 @@ impl TypeChecker {
             ExpressionKind::List(list) => self.type_from_list(list, expression.span),
             ExpressionKind::Dict(dict) => self.type_from_dict(dict, expression.span),
             ExpressionKind::Member(member) => self.type_from_member(member, expression.span),
+            ExpressionKind::Conditional(cond) => self.type_from_conditional(cond, expression.span),
             ExpressionKind::Match(match_expr) => self.type_from_match(match_expr, expression.span),
             ExpressionKind::Try(try_expr) => self.type_from_try(try_expr, expression.span),
             ExpressionKind::Index(index) => self.type_from_index(index, expression.span),
             ExpressionKind::Unwrap(inner) => self.type_from_unwrap(inner, expression.span),
             ExpressionKind::Range(_) => Type::Unknown,
+        }
+    }
+
+    fn type_from_conditional(
+        &mut self,
+        expression: &ConditionalExpression,
+        span: SourceSpan,
+    ) -> Type {
+        // Check condition is boolean
+        let condition_type = self.infer_expression(&expression.condition);
+        if !matches!(condition_type, Type::Bool | Type::Unknown) {
+            self.report_error(
+                format!(
+                    "if-expression condition must be boolean, found {}",
+                    condition_type.describe()
+                ),
+                Some(expression.condition.span),
+            );
+        }
+
+        // Infer types of both branches
+        let consequent_type = self.infer_expression(&expression.consequent);
+        let alternative_type = self.infer_expression(&expression.alternative);
+
+        // Both branches must have compatible types - for now, just check exact equality
+        // TODO: Implement proper type unification for optionals and unions
+        if consequent_type != alternative_type
+            && !matches!(consequent_type, Type::Unknown)
+            && !matches!(alternative_type, Type::Unknown)
+        {
+            self.report_error(
+                format!(
+                    "if-expression branches must have compatible types, found {} and {}",
+                    consequent_type.describe(),
+                    alternative_type.describe()
+                ),
+                Some(span),
+            );
+            Type::Unknown
+        } else if matches!(consequent_type, Type::Unknown) {
+            alternative_type
+        } else {
+            consequent_type
         }
     }
 

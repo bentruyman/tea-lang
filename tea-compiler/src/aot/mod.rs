@@ -22,7 +22,7 @@ pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind,
-    ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
+    ConditionalExpression, ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, Literal,
     LoopHeader, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement, SourceSpan,
     Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement, VarStatement,
@@ -2685,6 +2685,68 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
     }
 
+    fn compile_conditional_expression(
+        &mut self,
+        expression: &ConditionalExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Compile condition
+        let condition = self
+            .compile_expression(&expression.condition, function, locals)?
+            .into_bool()?;
+
+        // Compile then branch first to determine result type
+        let then_block = self.context.append_basic_block(function, "if_expr_then");
+        let else_block = self.context.append_basic_block(function, "if_expr_else");
+        let merge_block = self.context.append_basic_block(function, "if_expr_merge");
+
+        // Branch based on condition
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(condition, then_block, else_block),
+        )?;
+
+        // Compile then branch
+        self.builder.position_at_end(then_block);
+        let then_value = self.compile_expression(&expression.consequent, function, locals)?;
+        let result_type = then_value.ty();
+
+        // Allocate storage for result
+        let needs_storage = !matches!(result_type, ValueType::Void);
+        let result_alloca = if needs_storage {
+            Some(self.create_entry_alloca(
+                function,
+                "if_expr_result",
+                self.basic_type(&result_type)?,
+            )?)
+        } else {
+            None
+        };
+
+        // Store then branch result
+        if let Some(alloca) = result_alloca {
+            self.store_expr_in_pointer(alloca, &result_type, then_value, "if_expr_then")?;
+        }
+        map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+
+        // Compile else branch
+        self.builder.position_at_end(else_block);
+        let else_value = self.compile_expression(&expression.alternative, function, locals)?;
+        if let Some(alloca) = result_alloca {
+            self.store_expr_in_pointer(alloca, &result_type, else_value, "if_expr_else")?;
+        }
+        map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
+
+        // Load result in merge block
+        self.builder.position_at_end(merge_block);
+        if let Some(alloca) = result_alloca {
+            self.load_from_pointer(alloca, &result_type, "if_expr_result")
+        } else {
+            Ok(ExprValue::Void)
+        }
+    }
+
     fn compile_lambda_expression(
         &mut self,
         lambda: &LambdaExpression,
@@ -3501,6 +3563,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             ExpressionKind::Lambda(lambda) => {
                 self.compile_lambda_expression(lambda, function, locals)
+            }
+            ExpressionKind::Conditional(cond) => {
+                self.compile_conditional_expression(cond, function, locals)
             }
             ExpressionKind::Match(_) => bail!("unsupported expression"),
             ExpressionKind::Unwrap(inner) => {

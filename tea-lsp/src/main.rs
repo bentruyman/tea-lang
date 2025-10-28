@@ -1117,6 +1117,11 @@ fn collect_symbols(
                     self.visit_expression(&expr.target);
                     self.visit_expression(&expr.value);
                 }
+                ExpressionKind::Conditional(expr) => {
+                    self.visit_expression(&expr.condition);
+                    self.visit_expression(&expr.consequent);
+                    self.visit_expression(&expr.alternative);
+                }
                 ExpressionKind::Match(expr) => {
                     self.visit_expression(&expr.scrutinee);
                     for arm in &expr.arms {

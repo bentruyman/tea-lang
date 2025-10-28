@@ -4,12 +4,13 @@ use std::rc::Rc;
 use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalStatement,
-    DictLiteral, Expression, ExpressionKind, ForPattern, FunctionParameter, FunctionStatement,
-    IndexExpression, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
-    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression,
-    MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
-    TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
+    BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalExpression,
+    ConditionalStatement, DictLiteral, Expression, ExpressionKind, ForPattern, FunctionParameter,
+    FunctionStatement, IndexExpression, InterpolatedStringExpression, InterpolatedStringPart,
+    LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement,
+    MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
+    SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
+    VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase, TypeCheck};
@@ -839,6 +840,9 @@ impl CodeGenerator {
             }
             ExpressionKind::Lambda(lambda) => {
                 self.compile_lambda_expression(lambda, chunk, resolver)
+            }
+            ExpressionKind::Conditional(cond) => {
+                self.compile_conditional_expression(cond, chunk, resolver)
             }
             ExpressionKind::Match(match_expr) => {
                 self.compile_match_expression(match_expr, chunk, resolver)
@@ -1856,6 +1860,36 @@ impl CodeGenerator {
         let constant = chunk.add_constant(Value::String(member.property.clone()));
         chunk.emit(Instruction::Constant(constant));
         chunk.emit(Instruction::GetField);
+        Ok(())
+    }
+
+    fn compile_conditional_expression<R: Resolver>(
+        &mut self,
+        expression: &ConditionalExpression,
+        chunk: &mut Chunk,
+        resolver: &mut R,
+    ) -> Result<()> {
+        // Compile condition
+        self.compile_expression(&expression.condition, chunk, resolver)?;
+
+        // Jump to alternative if condition is false (pops condition)
+        let jump_to_alternative = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
+
+        // Compile consequent (then branch)
+        self.compile_expression(&expression.consequent, chunk, resolver)?;
+
+        // Jump past alternative after executing consequent
+        let jump_past_alternative = self.emit_jump(chunk, Instruction::Jump(usize::MAX));
+
+        // Patch jump to alternative
+        self.patch_jump(chunk, jump_to_alternative)?;
+
+        // Compile alternative (else branch)
+        self.compile_expression(&expression.alternative, chunk, resolver)?;
+
+        // Patch jump past alternative
+        self.patch_jump(chunk, jump_past_alternative)?;
+
         Ok(())
     }
 

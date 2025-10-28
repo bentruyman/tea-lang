@@ -1486,6 +1486,7 @@ impl<'a> Parser<'a> {
                 ExpressionKind::Literal(Literal::Nil),
             )),
             TokenKind::Keyword(Keyword::Match) => self.parse_match_expression(token_span),
+            TokenKind::Keyword(Keyword::If) => self.parse_if_expression(token_span, terminator),
             TokenKind::Keyword(Keyword::Try) => {
                 let expression = self.parse_expression_prec(Precedence::Unary, terminator)?;
                 let span = Self::union_spans(&token_span, &expression.span);
@@ -1719,6 +1720,56 @@ impl<'a> Parser<'a> {
             ExpressionKind::Match(MatchExpression {
                 scrutinee: Box::new(scrutinee),
                 arms,
+            }),
+        ))
+    }
+
+    fn parse_if_expression(
+        &mut self,
+        if_span: SourceSpan,
+        terminator: fn(&TokenKind) -> bool,
+    ) -> Result<Expression> {
+        self.skip_newlines();
+
+        // Parse condition (requires parentheses for clarity)
+        self.expect_token(
+            TokenKind::LParen,
+            "expected '(' after 'if' in if-expression",
+        )?;
+        let condition = self.parse_expression_prec(Precedence::Lowest, terminator_rparen)?;
+        self.expect_token(
+            TokenKind::RParen,
+            "expected ')' after if-expression condition",
+        )?;
+        self.skip_newlines();
+
+        // Parse consequent (then branch)
+        let consequent = self.parse_expression_prec(Precedence::Lowest, terminator)?;
+        self.skip_newlines();
+
+        // Require 'else' for expressions (both branches needed to have a value)
+        if !matches!(self.peek_kind(), TokenKind::Keyword(Keyword::Else)) {
+            let span = Self::span_from_token(&self.peek().clone());
+            self.diagnostics.push_error_with_span(
+                "if-expression requires 'else' branch (both branches must produce a value)",
+                Some(span),
+            );
+            bail!("if-expression missing else branch");
+        }
+
+        self.expect_keyword(Keyword::Else, "expected 'else' in if-expression")?;
+        self.skip_newlines();
+
+        // Parse alternative (else branch)
+        let alternative = self.parse_expression_prec(Precedence::Lowest, terminator)?;
+
+        let span = Self::union_spans(&if_span, &alternative.span);
+        Ok(Self::make_expression(
+            span,
+            ExpressionKind::Conditional(ConditionalExpression {
+                condition: Box::new(condition),
+                consequent: Box::new(consequent),
+                alternative: Box::new(alternative),
             }),
         ))
     }

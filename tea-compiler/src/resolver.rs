@@ -379,6 +379,11 @@ impl Resolver {
             ExpressionKind::Lambda(lambda) => self.resolve_lambda(lambda),
             ExpressionKind::Is(is_expr) => self.resolve_expression(&is_expr.value),
             ExpressionKind::Assignment(assignment) => self.resolve_assignment(assignment),
+            ExpressionKind::Conditional(cond) => {
+                self.resolve_expression(&cond.condition);
+                self.resolve_expression(&cond.consequent);
+                self.resolve_expression(&cond.alternative);
+            }
             ExpressionKind::Match(match_expr) => {
                 self.resolve_expression(&match_expr.scrutinee);
                 for arm in &match_expr.arms {

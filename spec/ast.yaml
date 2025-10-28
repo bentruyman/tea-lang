@@ -490,6 +490,8 @@ nodes:
           type: AssignmentExpression
       - Match:
           type: MatchExpression
+      - Conditional:
+          type: ConditionalExpression
       - Unwrap:
           type: Box<Expression>
       - Try:
@@ -711,6 +713,17 @@ nodes:
         type: Box<Expression>
       arms:
         type: Vec<MatchArm>
+
+  ConditionalExpression:
+    description: If-else conditional expression
+    derives: ["Debug", "Clone"]
+    fields:
+      condition:
+        type: Box<Expression>
+      consequent:
+        type: Box<Expression>
+      alternative:
+        type: Box<Expression>
 
   MatchArm:
     description: Match arm with expression

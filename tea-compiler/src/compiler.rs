@@ -780,6 +780,11 @@ impl ModuleExpander {
                 self.rewrite_expression_identifiers(&mut assignment.target, rename_map);
                 self.rewrite_expression_identifiers(&mut assignment.value, rename_map);
             }
+            ExpressionKind::Conditional(cond) => {
+                self.rewrite_expression_identifiers(&mut cond.condition, rename_map);
+                self.rewrite_expression_identifiers(&mut cond.consequent, rename_map);
+                self.rewrite_expression_identifiers(&mut cond.alternative, rename_map);
+            }
             ExpressionKind::Match(match_expr) => {
                 self.rewrite_expression_identifiers(&mut match_expr.scrutinee, rename_map);
                 for arm in &mut match_expr.arms {
@@ -1021,6 +1026,11 @@ impl ModuleExpander {
                     self.rewrite_block_alias(block, alias_maps);
                 }
             },
+            ExpressionKind::Conditional(cond) => {
+                self.rewrite_expression_alias(&mut cond.condition, alias_maps);
+                self.rewrite_expression_alias(&mut cond.consequent, alias_maps);
+                self.rewrite_expression_alias(&mut cond.alternative, alias_maps);
+            }
             ExpressionKind::Match(match_expr) => {
                 self.rewrite_expression_alias(&mut match_expr.scrutinee, alias_maps);
                 for arm in &mut match_expr.arms {

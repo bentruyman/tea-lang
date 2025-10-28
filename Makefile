@@ -1,4 +1,4 @@
-.PHONY: help setup codegen codegen-highlights codegen-ast test build fmt
+.PHONY: help setup codegen codegen-highlights codegen-ast test build fmt install
 
 help:
 	@echo "Tea Language Build Tasks"
@@ -10,6 +10,7 @@ help:
 	@echo "  test                Run all tests"
 	@echo "  build               Build all components"
 	@echo "  fmt                 Format all code"
+	@echo "  install             Install tea and tea-lsp to ~/.cargo/bin"
 	@echo ""
 
 setup:
@@ -47,3 +48,12 @@ fmt:
 	@cargo run -p tea-cli -- fmt .
 	@echo "Formatting with Prettier..."
 	@npx prettier --write .
+
+install:
+	@echo "Building release binaries..."
+	@cargo build --release
+	@echo "Installing to ~/.cargo/bin..."
+	@cp target/release/tea-cli ~/.cargo/bin/tea
+	@cp target/release/tea-lsp ~/.cargo/bin/tea-lsp
+	@echo "Verifying installation..."
+	@tea --version

@@ -473,7 +473,7 @@ fn normalize_control_keyword_spacing(line: &str) -> Cow<'_, str> {
         None => return Cow::Borrowed(line),
     };
 
-    const KEYWORDS: &[&str] = &["if", "unless"];
+    const KEYWORDS: &[&str] = &["if"];
     for kw in KEYWORDS {
         if line[first_non_ws..].starts_with(kw) {
             let mut idx = first_non_ws + kw.len();
@@ -1609,9 +1609,7 @@ fn is_block_closer(code: &str) -> bool {
 }
 
 fn opens_block(code: &str) -> bool {
-    const BLOCK_KEYWORDS: &[&str] = &[
-        "def", "if", "unless", "for", "while", "until", "test", "else", "match",
-    ];
+    const BLOCK_KEYWORDS: &[&str] = &["def", "if", "for", "while", "test", "else", "match"];
 
     if BLOCK_KEYWORDS
         .iter()
@@ -1645,7 +1643,7 @@ fn is_function_header(code: &str) -> bool {
 }
 
 fn is_conditional_header(code: &str) -> bool {
-    if line_starts_with_keyword(code, "if") || line_starts_with_keyword(code, "unless") {
+    if line_starts_with_keyword(code, "if") {
         return true;
     }
 
@@ -1653,9 +1651,7 @@ fn is_conditional_header(code: &str) -> bool {
 }
 
 fn is_loop_header(code: &str) -> bool {
-    line_starts_with_keyword(code, "for")
-        || line_starts_with_keyword(code, "while")
-        || line_starts_with_keyword(code, "until")
+    line_starts_with_keyword(code, "for") || line_starts_with_keyword(code, "while")
 }
 
 fn is_test_header(code: &str) -> bool {

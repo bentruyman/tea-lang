@@ -317,7 +317,7 @@ impl Resolver {
                     );
                 }
             }
-            LoopKind::While | LoopKind::Until => {
+            LoopKind::While => {
                 if let LoopHeader::Condition(condition) = &loop_stmt.header {
                     self.resolve_expression(condition);
                 }

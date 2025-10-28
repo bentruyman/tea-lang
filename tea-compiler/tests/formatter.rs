@@ -574,7 +574,7 @@ fn enforces_comparison_spacing() {
     let input = r#"
 while count<max
 if count>=1 && count<=10
-unless value!=expected
+if value!=expected
 if name=="tea"
 debug.print(count)
 end
@@ -586,7 +586,7 @@ end
     let expected = [
         "while count < max",
         "  if count >= 1 && count <= 10",
-        "    unless value != expected",
+        "    if value != expected",
         "      if name == \"tea\"",
         "        debug.print(count)",
         "      end",
@@ -614,7 +614,7 @@ var value = optional  !
 fn pads_top_level_conditionals() {
     let input = r#"
 var count = 0
-unless count == 1
+if count != 1
 count = 1
 end
 debug.print(count)
@@ -623,7 +623,7 @@ debug.print(count)
     let expected = [
         "var count = 0",
         "",
-        "unless count == 1",
+        "if count != 1",
         "  count = 1",
         "end",
         "",

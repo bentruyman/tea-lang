@@ -1287,10 +1287,6 @@ impl TypeChecker {
                 guard.as_ref().and_then(|g| g.when_true),
                 guard.as_ref().and_then(|g| g.when_false),
             ),
-            ConditionalKind::Unless => (
-                guard.as_ref().and_then(|g| g.when_false),
-                guard.as_ref().and_then(|g| g.when_true),
-            ),
         };
 
         let base_scope = self.non_nil_scopes.last().cloned().unwrap_or_default();
@@ -1344,15 +1340,6 @@ impl TypeChecker {
                     };
                     (true_continues, false_continues)
                 }
-                ConditionalKind::Unless => {
-                    let false_continues = !self.block_guarantees_exit(&statement.consequent);
-                    let true_continues = if let Some(alt) = &statement.alternative {
-                        !self.block_guarantees_exit(alt)
-                    } else {
-                        true
-                    };
-                    (true_continues, false_continues)
-                }
             };
 
             let true_scope_has = consequent_scope.contains(&guard.name);
@@ -1380,7 +1367,7 @@ impl TypeChecker {
 
     fn check_loop(&mut self, statement: &LoopStatement) {
         match statement.kind {
-            LoopKind::While | LoopKind::Until => {
+            LoopKind::While => {
                 let LoopHeader::Condition(condition) = &statement.header else {
                     self.report_error(
                         "loop header is not supported by the type checker yet",

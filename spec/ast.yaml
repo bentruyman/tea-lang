@@ -319,7 +319,7 @@ nodes:
         type: Option<String>
 
   ConditionalStatement:
-    description: If or unless conditional statement
+    description: If conditional statement
     derives: ["Debug", "Clone"]
     fields:
       kind:
@@ -336,10 +336,9 @@ nodes:
     derives: ["Debug", "Clone", "Copy"]
     variants:
       - If
-      - Unless
 
   LoopStatement:
-    description: Loop statement (for, while, until)
+    description: Loop statement (for, while)
     derives: ["Debug", "Clone"]
     fields:
       kind:
@@ -357,7 +356,6 @@ nodes:
     variants:
       - For
       - While
-      - Until
 
   LoopHeader:
     description: Loop header (condition or for iterator)

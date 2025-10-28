@@ -4,13 +4,12 @@ use std::rc::Rc;
 use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalKind,
-    ConditionalStatement, DictLiteral, Expression, ExpressionKind, ForPattern, FunctionParameter,
-    FunctionStatement, IndexExpression, InterpolatedStringExpression, InterpolatedStringPart,
-    LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement,
-    MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
-    SourceSpan, Statement, TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
-    VarStatement,
+    BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalStatement,
+    DictLiteral, Expression, ExpressionKind, ForPattern, FunctionParameter, FunctionStatement,
+    IndexExpression, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
+    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchExpression,
+    MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement, SourceSpan, Statement,
+    TestStatement, UnaryExpression, UnaryOperator, UseStatement, VarBinding, VarStatement,
 };
 
 use super::bytecode::{Chunk, Function, Instruction, Program, TestCase, TypeCheck};
@@ -740,9 +739,6 @@ impl CodeGenerator {
         resolver: &mut R,
     ) -> Result<()> {
         self.compile_expression(&statement.condition, chunk, resolver)?;
-        if matches!(statement.kind, ConditionalKind::Unless) {
-            chunk.emit(Instruction::Not);
-        }
         let then_jump = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
         let _ = self.compile_block(&statement.consequent, chunk, resolver)?;
 
@@ -1526,7 +1522,7 @@ impl CodeGenerator {
         resolver: &mut R,
     ) -> Result<()> {
         match statement.kind {
-            LoopKind::While | LoopKind::Until => {
+            LoopKind::While => {
                 let LoopHeader::Condition(condition) = &statement.header else {
                     return Err(CodegenError::Unsupported("loop header").into());
                 };
@@ -1540,9 +1536,6 @@ impl CodeGenerator {
                 });
 
                 self.compile_expression(condition, chunk, resolver)?;
-                if matches!(statement.kind, LoopKind::Until) {
-                    chunk.emit(Instruction::Not);
-                }
 
                 let exit_jump = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
                 let _ = self.compile_block(&statement.body, chunk, resolver)?;

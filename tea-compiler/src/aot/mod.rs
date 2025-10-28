@@ -21,12 +21,11 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
-    BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind, ConditionalKind,
+    BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind,
     ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, Literal,
-    LoopHeader, LoopKind, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement,
-    SourceSpan, Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement,
-    VarStatement,
+    LoopHeader, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement, SourceSpan,
+    Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement, VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
 use crate::stdlib::{self, StdFunctionKind};
@@ -2234,12 +2233,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
         return_type: &ValueType,
     ) -> Result<bool> {
-        let mut condition = self
+        let condition = self
             .compile_expression(&statement.condition, function, locals)?
             .into_bool()?;
-        if matches!(statement.kind, ConditionalKind::Unless) {
-            condition = map_builder_error(self.builder.build_not(condition, "unless"))?;
-        }
 
         let then_block = self.context.append_basic_block(function, "if_then");
         let else_block = statement
@@ -2329,12 +2325,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             LoopHeader::Condition(expr) => expr,
             LoopHeader::For { .. } => bail!("for loops unsupported"),
         };
-        let mut cond_value = self
+        let cond_value = self
             .compile_expression(cond_expr, function, locals)?
             .into_bool()?;
-        if matches!(statement.kind, LoopKind::Until) {
-            cond_value = map_builder_error(self.builder.build_not(cond_value, "until"))?;
-        }
 
         map_builder_error(
             self.builder

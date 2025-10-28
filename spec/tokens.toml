@@ -18,9 +18,7 @@ error = { semantic = "keyword", context = "error_definition" }
 # Control flow keywords
 if = { semantic = "keyword" }
 else = { semantic = "keyword" }
-unless = { semantic = "keyword" }
 while = { semantic = "keyword" }
-until = { semantic = "keyword" }
 match = { semantic = "keyword" }
 case = { semantic = "keyword", context = ["match_case_block", "match_case_expression", "catch_case"] }
 end = { semantic = "keyword" }
@@ -154,7 +152,7 @@ contextual_keywords = [
 # Safe keywords that can be in top-level array
 safe_keywords = [
   "def", "pub", "var", "const", "use", "struct", "enum",
-  "if", "else", "unless", "while", "until", "return", "test", "end"
+  "if", "else", "while", "return", "test", "end"
 ]
 
 [patterns]

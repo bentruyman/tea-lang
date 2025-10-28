@@ -1226,7 +1226,20 @@ impl TypeChecker {
                 false
             };
 
-            let inferred = if skip_list_inference {
+            let skip_dict_inference = if let (Some(Type::Dict(expected_value)), Some(init)) =
+                (&annotated, &binding.initializer)
+            {
+                if let ExpressionKind::Dict(dict) = &init.kind {
+                    self.validate_dict_values_against_type(dict, expected_value, "dict");
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            let inferred = if skip_list_inference || skip_dict_inference {
                 annotated.clone().unwrap()
             } else {
                 binding
@@ -1237,7 +1250,7 @@ impl TypeChecker {
             };
 
             let target_type = if let Some(expected) = annotated.clone() {
-                if !skip_list_inference {
+                if !skip_list_inference && !skip_dict_inference {
                     self.ensure_compatible(
                         &expected,
                         &inferred,
@@ -3274,6 +3287,23 @@ impl TypeChecker {
                 &elem_type,
                 &format!("{} element {}", context, index + 1),
                 Some(element.span),
+            );
+        }
+    }
+
+    fn validate_dict_values_against_type(
+        &mut self,
+        dict: &DictLiteral,
+        expected_value_type: &Type,
+        context: &str,
+    ) {
+        for (index, entry) in dict.entries.iter().enumerate() {
+            let value_type = self.infer_expression(&entry.value);
+            self.ensure_compatible(
+                expected_value_type,
+                &value_type,
+                &format!("{} value {}", context, index + 1),
+                Some(entry.value.span),
             );
         }
     }

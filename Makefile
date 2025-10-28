@@ -42,6 +42,8 @@ build: codegen
 
 fmt:
 	@echo "Formatting Rust code..."
-	@cargo fmt
-	@echo "Formatting Tea examples..."
-	@cargo run -p tea-cli -- fmt examples/
+	@cargo fmt --all
+	@echo "Formatting Tea code..."
+	@cargo run -p tea-cli -- fmt .
+	@echo "Formatting with Prettier..."
+	@npx prettier --write .

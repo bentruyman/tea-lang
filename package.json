@@ -1,15 +1,26 @@
 {
   "name": "tea-lang",
-  "version": "0.1.0",
   "private": true,
   "scripts": {
-    "codegen": "bun run codegen:highlights && bun run codegen:ast",
-    "codegen:highlights": "bun scripts/codegen-highlights.js",
-    "codegen:ast": "bun scripts/codegen-ast.js"
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.6",
+    "prettier": "^3.6.2",
     "toml": "^3.0.0",
     "yaml": "^2.3.4"
+  },
+  "lint-staged": {
+    "*.{js,ts,json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "*.rs": [
+      "rustfmt"
+    ],
+    "*.tea": [
+      "cargo run -p tea-cli -- fmt"
+    ]
   },
   "workspaces": [
     "tree-sitter-tea"

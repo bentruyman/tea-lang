@@ -328,6 +328,7 @@ pub struct TypeChecker {
     enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     match_exhaustiveness: HashMap<SourceSpan, Vec<String>>,
     type_test_metadata: HashMap<SourceSpan, Type>,
+    suppress_list_element_errors: bool,
 }
 
 impl TypeChecker {
@@ -360,6 +361,7 @@ impl TypeChecker {
             enum_variant_metadata: HashMap::new(),
             match_exhaustiveness: HashMap::new(),
             type_test_metadata: HashMap::new(),
+            suppress_list_element_errors: false,
         };
         checker.register_builtin_structs();
         checker
@@ -1204,19 +1206,45 @@ impl TypeChecker {
                 .type_annotation
                 .as_ref()
                 .and_then(|annotation| self.parse_type(annotation));
-            let inferred = binding
-                .initializer
-                .as_ref()
-                .map(|expr| self.infer_expression(expr))
-                .unwrap_or(Type::Unknown);
+
+            let skip_list_inference = if let (Some(Type::List(expected_elem)), Some(init)) =
+                (&annotated, &binding.initializer)
+            {
+                if let ExpressionKind::List(list) = &init.kind {
+                    if matches!(expected_elem.as_ref(), Type::Union(_)) {
+                        self.suppress_list_element_errors = true;
+                        self.validate_list_elements_against_type(list, expected_elem, "list");
+                        self.suppress_list_element_errors = false;
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            let inferred = if skip_list_inference {
+                annotated.clone().unwrap()
+            } else {
+                binding
+                    .initializer
+                    .as_ref()
+                    .map(|expr| self.infer_expression(expr))
+                    .unwrap_or(Type::Unknown)
+            };
 
             let target_type = if let Some(expected) = annotated.clone() {
-                self.ensure_compatible(
-                    &expected,
-                    &inferred,
-                    &format!("variable '{}'", name),
-                    Some(binding.span),
-                );
+                if !skip_list_inference {
+                    self.ensure_compatible(
+                        &expected,
+                        &inferred,
+                        &format!("variable '{}'", name),
+                        Some(binding.span),
+                    );
+                }
                 expected
             } else {
                 inferred.clone()
@@ -2505,15 +2533,46 @@ impl TypeChecker {
             }
             (left, right) if left == right => left,
             (left, right) => {
-                self.report_error(
-                    format!(
-                        "{}: expected {}, found {}",
-                        context,
-                        left.describe(),
-                        right.describe()
-                    ),
-                    span,
-                );
+                if !self.suppress_list_element_errors {
+                    let is_primitive_mismatch = matches!(
+                        (&left, &right),
+                        (Type::Bool, _)
+                            | (Type::Int, _)
+                            | (Type::Float, _)
+                            | (Type::String, _)
+                            | (_, Type::Bool)
+                            | (_, Type::Int)
+                            | (_, Type::Float)
+                            | (_, Type::String)
+                    ) && !matches!(left, Type::Unknown)
+                        && !matches!(right, Type::Unknown);
+
+                    let is_list_element = context.starts_with("list element ");
+
+                    if is_primitive_mismatch && is_list_element {
+                        self.report_error(
+                            format!(
+                                "{}: expected {}, found {}. List elements must be the same type or use a union type, e.g. 'union Result {{ {} {} }}' with List[Result]",
+                                context,
+                                left.describe(),
+                                right.describe(),
+                                left.describe(),
+                                right.describe()
+                            ),
+                            span,
+                        );
+                    } else {
+                        self.report_error(
+                            format!(
+                                "{}: expected {}, found {}",
+                                context,
+                                left.describe(),
+                                right.describe()
+                            ),
+                            span,
+                        );
+                    }
+                }
                 left
             }
         }
@@ -3152,9 +3211,21 @@ impl TypeChecker {
     }
 
     fn type_from_list(&mut self, list: &ListLiteral, _span: SourceSpan) -> Type {
+        if list.elements.is_empty() {
+            return Type::List(Box::new(Type::Unknown));
+        }
+
         let mut element_type = Type::Unknown;
+        let mut has_nil = false;
+
         for (index, element) in list.elements.iter().enumerate() {
             let value_type = self.infer_expression(element);
+
+            if matches!(value_type, Type::Nil) {
+                has_nil = true;
+                continue;
+            }
+
             element_type = self.merge_binding_type(
                 element_type,
                 value_type,
@@ -3162,7 +3233,49 @@ impl TypeChecker {
                 Some(element.span),
             );
         }
+
+        if matches!(element_type, Type::Unknown) && has_nil {
+            return Type::List(Box::new(Type::Nil));
+        }
+
+        if has_nil && !matches!(element_type, Type::Unknown) {
+            return Type::List(Box::new(Type::Optional(Box::new(element_type))));
+        }
+
         Type::List(Box::new(element_type))
+    }
+
+    fn validate_list_elements_against_type(
+        &mut self,
+        list: &ListLiteral,
+        expected_elem_type: &Type,
+        context: &str,
+    ) {
+        for (index, element) in list.elements.iter().enumerate() {
+            let elem_type = self.infer_expression(element);
+            self.ensure_compatible(
+                expected_elem_type,
+                &elem_type,
+                &format!("{} element {}", context, index + 1),
+                Some(element.span),
+            );
+        }
+    }
+
+    fn infer_argument_with_expected_type(
+        &mut self,
+        arg: &Expression,
+        expected: Option<&Type>,
+    ) -> Type {
+        if let (Some(Type::List(expected_elem)), ExpressionKind::List(_)) = (expected, &arg.kind) {
+            if matches!(expected_elem.as_ref(), Type::Union(_)) {
+                self.suppress_list_element_errors = true;
+                let result = self.infer_expression(arg);
+                self.suppress_list_element_errors = false;
+                return result;
+            }
+        }
+        self.infer_expression(arg)
     }
 
     fn type_from_dict(&mut self, dict: &DictLiteral, _span: SourceSpan) -> Type {
@@ -3738,11 +3851,24 @@ impl TypeChecker {
             );
         }
 
-        let arg_types: Vec<Type> = call
-            .arguments
-            .iter()
-            .map(|arg| self.infer_expression(&arg.expression))
-            .collect();
+        let is_non_generic_function_call =
+            if let ExpressionKind::Identifier(ident) = &call.callee.kind {
+                self.functions
+                    .get(&ident.name)
+                    .map(|sig| sig.type_parameters.is_empty())
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+
+        let arg_types: Vec<Type> = if is_non_generic_function_call {
+            Vec::new()
+        } else {
+            call.arguments
+                .iter()
+                .map(|arg| self.infer_expression(&arg.expression))
+                .collect()
+        };
         if let ExpressionKind::Member(member) = &call.callee.kind {
             if let ExpressionKind::Identifier(alias_ident) = &member.object.kind {
                 if let Some(binding) = self.module_aliases.get(&alias_ident.name) {
@@ -3795,9 +3921,18 @@ impl TypeChecker {
         if let ExpressionKind::Identifier(identifier) = &call.callee.kind {
             if let Some(signature) = self.functions.get(&identifier.name).cloned() {
                 if signature.type_parameters.is_empty() {
+                    let arg_types_for_call: Vec<Type> = call
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .map(|(index, arg)| {
+                            let expected = signature.params.get(index);
+                            self.infer_argument_with_expected_type(&arg.expression, expected)
+                        })
+                        .collect();
                     self.verify_call_arguments(
                         &signature.params,
-                        &arg_types,
+                        &arg_types_for_call,
                         &call.arguments,
                         signature.arity,
                         Some(&identifier.name),
@@ -4432,6 +4567,23 @@ impl TypeChecker {
                     self.argument_expected_types
                         .insert(span, expected_ty.clone());
                 }
+
+                if let (Type::List(expected_elem), Some(arg)) = (expected_ty, arguments.get(index))
+                {
+                    if let ExpressionKind::List(list) = &arg.expression.kind {
+                        if matches!(expected_elem.as_ref(), Type::Union(_)) {
+                            self.suppress_list_element_errors = true;
+                            self.validate_list_elements_against_type(
+                                list,
+                                expected_elem,
+                                &argument_context,
+                            );
+                            self.suppress_list_element_errors = false;
+                            continue;
+                        }
+                    }
+                }
+
                 self.ensure_compatible(expected_ty, actual_ty, &argument_context, arg_span);
             }
         }

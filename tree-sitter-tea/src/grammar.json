@@ -3098,29 +3098,12 @@
     }
   ],
   "conflicts": [
-    [
-      "return_statement"
-    ],
-    [
-      "argument",
-      "parenthesized_expression"
-    ],
-    [
-      "braced_block",
-      "dict_literal"
-    ],
-    [
-      "_expression",
-      "match_pattern"
-    ],
-    [
-      "match_case_block",
-      "match_case_expression"
-    ],
-    [
-      "_expression",
-      "catch_clause"
-    ]
+    ["return_statement"],
+    ["argument", "parenthesized_expression"],
+    ["braced_block", "dict_literal"],
+    ["_expression", "match_pattern"],
+    ["match_case_block", "match_case_expression"],
+    ["_expression", "catch_clause"]
   ],
   "precedences": [],
   "externals": [],

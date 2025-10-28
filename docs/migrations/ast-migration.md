@@ -7,11 +7,13 @@ The Tea compiler's AST (`tea-compiler/src/ast.rs`) has been migrated from manual
 ## What Changed
 
 ### Before
+
 - AST was manually written and maintained in `tea-compiler/src/ast.rs`
 - Changes required manual edits that could drift from documentation
 - No single source of truth for AST structure
 
 ### After
+
 - AST is **generated** from `spec/ast.yaml` by `scripts/codegen-ast.js`
 - Changes are made to the YAML schema, then regenerated
 - Single source of truth ensures consistency across tools
@@ -23,6 +25,7 @@ The Tea compiler's AST (`tea-compiler/src/ast.rs`) has been migrated from manual
 **Generator:** `scripts/codegen-ast.js`
 
 The generated AST includes:
+
 - All node type definitions (structs and enums)
 - Derive macros (Debug, Clone, Copy, etc.)
 - Documentation comments from the schema
@@ -34,6 +37,7 @@ The generated AST includes:
 ### Adding a New Node Type
 
 1. Edit `spec/ast.yaml` and add the new node under `nodes:`
+
    ```yaml
    NewNode:
      description: Description of what this node represents
@@ -45,6 +49,7 @@ The generated AST includes:
    ```
 
 2. Regenerate the AST:
+
    ```bash
    npm run codegen:ast
    # or
@@ -52,6 +57,7 @@ The generated AST includes:
    ```
 
 3. Verify it compiles:
+
    ```bash
    cargo build
    ```
@@ -73,26 +79,32 @@ The generated AST includes:
 The generator supports three variant patterns:
 
 1. **Unit variant:**
+
    ```yaml
    variants:
      - SimpleCase
    ```
+
    Generates: `SimpleCase`
 
 2. **Single-field tuple variant:**
+
    ```yaml
    variants:
      - Wrapper:
          type: SomeType
    ```
+
    Generates: `Wrapper(SomeType)`
 
 3. **Multi-field tuple variant:**
+
    ```yaml
    variants:
      - Multiple:
          fields: [TypeA, TypeB]
    ```
+
    Generates: `Multiple(TypeA, TypeB)`
 
 4. **Struct variant:**
@@ -127,6 +139,7 @@ This prevents confusing compilation errors if you forget to generate the AST aft
 `tea-compiler/src/ast.rs` is **not tracked** in git (listed in `.gitignore`).
 
 After cloning the repository:
+
 ```bash
 bun install
 bun run codegen  # or make codegen
@@ -138,12 +151,14 @@ This ensures everyone generates the AST from the authoritative `spec/ast.yaml` s
 ## Validation
 
 All existing tests pass with the generated AST:
+
 - ✅ 80+ test cases in tea-compiler
 - ✅ Parser tests
 - ✅ Runtime tests
 - ✅ Integration tests with examples
 
 The generated AST is functionally identical to the previous manual version, verified by:
+
 1. Line count: ~563 lines (original: 535 lines)
 2. All derive macros preserved
 3. All impl methods preserved
@@ -153,12 +168,15 @@ The generated AST is functionally identical to the previous manual version, veri
 ## Troubleshooting
 
 ### "ast.rs not found" during build
+
 Run `bun run codegen:ast` or `make codegen`
 
 ### Changes to ast.yaml not reflected
+
 Regenerate: `bun run codegen:ast`
 
 ### Tests failing after AST change
+
 1. Check that field names/types match usage in parser/compiler
 2. Verify derives are correct for how the type is used
 3. Run `cargo test --workspace -- --nocapture` for detailed output

@@ -3,16 +3,19 @@
 This document captures the first working cut of tea-lang. It is the contract for the compiler, runtime, and standard library. Revisit and version it as the language evolves. The current prototype only implements the subset called out in **Prototype Scope**; other sections describe the intended design.
 
 ## Source Form
+
 - Files use UTF-8 and `.tea` suffix.
 - Line breaks terminate statements. A newline is significant unless the parser is inside `()`, `[]`, `{}`, a `| |` lambda header, or the line ends with a trailing operator (`+`, `-`, `*`, `/`, `.`, `&&`, `||`).
 - Comments start with `#` and extend to the end of the line.
 
 ## Lexical Elements
+
 - Identifiers: `[A-Za-z_][A-Za-z0-9_]*`. Snake_case for variables/functions, PascalCase for types.
 - Reserved keywords: `var`, `const`, `def`, `struct`, `if`, `unless`, `else`, `end`, `for`, `of`, `while`, `until`, `return`, `use`, `not`, `in`, `nil`.
 - Literals: integers (`42`), floats (`3.14`, `1_000.0`), strings (`"Hello"` and `` `Hello, ${name}` ``), booleans (`true`, `false`), lists (`[1, 2, 3]`), dictionaries (`{ "name": "tea" }`), ranges (`0..10`, `0...10`).
 
 ## Types
+
 - Scalar: `Bool`, `Int`, `Float`, `String`.
 - Compound: `List[T]`, `Dict[K, V]`, `Struct`, `Func`.
 - `Nil` represents optional absence and is a first-class value; `Void` marks functions that do not return data. Both `nil` and `void` evaluate as falsy alongside `false`.
@@ -30,6 +33,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Struct definitions: `struct App { server: http.Server }`. Fields are immutable by default; setter functions must handle mutations.
 
 ## Expressions
+
 - Everything is an expression; the last expression in a block is the implicit return.
 - Supported operators (precedence high → low):
   1. `()` call, `[]` index, `.` member.
@@ -48,6 +52,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - String interpolation uses backtick-delimited strings with `${expr}` placeholders.
 
 ## Statements
+
 - `use alias = "module"` loads std modules or relative paths (`use helpers = "./math"`). Dot access resolves exported constants/functions/structs under the chosen alias. The builtin library currently ships:
   - `"std.debug"` — exposes `print` for console output.
   - `"std.assert"` — provides `assert`, `assert_eq`, `assert_ne`, and `fail` helpers for runtime checks.
@@ -86,11 +91,12 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Loops:
   - `while condition ... end`
   - `until condition ... end`
-  - `for item of iterable ... end` *(planned)*
+  - `for item of iterable ... end` _(planned)_
 - `return` exits the current function; bare `return` (or falling off the end of a `-> Void` function) produces `void`, while functions declared `-> Nil` must return an explicit `nil`.
 - `break` and `next` (skip) are future additions; flag TODO.
 
 ## Scopes & Variables
+
 - Lexical scoping: new scopes for functions, structs, blocks, loops.
 - `var` creates mutable binding in the current scope. `const` creates an immutable binding; any assignment to that name after initialization raises a resolver/type-checker diagnostic.
 - Closures capture by reference. Mutation inside closures affects outer binding.
@@ -99,6 +105,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - The resolver also reports unused local variables and parameters so you can prune dead bindings early.
 
 ## Functions & Modules
+
 - Functions are first-class values. `def` assigns the function to the current scope binding (an implicit `var`). Function parameters must include explicit type annotations (e.g. `def add(a: Int, b: Int)`).
 - Default arguments evaluated at call-time.
 - Keyword arguments: `def greet(name: String, punctuation: String = "!")` call as `greet(name: "tea")`. Order-insensitive when passed by keyword.
@@ -106,6 +113,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Modules expose names declared at top-level via the alias you choose (`use fs = "std.fs"` then `fs.read_text("path")`). Relative modules continue to inline their declarations at compile time, but future revisions may surface them under aliases as well.
 
 ## Match Expressions
+
 - `match` evaluates its scrutinee once and dispatches to the first `case` whose pattern succeeds. The expression evaluates to the selected arm's value.
 - Patterns accept literals (`"ok"`, `42`, `true`), identifiers (including constants in scope), enum variants (`Option.Some`), and the `_` wildcard. Multiple patterns can share an arm via `|`.
 - Add a trailing `_` arm to cover the default path. The compiler recognises `Bool` and enum matches as exhaustive when all literals/variants appear; otherwise add `_` to silence the exhaustiveness error.
@@ -126,12 +134,14 @@ end
 ```
 
 ## Runtime & Execution Model
+
 - Programs execute top-to-bottom. Each file compiles to a module containing a top-level block invoked when loaded.
 - Running the CLI executes the main file's module block, leaving exported bindings in the module namespace.
 - Arithmetic honours numeric types: operations on two `Int`s remain integral, but if either operand is a `Float` the VM promotes the result to `Float`; division or modulo by zero raises a runtime error.
 - Standard library provides `print`, math helpers, HTTP stub (future). For prototype, embed minimal host functions (`print`, `len`).
 
 ## Errors & Diagnostics
+
 - Compilation errors:
   - Lexical: invalid character, unterminated string.
   - Syntactic: unexpected token, unterminated block.
@@ -141,6 +151,7 @@ end
 - Runtime errors provide stack trace (function names, location).
 
 ## Prototype Scope
+
 - Implement: integers, booleans, strings, lists; `if/unless`, `for/while/until`, `match`, functions, `return`, lambda literals (`|x| => expr`, `|| => expr`).
 - Omit (mark TODO):
   - Dictionaries, modules beyond `use` stub.
@@ -149,6 +160,7 @@ end
 - Ensure CLI supports `tea file.tea`, `--dump-tokens`, `--dump-ast`, `--emit=ir` (stub).
 
 ## Example Execution Flow
+
 1. CLI reads file, forms `SourceFile`.
 2. Lexer emits tokens.
 3. Parser builds AST honoring newline-delimited statements.

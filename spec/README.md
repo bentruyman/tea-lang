@@ -5,29 +5,36 @@ This directory contains the canonical specifications for the Tea programming lan
 ## Files
 
 ### `grammar.ebnf`
+
 Canonical EBNF grammar defining Tea's syntax.
 
 **Used by:**
+
 - Documentation and language tutorials
 - Parser implementation reference
 - Future: Railroad diagram generation
 
 ### `ast.yaml`
+
 Complete Abstract Syntax Tree node schema.
 
 **Defines:**
+
 - All statement and expression node types
 - Field names and types for each node
 - Rust derive macros
 - Documentation for each node
 
 **Generates:**
+
 - `tea-compiler/src/ast.rs` (via `bun run codegen:ast`)
 
 ### `tokens.toml`
+
 Token definitions including keywords, operators, and semantic mappings.
 
 **Defines:**
+
 - Keywords with semantic types
 - Operators with precedence
 - Punctuation and delimiters
@@ -35,6 +42,7 @@ Token definitions including keywords, operators, and semantic mappings.
 - LSP semantic token types
 
 **Generates:**
+
 - `tree-sitter-tea/queries/highlights.scm` (via `bun run codegen:highlights`)
 
 ## Making Changes
@@ -51,6 +59,7 @@ See [docs/explanation/compiler-codegen.md](../docs/explanation/compiler-codegen.
 ## Philosophy
 
 These specifications embody the principle that language design decisions should be:
+
 - **Documented once** in a canonical location
 - **Machine-readable** for automation
 - **Version-controlled** alongside code

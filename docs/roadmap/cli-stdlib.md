@@ -23,19 +23,19 @@ before they can rely on Tea for production tooling.
 
 ## Current Foundation
 
-| Module          | Status | Notes |
-| --------------- | ------ | ----- |
-| `std.debug`     | ✅     | thin wrapper around runtime print helpers |
-| `std.assert`    | ✅     | includes equality, failure, and snapshot assertions |
-| `std.util`      | ✅     | predicates and conversions (type checks, `to_string`, `clamp_int`) |
-| `std.fs`        | ✅ (narrow) | text/byte read & write, metadata basics |
-| `std.path`      | ✅     | join/split, normalization, absolute/relative helpers |
-| `std.env`       | ✅     | env var access, cwd changes, temp/home/config directory helpers |
-| `std.io`        | ✅     | buffered stdin read, stdout/stderr write & flush |
-| `std.json`      | ✅     | encode/decode with type-checker-aware literals |
-| `std.yaml`      | ✅     | encode/decode parity with JSON |
-| `support.cli`   | ✅     | argument access & parsing, snapshot capture (VM-only) |
-| `std.process`   | ✅ (initial) | synchronous `run`, `spawn` + `wait`, streaming stdout/stderr helpers |
+| Module        | Status       | Notes                                                                |
+| ------------- | ------------ | -------------------------------------------------------------------- |
+| `std.debug`   | ✅           | thin wrapper around runtime print helpers                            |
+| `std.assert`  | ✅           | includes equality, failure, and snapshot assertions                  |
+| `std.util`    | ✅           | predicates and conversions (type checks, `to_string`, `clamp_int`)   |
+| `std.fs`      | ✅ (narrow)  | text/byte read & write, metadata basics                              |
+| `std.path`    | ✅           | join/split, normalization, absolute/relative helpers                 |
+| `std.env`     | ✅           | env var access, cwd changes, temp/home/config directory helpers      |
+| `std.io`      | ✅           | buffered stdin read, stdout/stderr write & flush                     |
+| `std.json`    | ✅           | encode/decode with type-checker-aware literals                       |
+| `std.yaml`    | ✅           | encode/decode parity with JSON                                       |
+| `support.cli` | ✅           | argument access & parsing, snapshot capture (VM-only)                |
+| `std.process` | ✅ (initial) | synchronous `run`, `spawn` + `wait`, streaming stdout/stderr helpers |
 
 Gaps remain around richer filesystem traversal, process spawning, environment
 management, piping, configuration, and network access.
@@ -62,6 +62,7 @@ Objective: close the must-have gaps for typical command-line tools.
   `Result`-like values).
 
 Deliverables:
+
 - Runtime implementations with VM & LLVM parity.
 - Examples under `examples/stdlib/cli/` (e.g., dir walker, process runner).
 - Tests covering success/failure paths, including snapshot-driven CLI checks.
@@ -80,6 +81,7 @@ Objective: embrace CLI composability and pipelines.
   working directory/env overrides.
 
 Deliverables:
+
 - End-to-end pipeline example (`examples/stdlib/cli/pipeline.tea`) built via VM & LLVM.
 - Snapshot tests validating stdout/stderr streaming.
 
@@ -95,6 +97,7 @@ Objective: make it simple to load configuration safely.
   (macOS/iOS keychain, Windows credential store, etc.).
 
 Deliverables:
+
 - Documentation and samples for layering runtime helpers with user-land
   packages.
 - Tests ensuring secrets do not leak via default debug/print paths.
@@ -111,6 +114,7 @@ Objective: enable CLIs that call remote services.
   Tea-level packages (e.g., `support.http`).
 
 Deliverables:
+
 - Integration tests hitting local echo servers.
 - Docs highlighting security defaults, TLS requirements, and how to replace the
   runtime transport.
@@ -145,4 +149,4 @@ Objective: grow the ecosystem without bloating the core runtime.
 2. Use Milestone B to wire the new process/streaming APIs into the snapshot test
    harness.
 3. Prepare design spikes for configuration and networking to validate runtime
-  feasibility before committing to implementation timelines.
+   feasibility before committing to implementation timelines.

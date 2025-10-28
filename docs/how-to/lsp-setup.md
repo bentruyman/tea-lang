@@ -135,51 +135,57 @@ VS Code does not ship with a generic “register any LSP binary” workflow, so 
 4. Create `extension.js` beside the manifest with the client bootstrap logic:
 
    ```javascript
-   const vscode = require('vscode')
-   const { LanguageClient } = require('vscode-languageclient/node')
+   const vscode = require("vscode");
+   const { LanguageClient } = require("vscode-languageclient/node");
 
-   let client
+   let client;
 
    function activate(context) {
-     const config = vscode.workspace.getConfiguration('tea')
-     const command = config.get('lspPath') || process.env.TEA_LSP_PATH || 'tea-lsp'
+     const config = vscode.workspace.getConfiguration("tea");
+     const command =
+       config.get("lspPath") || process.env.TEA_LSP_PATH || "tea-lsp";
 
      const serverOptions = {
        command,
        args: [],
        options: { env: process.env },
-     }
+     };
 
      const clientOptions = {
-       documentSelector: [{ scheme: 'file', language: 'tea' }],
+       documentSelector: [{ scheme: "file", language: "tea" }],
        synchronize: {
-         fileEvents: vscode.workspace.createFileSystemWatcher('**/*.tea'),
+         fileEvents: vscode.workspace.createFileSystemWatcher("**/*.tea"),
        },
-     }
+     };
 
-     client = new LanguageClient('tea-lsp', 'Tea Language Server', serverOptions, clientOptions)
-     context.subscriptions.push(client.start())
+     client = new LanguageClient(
+       "tea-lsp",
+       "Tea Language Server",
+       serverOptions,
+       clientOptions,
+     );
+     context.subscriptions.push(client.start());
 
      context.subscriptions.push(
-       vscode.commands.registerCommand('tea-lsp.restart', async () => {
+       vscode.commands.registerCommand("tea-lsp.restart", async () => {
          if (!client) {
-           return
+           return;
          }
-         await client.stop()
-         await client.start()
-         vscode.window.showInformationMessage('Tea LSP restarted')
-       })
-     )
+         await client.stop();
+         await client.start();
+         vscode.window.showInformationMessage("Tea LSP restarted");
+       }),
+     );
    }
 
    function deactivate() {
      if (!client) {
-       return undefined
+       return undefined;
      }
-     return client.stop()
+     return client.stop();
    }
 
-   module.exports = { activate, deactivate }
+   module.exports = { activate, deactivate };
    ```
 
 5. Package and install the extension:
@@ -196,7 +202,7 @@ VS Code does not ship with a generic “register any LSP binary” workflow, so 
 
 - **Server binary not found** – confirm `tea-lsp` is in your `PATH` (`which tea-lsp`). Configure `cmd` in Neovim or set `tea.lspPath` in VS Code if the binary lives elsewhere.
 - **Neovim reports “command not executable”** – ensure the binary has the executable bit (`chmod +x` if you copied it manually) and that the absolute path has no spaces. Use `:checkhealth` to inspect remote shell PATH differences.
-- **No diagnostics or hover info** – make sure the workspace you opened contains Tea sources that compile. Run `RUST_LOG=tea_lsp=debug tea-lsp` in a terminal to inspect incoming requests. On VS Code, open the *Tea Language Server* output channel for verbose logs.
+- **No diagnostics or hover info** – make sure the workspace you opened contains Tea sources that compile. Run `RUST_LOG=tea_lsp=debug tea-lsp` in a terminal to inspect incoming requests. On VS Code, open the _Tea Language Server_ output channel for verbose logs.
 - **Crashes on startup** – delete the cached binary and rebuild with `cargo install --force`. Out-of-date dependencies occasionally cause handshake mismatches.
 - **Neovim attaches but completions are empty** – verify your configuration registers the `tea` filetype (`:set filetype?`). If you use Tree-sitter, ensure a grammar exists or disable it temporarily while testing.
 - **VS Code does not recognise `.tea` files** – confirm the extension installed successfully via `code --list-extensions | grep tea-language-support`. You can also add a file association in settings: `"files.associations": { "*.tea": "tea" }`.

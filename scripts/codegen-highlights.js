@@ -131,11 +131,11 @@ function generateHighlights() {
   lines.push("");
 
   const output = lines.join("\n");
-  
+
   // Ensure output directory exists
   const outDir = path.dirname(OUTPUT_PATH);
   fs.mkdirSync(outDir, { recursive: true });
-  
+
   fs.writeFileSync(OUTPUT_PATH, output, "utf-8");
   console.log(`✓ Generated ${OUTPUT_PATH}`);
 }

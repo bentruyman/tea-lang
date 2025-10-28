@@ -189,21 +189,21 @@ function generateAST() {
   }
 
   const output = lines.join("\n");
-  
+
   // Ensure output directory exists
   const outDir = path.dirname(OUTPUT_PATH);
   fs.mkdirSync(outDir, { recursive: true });
-  
+
   fs.writeFileSync(OUTPUT_PATH, output, "utf-8");
-  
+
   // Format the generated file with rustfmt
-  const { execSync } = require('child_process');
+  const { execSync } = require("child_process");
   try {
-    execSync(`rustfmt ${OUTPUT_PATH}`, { stdio: 'inherit' });
+    execSync(`rustfmt ${OUTPUT_PATH}`, { stdio: "inherit" });
   } catch (error) {
-    console.warn('Warning: rustfmt failed, but file was generated');
+    console.warn("Warning: rustfmt failed, but file was generated");
   }
-  
+
   console.log(`✓ Generated ${OUTPUT_PATH}`);
 }
 

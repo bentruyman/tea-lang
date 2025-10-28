@@ -4,7 +4,7 @@
 
 nodes:
   # ===== Utilities =====
-  
+
   SourceSpan:
     description: Source location information
     derives: ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
@@ -23,7 +23,7 @@ nodes:
         description: Ending column (1-based)
 
   # ===== Top-level =====
-  
+
   Module:
     description: Root AST node representing a complete source file
     derives: ["Debug", "Clone", "Default"]

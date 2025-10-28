@@ -53,6 +53,9 @@ pub enum TokenKind {
     Colon,
     Semicolon,
     Equal,
+    PlusEqual,
+    MinusEqual,
+    StarEqual,
     DoubleEqual,
     Bang,
     BangEqual,
@@ -307,7 +310,10 @@ impl<'a> Lexer<'a> {
                     let token = self.lex_minus_variants();
                     tokens.push(token);
                 }
-                '*' => tokens.push(self.simple_token(TokenKind::Star)),
+                '*' => {
+                    let token = self.lex_star_variants();
+                    tokens.push(token);
+                }
                 '/' => tokens.push(self.simple_token(TokenKind::Slash)),
                 '%' => tokens.push(self.simple_token(TokenKind::Percent)),
                 '|' => {
@@ -961,6 +967,14 @@ impl<'a> Lexer<'a> {
                 start_line,
                 start_column,
             )
+        } else if self.peek_char() == Some('=') {
+            self.advance_char();
+            Token::new(
+                TokenKind::PlusEqual,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
         } else {
             Token::new(
                 TokenKind::Plus,
@@ -993,9 +1007,41 @@ impl<'a> Lexer<'a> {
                 start_line,
                 start_column,
             )
+        } else if self.peek_char() == Some('=') {
+            self.advance_char();
+            Token::new(
+                TokenKind::MinusEqual,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
         } else {
             Token::new(
                 TokenKind::Minus,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
+        }
+    }
+
+    fn lex_star_variants(&mut self) -> Token {
+        let start_line = self.line;
+        let start_column = self.column;
+        let start = self.position;
+        self.advance_char(); // consume '*'
+
+        if self.peek_char() == Some('=') {
+            self.advance_char();
+            Token::new(
+                TokenKind::StarEqual,
+                self.slice(start, self.position).to_string(),
+                start_line,
+                start_column,
+            )
+        } else {
+            Token::new(
+                TokenKind::Star,
                 self.slice(start, self.position).to_string(),
                 start_line,
                 start_column,

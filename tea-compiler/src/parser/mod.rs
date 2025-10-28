@@ -23,7 +23,10 @@ enum Precedence {
 impl Precedence {
     fn of(kind: &TokenKind) -> Option<Self> {
         match kind {
-            TokenKind::Equal => Some(Precedence::Assignment),
+            TokenKind::Equal
+            | TokenKind::PlusEqual
+            | TokenKind::MinusEqual
+            | TokenKind::StarEqual => Some(Precedence::Assignment),
             TokenKind::QuestionQuestion => Some(Precedence::Coalesce),
             TokenKind::PipePipe => Some(Precedence::Or),
             TokenKind::AmpersandAmpersand => Some(Precedence::And),
@@ -2199,6 +2202,38 @@ impl<'a> Parser<'a> {
                     ExpressionKind::Assignment(AssignmentExpression {
                         target: Box::new(left),
                         value: Box::new(value),
+                    }),
+                ))
+            }
+            TokenKind::PlusEqual | TokenKind::MinusEqual | TokenKind::StarEqual => {
+                // Desugar compound assignments: x += y becomes x = x + y
+                let binary_op = match operator_token.kind {
+                    TokenKind::PlusEqual => BinaryOperator::Add,
+                    TokenKind::MinusEqual => BinaryOperator::Subtract,
+                    TokenKind::StarEqual => BinaryOperator::Multiply,
+                    _ => unreachable!(),
+                };
+
+                let right = self.parse_expression_prec(precedence, terminator)?;
+                let right_span = right.span.clone();
+
+                // Create binary expression: left op right
+                let binary_expr = Self::make_expression(
+                    Self::union_spans(&Self::union_spans(&left.span, &operator_span), &right_span),
+                    ExpressionKind::Binary(BinaryExpression {
+                        left: Box::new(left.clone()),
+                        operator: binary_op,
+                        right: Box::new(right),
+                    }),
+                );
+
+                // Create assignment: left = (left op right)
+                let span = Self::union_spans(&left.span, &binary_expr.span);
+                Ok(Self::make_expression(
+                    span,
+                    ExpressionKind::Assignment(AssignmentExpression {
+                        target: Box::new(left),
+                        value: Box::new(binary_expr),
                     }),
                 ))
             }

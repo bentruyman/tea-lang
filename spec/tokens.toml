@@ -59,6 +59,9 @@ is = { semantic = "operator", precedence = 6, associativity = "left" }
 
 # Assignment
 "=" = { semantic = "operator", precedence = 2, associativity = "right" }
+"+=" = { semantic = "operator", precedence = 2, associativity = "right" }
+"-=" = { semantic = "operator", precedence = 2, associativity = "right" }
+"*=" = { semantic = "operator", precedence = 2, associativity = "right" }
 
 # Function and lambda
 "->" = { semantic = "operator" }

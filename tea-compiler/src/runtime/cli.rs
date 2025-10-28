@@ -674,7 +674,7 @@ fn parse_command<'a>(
     }))
 }
 
-fn initialise_option_state(spec: &CommandSpec) -> Result<Vec<OptionParseState>> {
+fn initialise_option_state(spec: &CommandSpec) -> Result<Vec<OptionParseState<'_>>> {
     spec.options
         .iter()
         .map(|option| {

@@ -544,6 +544,22 @@ impl Vm {
                     }
                     self.stack.push(Value::Dict(Rc::new(entries)));
                 }
+                Instruction::DictKeys => {
+                    let dict_value = self.pop()?;
+                    match dict_value {
+                        Value::Dict(map) => {
+                            // Get keys in insertion order (HashMap iteration is deterministic in Rust)
+                            let keys: Vec<Value> =
+                                map.keys().map(|k| Value::String(k.clone())).collect();
+                            self.stack.push(Value::List(Rc::new(keys)));
+                        }
+                        _ => {
+                            bail!(VmError::Runtime(
+                                "DictKeys instruction requires a dict value".to_string()
+                            ));
+                        }
+                    }
+                }
                 Instruction::GetField => {
                     let field_value = self.pop()?;
                     let object_value = self.pop()?;
@@ -1297,7 +1313,7 @@ impl Vm {
                             Some(&key),
                             "variable not set",
                         ))
-                        .into())
+                        .into());
                     }
                 }
             }
@@ -1352,7 +1368,7 @@ impl Vm {
                         .stack
                         .push(Value::String(path.to_string_lossy().into_owned())),
                     Err(error) => {
-                        return Err(VmError::Runtime(env_error("cwd", None, error)).into())
+                        return Err(VmError::Runtime(env_error("cwd", None, error)).into());
                     }
                 }
             }
@@ -3179,7 +3195,7 @@ impl Vm {
                 return Err(VmError::Runtime(
                     "binary operation expects numeric operands".to_string(),
                 )
-                .into())
+                .into());
             }
         };
         self.stack.push(result);
@@ -3298,7 +3314,7 @@ impl Vm {
                 return Err(VmError::Runtime(
                     "comparison operation expects numeric operands".to_string(),
                 )
-                .into())
+                .into());
             }
         };
         self.stack.push(Value::Bool(result));
@@ -3418,7 +3434,7 @@ fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
         Value::Function(_) | Value::Closure(_) => {
             return Err(VmError::Runtime(
                 "json encode does not support functions or closures".to_string(),
-            ))
+            ));
         }
     })
 }

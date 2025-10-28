@@ -1223,7 +1223,54 @@ impl<'a> Parser<'a> {
         let span = Self::span_from_token(&for_token);
         self.advance(); // consume 'for'
 
-        let pattern = self.parse_expression_with(terminator_keyword_of)?;
+        // Parse the loop variable(s) - either `item` or `key, value`
+        let first_token = self.peek().clone();
+        let first_span = Self::span_from_token(&first_token);
+        let first_name = match &first_token.kind {
+            TokenKind::Identifier => {
+                self.advance();
+                first_token.lexeme
+            }
+            _ => {
+                self.diagnostics
+                    .push_error_with_span("expected identifier after 'for'", Some(first_span));
+                bail!("invalid for loop variable");
+            }
+        };
+
+        let pattern = if matches!(self.peek_kind(), TokenKind::Comma) {
+            self.advance(); // consume ','
+            let second_token = self.peek().clone();
+            let second_span = Self::span_from_token(&second_token);
+            let second_name = match &second_token.kind {
+                TokenKind::Identifier => {
+                    self.advance();
+                    second_token.lexeme
+                }
+                _ => {
+                    self.diagnostics.push_error_with_span(
+                        "expected second identifier after ',' in for loop",
+                        Some(second_span),
+                    );
+                    bail!("invalid for loop variable");
+                }
+            };
+            ForPattern::Pair(
+                Identifier {
+                    name: first_name,
+                    span: first_span,
+                },
+                Identifier {
+                    name: second_name,
+                    span: second_span,
+                },
+            )
+        } else {
+            ForPattern::Single(Identifier {
+                name: first_name,
+                span: first_span,
+            })
+        };
 
         self.expect_keyword(Keyword::Of, "expected 'of' in for loop")?;
         let iterator = self.parse_expression_with(default_expression_terminator)?;
@@ -2914,10 +2961,6 @@ fn terminator_comma_or_rbracket(kind: &TokenKind) -> bool {
 
 fn terminator_comma_or_rbrace(kind: &TokenKind) -> bool {
     matches!(kind, TokenKind::Comma | TokenKind::RBrace)
-}
-
-fn terminator_keyword_of(kind: &TokenKind) -> bool {
-    matches!(kind, TokenKind::Keyword(Keyword::Of))
 }
 
 fn terminator_rparen(kind: &TokenKind) -> bool {

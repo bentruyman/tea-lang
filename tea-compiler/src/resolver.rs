@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::{
     AssignmentExpression, BinaryExpression, Block, CallExpression, CatchArm, CatchHandler,
     CatchKind, ConditionalStatement, DictLiteral, EnumStatement, ErrorStatement, Expression,
-    ExpressionKind, FunctionParameter, FunctionStatement, Identifier, IndexExpression,
+    ExpressionKind, ForPattern, FunctionParameter, FunctionStatement, Identifier, IndexExpression,
     InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, LoopHeader, LoopKind,
     LoopStatement, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
     SourceSpan, Statement, StructStatement, TestStatement, ThrowStatement, TryExpression,
@@ -275,29 +275,41 @@ impl Resolver {
                     // Resolve the iterator expression first (in outer scope)
                     self.resolve_expression(iterator);
 
-                    // Extract identifier from pattern
-                    // For now, we only support simple identifier patterns
-                    if let ExpressionKind::Identifier(ident) = &pattern.kind {
-                        // Create a new scope for the loop body with the loop variable
-                        self.push_scope();
-                        self.declare_binding(
-                            &ident.name,
-                            ident.span,
-                            BindingKind::Variable,
-                            false, // Don't check shadowing for loop vars
-                        );
-                        // Mark the loop variable as used to avoid "unused variable" warnings
-                        // since it's implicitly used by the iteration
-                        self.mark_binding_used(&ident.name);
-                        self.resolve_block(&loop_stmt.body);
-                        self.pop_scope();
-                    } else {
-                        self.diagnostics.push_error_with_span(
-                            "for loop pattern must be a simple identifier",
-                            Some(pattern.span),
-                        );
-                        self.resolve_block(&loop_stmt.body);
+                    // Create a new scope for the loop body with the loop variable(s)
+                    self.push_scope();
+
+                    match pattern {
+                        ForPattern::Single(ident) => {
+                            self.declare_binding(
+                                &ident.name,
+                                ident.span,
+                                BindingKind::Variable,
+                                false, // Don't check shadowing for loop vars
+                            );
+                            // Mark the loop variable as used to avoid "unused variable" warnings
+                            // since it's implicitly used by the iteration
+                            self.mark_binding_used(&ident.name);
+                        }
+                        ForPattern::Pair(key_ident, value_ident) => {
+                            self.declare_binding(
+                                &key_ident.name,
+                                key_ident.span,
+                                BindingKind::Variable,
+                                false,
+                            );
+                            self.mark_binding_used(&key_ident.name);
+                            self.declare_binding(
+                                &value_ident.name,
+                                value_ident.span,
+                                BindingKind::Variable,
+                                false,
+                            );
+                            self.mark_binding_used(&value_ident.name);
+                        }
                     }
+
+                    self.resolve_block(&loop_stmt.body);
+                    self.pop_scope();
                 } else {
                     self.diagnostics.push_error_with_span(
                         "internal error: for loop without for header",

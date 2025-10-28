@@ -364,10 +364,19 @@ nodes:
     derives: ["Debug", "Clone"]
     variants:
       - For:
-          pattern: Expression
+          pattern: ForPattern
           iterator: Expression
       - Condition:
           type: Expression
+
+  ForPattern:
+    description: Pattern for for-loop iteration variable(s)
+    derives: ["Debug", "Clone"]
+    variants:
+      - Single:
+          type: Identifier
+      - Pair:
+          fields: [Identifier, Identifier]
 
   ThrowStatement:
     description: Error throw statement

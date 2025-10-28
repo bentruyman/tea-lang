@@ -672,8 +672,9 @@ impl ModuleExpander {
             }
             Statement::Loop(loop_stmt) => {
                 match &mut loop_stmt.header {
-                    LoopHeader::For { pattern, iterator } => {
-                        self.rewrite_expression_identifiers(pattern, rename_map);
+                    LoopHeader::For { iterator, .. } => {
+                        // Note: pattern is ForPattern (identifiers), not Expression
+                        // Loop variables are not rewritten - they're local bindings
                         self.rewrite_expression_identifiers(iterator, rename_map);
                     }
                     LoopHeader::Condition(expr) => {
@@ -890,8 +891,9 @@ impl ModuleExpander {
             }
             Statement::Loop(loop_stmt) => {
                 match &mut loop_stmt.header {
-                    LoopHeader::For { pattern, iterator } => {
-                        self.rewrite_expression_alias(pattern, alias_maps);
+                    LoopHeader::For { iterator, .. } => {
+                        // Note: pattern is ForPattern (identifiers), not Expression
+                        // Loop variables don't contain alias references
                         self.rewrite_expression_alias(iterator, alias_maps);
                     }
                     LoopHeader::Condition(expr) => {

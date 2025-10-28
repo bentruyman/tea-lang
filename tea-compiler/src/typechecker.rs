@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::{
     BinaryExpression, BinaryOperator, Block, CallArgument, CallExpression, CatchHandler, CatchKind,
     ConditionalKind, ConditionalStatement, DictLiteral, ErrorAnnotation, ErrorTypeSpecifier,
-    Expression, ExpressionKind, FunctionStatement, Identifier, IndexExpression,
+    Expression, ExpressionKind, ForPattern, FunctionStatement, Identifier, IndexExpression,
     InterpolatedStringPart, LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader,
     LoopKind, LoopStatement, MatchExpression, MatchPattern, MatchStatement, Module,
     ReturnStatement, SourceSpan, Statement, StructStatement, TestStatement, TryExpression,
@@ -1397,42 +1397,58 @@ impl TypeChecker {
                 // Infer the type of the iterator expression
                 let iterator_type = self.infer_expression(iterator);
 
-                // Ensure it's a List type
-                let element_type = match &iterator_type {
-                    Type::List(element_type) => element_type.as_ref().clone(),
-                    _ => {
-                        self.report_error(
-                            format!(
-                                "cannot iterate over type {}, expected List[T]",
-                                iterator_type.describe()
-                            ),
-                            Some(iterator.span),
-                        );
-                        Type::Unknown
+                // Create a new scope for the loop body
+                self.push_scope();
+
+                match pattern {
+                    ForPattern::Single(ident) => {
+                        // Single variable: iterate over list elements
+                        let element_type = match &iterator_type {
+                            Type::List(element_type) => element_type.as_ref().clone(),
+                            _ => {
+                                self.report_error(
+                                    format!(
+                                        "cannot iterate over type {}, expected List[T]",
+                                        iterator_type.describe()
+                                    ),
+                                    Some(iterator.span),
+                                );
+                                Type::Unknown
+                            }
+                        };
+
+                        // Bind the loop variable to the element type
+                        self.insert(ident.name.clone(), element_type.clone(), false);
+                        self.binding_types.insert(ident.span, element_type);
                     }
-                };
+                    ForPattern::Pair(key_ident, value_ident) => {
+                        // Two variables: iterate over dict entries
+                        let value_type = match &iterator_type {
+                            Type::Dict(v) => v.as_ref().clone(),
+                            _ => {
+                                self.report_error(
+                                    format!(
+                                        "cannot iterate with two variables over type {}, expected Dict[V]",
+                                        iterator_type.describe()
+                                    ),
+                                    Some(iterator.span),
+                                );
+                                Type::Unknown
+                            }
+                        };
 
-                // Extract the loop variable name from the pattern
-                // For now, we only support simple identifier patterns
-                if let ExpressionKind::Identifier(ident) = &pattern.kind {
-                    // Create a new scope for the loop body
-                    self.push_scope();
-
-                    // Bind the loop variable to the element type
-                    self.insert(ident.name.clone(), element_type.clone(), false);
-                    self.binding_types.insert(ident.span, element_type);
-
-                    // Check the loop body
-                    self.check_statements(&statement.body.statements);
-
-                    self.pop_scope();
-                } else {
-                    self.report_error(
-                        "for loop pattern must be a simple identifier",
-                        Some(pattern.span),
-                    );
-                    self.check_statements(&statement.body.statements);
+                        // Bind the key variable (always String) and value variable
+                        self.insert(key_ident.name.clone(), Type::String, false);
+                        self.binding_types.insert(key_ident.span, Type::String);
+                        self.insert(value_ident.name.clone(), value_type.clone(), false);
+                        self.binding_types.insert(value_ident.span, value_type);
+                    }
                 }
+
+                // Check the loop body
+                self.check_statements(&statement.body.statements);
+
+                self.pop_scope();
             }
         }
     }

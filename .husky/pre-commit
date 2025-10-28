@@ -11,5 +11,5 @@ fi
 
 git add .beads/issues.jsonl 2>/dev/null || true
 
-cargo fmt --all -- --check
-cargo run -p tea-cli -- fmt --check
+cargo fmt --all
+npx lint-staged

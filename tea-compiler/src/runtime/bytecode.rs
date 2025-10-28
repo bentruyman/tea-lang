@@ -116,6 +116,7 @@ pub enum Instruction {
     MakeList(usize),
     Index,
     MakeDict(usize),
+    DictKeys,
     GetField,
     MakeStructPositional(usize),
     MakeStructNamed(usize),
@@ -171,6 +172,7 @@ impl fmt::Display for Instruction {
             Instruction::MakeList(count) => write!(f, "MAKE_LIST {count}"),
             Instruction::Index => write!(f, "INDEX"),
             Instruction::MakeDict(count) => write!(f, "MAKE_DICT {count}"),
+            Instruction::DictKeys => write!(f, "DICT_KEYS"),
             Instruction::GetField => write!(f, "GET_FIELD"),
             Instruction::MakeStructPositional(index) => {
                 write!(f, "MAKE_STRUCT_POS {index}")

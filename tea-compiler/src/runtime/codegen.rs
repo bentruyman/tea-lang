@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, Block, CatchHandler, CatchKind, ConditionalKind,
-    ConditionalStatement, DictLiteral, Expression, ExpressionKind, FunctionParameter,
+    ConditionalStatement, DictLiteral, Expression, ExpressionKind, ForPattern, FunctionParameter,
     FunctionStatement, IndexExpression, InterpolatedStringExpression, InterpolatedStringPart,
     LambdaBody, LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement,
     MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module, ReturnStatement,
@@ -1570,111 +1570,242 @@ impl CodeGenerator {
                     return Err(CodegenError::Unsupported("for loop header").into());
                 };
 
-                // Extract the loop variable name from the pattern
-                let ExpressionKind::Identifier(loop_var) = &pattern.kind else {
-                    return Err(CodegenError::Unsupported("for loop pattern").into());
-                };
-
                 // Generate unique names for temporaries to support nested loops
                 let loop_id = self.temp_name_counter;
                 self.temp_name_counter += 1;
-                let list_name = format!("__for_list_{}", loop_id);
-                let counter_name = format!("__for_index_{}", loop_id);
 
                 // Determine if we're in global or local scope
                 let is_global = resolver.kind() == ResolverKind::Global;
 
-                // Compile the iterator expression (the list)
-                self.compile_expression(iterator, chunk, resolver)?;
+                match pattern {
+                    ForPattern::Single(loop_var) => {
+                        // Single variable: iterate over list elements
+                        let list_name = format!("__for_list_{}", loop_id);
+                        let counter_name = format!("__for_index_{}", loop_id);
 
-                // Store the list in a temporary variable (global or local)
-                let list_slot = if is_global {
-                    let idx = self.resolve_or_insert_global(&list_name);
-                    VarSlot::Global(idx).emit_set(chunk);
-                    VarSlot::Global(idx)
-                } else {
-                    let idx = resolver.declare_local(&list_name, true)?;
-                    VarSlot::Local(idx).emit_set(chunk);
-                    VarSlot::Local(idx)
-                };
+                        // Compile the iterator expression (the list)
+                        self.compile_expression(iterator, chunk, resolver)?;
 
-                // Initialize counter to 0
-                let zero_constant = chunk.add_constant(Value::Int(0));
-                chunk.emit(Instruction::Constant(zero_constant));
-                let counter_slot = if is_global {
-                    let idx = self.resolve_or_insert_global(&counter_name);
-                    VarSlot::Global(idx).emit_set(chunk);
-                    VarSlot::Global(idx)
-                } else {
-                    let idx = resolver.declare_local(&counter_name, false)?;
-                    VarSlot::Local(idx).emit_set(chunk);
-                    VarSlot::Local(idx)
-                };
+                        // Store the list in a temporary variable (global or local)
+                        let list_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&list_name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&list_name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
 
-                // Loop start: load counter and list length to compare
-                let loop_start = chunk.len();
+                        // Initialize counter to 0
+                        let zero_constant = chunk.add_constant(Value::Int(0));
+                        chunk.emit(Instruction::Constant(zero_constant));
+                        let counter_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&counter_name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&counter_name, false)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
 
-                // Load counter
-                counter_slot.emit_get(chunk);
+                        // Loop start: load counter and list length to compare
+                        let loop_start = chunk.len();
 
-                // Get list length using util.len builtin
-                list_slot.emit_get(chunk);
-                chunk.emit(Instruction::BuiltinCall {
-                    kind: StdFunctionKind::UtilLen,
-                    arg_count: 1,
-                });
+                        // Load counter
+                        counter_slot.emit_get(chunk);
 
-                // Check if counter < length
-                chunk.emit(Instruction::Less);
-                let exit_jump = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
+                        // Get list length using util.len builtin
+                        list_slot.emit_get(chunk);
+                        chunk.emit(Instruction::BuiltinCall {
+                            kind: StdFunctionKind::UtilLen,
+                            arg_count: 1,
+                        });
 
-                // Get list[counter]
-                list_slot.emit_get(chunk);
-                counter_slot.emit_get(chunk);
-                chunk.emit(Instruction::Index);
+                        // Check if counter < length
+                        chunk.emit(Instruction::Less);
+                        let exit_jump = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
 
-                // Bind to loop variable
-                let _item_slot = if is_global {
-                    let idx = self.resolve_or_insert_global(&loop_var.name);
-                    VarSlot::Global(idx).emit_set(chunk);
-                    VarSlot::Global(idx)
-                } else {
-                    let idx = resolver.declare_local(&loop_var.name, true)?;
-                    VarSlot::Local(idx).emit_set(chunk);
-                    VarSlot::Local(idx)
-                };
+                        // Get list[counter]
+                        list_slot.emit_get(chunk);
+                        counter_slot.emit_get(chunk);
+                        chunk.emit(Instruction::Index);
 
-                // Push loop context for break/continue
-                self.loop_stack.push(LoopContext {
-                    break_jumps: Vec::new(),
-                    continue_jumps: Vec::new(),
-                });
+                        // Bind to loop variable
+                        let _item_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&loop_var.name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&loop_var.name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
 
-                // Execute loop body
-                let _ = self.compile_block(&statement.body, chunk, resolver)?;
+                        // Push loop context for break/continue
+                        self.loop_stack.push(LoopContext {
+                            break_jumps: Vec::new(),
+                            continue_jumps: Vec::new(),
+                        });
 
-                // Patch continue jumps to jump here (before increment)
-                let loop_ctx = self.loop_stack.pop().unwrap();
-                for continue_jump in &loop_ctx.continue_jumps {
-                    self.patch_jump(chunk, *continue_jump)?;
-                }
+                        // Execute loop body
+                        let _ = self.compile_block(&statement.body, chunk, resolver)?;
 
-                // Increment counter: counter = counter + 1
-                counter_slot.emit_get(chunk);
-                let one_constant = chunk.add_constant(Value::Int(1));
-                chunk.emit(Instruction::Constant(one_constant));
-                chunk.emit(Instruction::Add);
-                counter_slot.emit_set(chunk);
+                        // Patch continue jumps to jump here (before increment)
+                        let loop_ctx = self.loop_stack.pop().unwrap();
+                        for continue_jump in &loop_ctx.continue_jumps {
+                            self.patch_jump(chunk, *continue_jump)?;
+                        }
 
-                // Jump back to loop start
-                chunk.emit(Instruction::Jump(loop_start));
+                        // Increment counter: counter = counter + 1
+                        counter_slot.emit_get(chunk);
+                        let one_constant = chunk.add_constant(Value::Int(1));
+                        chunk.emit(Instruction::Constant(one_constant));
+                        chunk.emit(Instruction::Add);
+                        counter_slot.emit_set(chunk);
 
-                // Patch exit jump
-                self.patch_jump(chunk, exit_jump)?;
+                        // Jump back to loop start
+                        chunk.emit(Instruction::Jump(loop_start));
 
-                // Patch all break jumps to jump here (after the loop)
-                for break_jump in loop_ctx.break_jumps {
-                    self.patch_jump(chunk, break_jump)?;
+                        // Patch exit jump
+                        self.patch_jump(chunk, exit_jump)?;
+
+                        // Patch all break jumps to jump here (after the loop)
+                        for break_jump in loop_ctx.break_jumps {
+                            self.patch_jump(chunk, break_jump)?;
+                        }
+                    }
+                    ForPattern::Pair(key_var, value_var) => {
+                        // Two variables: iterate over dict entries
+                        let dict_name = format!("__for_dict_{}", loop_id);
+                        let keys_name = format!("__for_keys_{}", loop_id);
+                        let counter_name = format!("__for_index_{}", loop_id);
+
+                        // Compile the iterator expression (the dict)
+                        self.compile_expression(iterator, chunk, resolver)?;
+
+                        // Store the dict in a temporary variable
+                        let dict_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&dict_name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&dict_name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
+
+                        // Get dict keys as a list
+                        dict_slot.emit_get(chunk);
+                        chunk.emit(Instruction::DictKeys);
+
+                        // Store the keys list in a temporary variable
+                        let keys_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&keys_name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&keys_name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
+
+                        // Initialize counter to 0
+                        let zero_constant = chunk.add_constant(Value::Int(0));
+                        chunk.emit(Instruction::Constant(zero_constant));
+                        let counter_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&counter_name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&counter_name, false)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
+
+                        // Loop start: load counter and keys length to compare
+                        let loop_start = chunk.len();
+
+                        // Load counter
+                        counter_slot.emit_get(chunk);
+
+                        // Get keys length using util.len builtin
+                        keys_slot.emit_get(chunk);
+                        chunk.emit(Instruction::BuiltinCall {
+                            kind: StdFunctionKind::UtilLen,
+                            arg_count: 1,
+                        });
+
+                        // Check if counter < length
+                        chunk.emit(Instruction::Less);
+                        let exit_jump = self.emit_jump(chunk, Instruction::JumpIfFalse(usize::MAX));
+
+                        // Get key = keys[counter]
+                        keys_slot.emit_get(chunk);
+                        counter_slot.emit_get(chunk);
+                        chunk.emit(Instruction::Index);
+
+                        // Bind to key variable
+                        let _key_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&key_var.name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&key_var.name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
+
+                        // Get value = dict[key]
+                        dict_slot.emit_get(chunk);
+                        _key_slot.emit_get(chunk);
+                        chunk.emit(Instruction::Index);
+
+                        // Bind to value variable
+                        let _value_slot = if is_global {
+                            let idx = self.resolve_or_insert_global(&value_var.name);
+                            VarSlot::Global(idx).emit_set(chunk);
+                            VarSlot::Global(idx)
+                        } else {
+                            let idx = resolver.declare_local(&value_var.name, true)?;
+                            VarSlot::Local(idx).emit_set(chunk);
+                            VarSlot::Local(idx)
+                        };
+
+                        // Push loop context for break/continue
+                        self.loop_stack.push(LoopContext {
+                            break_jumps: Vec::new(),
+                            continue_jumps: Vec::new(),
+                        });
+
+                        // Execute loop body
+                        let _ = self.compile_block(&statement.body, chunk, resolver)?;
+
+                        // Patch continue jumps to jump here (before increment)
+                        let loop_ctx = self.loop_stack.pop().unwrap();
+                        for continue_jump in &loop_ctx.continue_jumps {
+                            self.patch_jump(chunk, *continue_jump)?;
+                        }
+
+                        // Increment counter: counter = counter + 1
+                        counter_slot.emit_get(chunk);
+                        let one_constant = chunk.add_constant(Value::Int(1));
+                        chunk.emit(Instruction::Constant(one_constant));
+                        chunk.emit(Instruction::Add);
+                        counter_slot.emit_set(chunk);
+
+                        // Jump back to loop start
+                        chunk.emit(Instruction::Jump(loop_start));
+
+                        // Patch exit jump
+                        self.patch_jump(chunk, exit_jump)?;
+
+                        // Patch all break jumps to jump here (after the loop)
+                        for break_jump in loop_ctx.break_jumps {
+                            self.patch_jump(chunk, break_jump)?;
+                        }
+                    }
                 }
 
                 Ok(())

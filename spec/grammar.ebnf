@@ -104,7 +104,7 @@ if_statement = "if" expression block [ "else" block ] "end" ;
 
 unless_statement = "unless" expression block "end" ;
 
-for_statement = "for" identifier "of" expression block "end" ;
+for_statement = "for" ( identifier | identifier "," identifier ) "of" expression block "end" ;
 
 while_statement = "while" expression block "end" ;
 

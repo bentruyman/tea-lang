@@ -14,7 +14,7 @@ pub use crate::ast::{
     AssignmentExpression, BinaryExpression, BinaryOperator, Block, BreakStatement, CallExpression,
     CatchArm, CatchClause, CatchHandler, CatchKind, ConditionalKind, ConditionalStatement,
     ContinueStatement, DictEntry, DictLiteral, ErrorAnnotation, ErrorField, ErrorStatement,
-    ErrorTypeSpecifier, ErrorVariant, Expression, ExpressionKind, ExpressionStatement,
+    ErrorTypeSpecifier, ErrorVariant, Expression, ExpressionKind, ExpressionStatement, ForPattern,
     FunctionParameter, FunctionStatement, Identifier, IndexExpression,
     InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
     ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchArm, MatchArmBlock,

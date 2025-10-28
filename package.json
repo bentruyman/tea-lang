@@ -15,9 +15,6 @@
     "*.{js,ts,json,md,yml,yaml}": [
       "prettier --write"
     ],
-    "*.rs": [
-      "rustfmt"
-    ],
     "*.tea": [
       "cargo run -p tea-cli -- fmt"
     ]

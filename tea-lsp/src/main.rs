@@ -270,6 +270,61 @@ end
         let doc = symbol_docstring(team_symbol, &analysis);
         assert_eq!(doc.as_deref(), Some("A football team"));
     }
+
+    #[test]
+    fn loop_variables_have_type_information() {
+        let compilation = compile_source(
+            r#"
+use debug = "std.debug"
+
+def main() -> Void
+  var point = { x: 3, y: 4 }
+
+  for key, value of point
+    debug.print(key)
+    debug.print(value)
+  end
+
+  var numbers = [1, 2, 3]
+
+  for num of numbers
+    debug.print(num)
+  end
+end
+"#,
+        );
+
+        let analysis = collect_symbols(
+            &compilation.module,
+            &compilation.module_aliases,
+            &compilation.binding_types,
+            &compilation.argument_types,
+            &compilation.match_exhaustiveness,
+        );
+
+        // Check dict iteration variables
+        let key_symbol = analysis
+            .symbols
+            .iter()
+            .find(|symbol| symbol.name == "key" && symbol.kind == SymbolKind::Variable)
+            .expect("key variable to be present");
+        assert_eq!(key_symbol.type_desc.as_deref(), Some("String"));
+
+        let value_symbol = analysis
+            .symbols
+            .iter()
+            .find(|symbol| symbol.name == "value" && symbol.kind == SymbolKind::Variable)
+            .expect("value variable to be present");
+        assert_eq!(value_symbol.type_desc.as_deref(), Some("Int"));
+
+        // Check list iteration variable
+        let num_symbol = analysis
+            .symbols
+            .iter()
+            .find(|symbol| symbol.name == "num" && symbol.kind == SymbolKind::Variable)
+            .expect("num variable to be present");
+        assert_eq!(num_symbol.type_desc.as_deref(), Some("Int"));
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -902,8 +957,47 @@ fn collect_symbols(
                 Statement::Loop(loop_stmt) => {
                     match &loop_stmt.header {
                         tea_compiler::LoopHeader::For { pattern, iterator } => {
-                            self.visit_expression(pattern);
+                            // Visit iterator expression
                             self.visit_expression(iterator);
+
+                            // Extract and register loop variable(s) with their types
+                            match pattern {
+                                tea_compiler::ForPattern::Single(ident) => {
+                                    let range = range_from_span!(&ident.span);
+                                    let type_desc = self.binding_types.get(&ident.span).cloned();
+                                    self.symbols.push(SymbolInfo {
+                                        name: ident.name.clone(),
+                                        range,
+                                        kind: SymbolKind::Variable,
+                                        type_desc,
+                                        docstring: None,
+                                    });
+                                }
+                                tea_compiler::ForPattern::Pair(key_ident, value_ident) => {
+                                    // Register key variable
+                                    let key_range = range_from_span!(&key_ident.span);
+                                    let key_type = self.binding_types.get(&key_ident.span).cloned();
+                                    self.symbols.push(SymbolInfo {
+                                        name: key_ident.name.clone(),
+                                        range: key_range,
+                                        kind: SymbolKind::Variable,
+                                        type_desc: key_type,
+                                        docstring: None,
+                                    });
+
+                                    // Register value variable
+                                    let value_range = range_from_span!(&value_ident.span);
+                                    let value_type =
+                                        self.binding_types.get(&value_ident.span).cloned();
+                                    self.symbols.push(SymbolInfo {
+                                        name: value_ident.name.clone(),
+                                        range: value_range,
+                                        kind: SymbolKind::Variable,
+                                        type_desc: value_type,
+                                        docstring: None,
+                                    });
+                                }
+                            }
                         }
                         tea_compiler::LoopHeader::Condition(expr) => {
                             self.visit_expression(expr);

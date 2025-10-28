@@ -1,8 +1,8 @@
-# AST Migration to Generated Code
+# AST Migration Guide
 
 ## Overview
 
-The Tea compiler's AST (`tea-compiler/src/ast.rs`) has been migrated from manual maintenance to code generation from the `docs/ast.yaml` specification.
+The Tea compiler's AST (`tea-compiler/src/ast.rs`) has been migrated from manual maintenance to code generation from the `spec/ast.yaml` specification.
 
 ## What Changed
 
@@ -12,14 +12,14 @@ The Tea compiler's AST (`tea-compiler/src/ast.rs`) has been migrated from manual
 - No single source of truth for AST structure
 
 ### After
-- AST is **generated** from `docs/ast.yaml` by `scripts/codegen-ast.js`
+- AST is **generated** from `spec/ast.yaml` by `scripts/codegen-ast.js`
 - Changes are made to the YAML schema, then regenerated
 - Single source of truth ensures consistency across tools
 
 ## Generated File
 
 **File:** `tea-compiler/src/ast.rs`  
-**Source:** `docs/ast.yaml`  
+**Source:** `spec/ast.yaml`  
 **Generator:** `scripts/codegen-ast.js`
 
 The generated AST includes:
@@ -33,7 +33,7 @@ The generated AST includes:
 
 ### Adding a New Node Type
 
-1. Edit `docs/ast.yaml` and add the new node under `nodes:`
+1. Edit `spec/ast.yaml` and add the new node under `nodes:`
    ```yaml
    NewNode:
      description: Description of what this node represents
@@ -63,7 +63,7 @@ The generated AST includes:
 
 ### Modifying an Existing Node
 
-1. Edit the node definition in `docs/ast.yaml`
+1. Edit the node definition in `spec/ast.yaml`
 2. Regenerate: `npm run codegen:ast`
 3. Update parser/compiler code that uses the changed fields
 4. Test: `cargo test --workspace`
@@ -116,8 +116,8 @@ A build script (`tea-compiler/build.rs`) checks that `ast.rs` exists before comp
 
 ```
 ERROR: tea-compiler/src/ast.rs is missing!
-This file is generated from docs/ast.yaml.
-Please run: npm run codegen
+This file is generated from spec/ast.yaml.
+Please run: bun run codegen
 ```
 
 This prevents confusing compilation errors if you forget to generate the AST after cloning.
@@ -128,12 +128,12 @@ This prevents confusing compilation errors if you forget to generate the AST aft
 
 After cloning the repository:
 ```bash
-npm install
-npm run codegen  # or make codegen
+bun install
+bun run codegen  # or make codegen
 cargo build
 ```
 
-This ensures everyone generates the AST from the authoritative `docs/ast.yaml` source.
+This ensures everyone generates the AST from the authoritative `spec/ast.yaml` source.
 
 ## Validation
 

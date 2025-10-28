@@ -1,4 +1,4 @@
-# Tea LSP Installation & Editor Setup
+# LSP Setup
 
 The Tea language server (`tea-lsp`) provides IDE features such as hover docs, go-to definition, and diagnostics on top of the compiler pipeline. This guide explains how to build the binary, put it on your `PATH`, wire it into Neovim and VS Code, and debug common problems.
 

@@ -1,4 +1,4 @@
-# LLVM AOT Backend (Preview)
+# AOT Backend Architecture
 
 This document describes the ahead-of-time (AOT) code generation pipeline that lowers tea-lang programs to LLVM IR. The backend now ships in the default CLI build; expect ongoing iteration as we flesh out lowering, runtime integration, and packaging.
 
@@ -55,4 +55,4 @@ cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/bas
 - Add Criterion benchmarks to compare interpreter vs LLVM output once execution is wired up.
 - Improve diagnostics (include spans/labels) and surface linker hints for missing runtime symbols/toolchains.
 
-Track detailed milestones in `docs/aot-llvm-plan.md`; this document will evolve as the backend matures.
+Track detailed milestones in [docs/rfcs/aot-llvm-plan.md](../rfcs/aot-llvm-plan.md); this document will evolve as the backend matures.

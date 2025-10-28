@@ -1,4 +1,4 @@
-# LLVM AOT Integration Plan
+# LLVM AOT Backend Plan
 
 Target outcome: tea-lang programs compile Ahead-Of-Time to native binaries with performance comparable to Rust/Go, while preserving the current compiler pipeline for diagnostics and interpreter fallback. The first end-to-end slice now ships in the default CLI build; the bullets below track the remaining polish items.
 

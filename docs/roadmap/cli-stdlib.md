@@ -1,4 +1,4 @@
-# CLI Standard Library Roadmap
+# CLI & Standard Library Roadmap
 
 This roadmap captures how Tea's standard library will evolve to serve CLI-first
 workflows. It builds on the existing runtime-backed modules (`std.debug`,

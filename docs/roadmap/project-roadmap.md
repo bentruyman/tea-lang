@@ -1,4 +1,4 @@
-# Tea-Lang Roadmap
+# Project Roadmap
 
 This document tracks the near-term implementation plan for tea-lang. With the resolver/type checker in place and the first LLVM-backed `tea build` flow available behind a feature flag, the roadmap now focuses on closing remaining language gaps, rounding out the runtime, and hardening the new ahead-of-time pipeline.
 
@@ -53,7 +53,7 @@ This document tracks the near-term implementation plan for tea-lang. With the re
 - **Cross-Compilation**: surface `--target`/linker overrides in `tea build` and document required toolchains.  
 - **Performance Benchmarks**: wire up Criterion runs comparing VM vs LLVM output once the backend stabilises.  
 - **REPL**: stretch goal once the runtime + module system are stable.  
-- **Documentation**: keep `semantics.md`, `aot-backend.md`, and CLI help up to date with new capabilities; track CLI standard library milestones in `docs/cli-stdlib-roadmap.md`.
+- **Documentation**: keep language semantics, AOT backend architecture, and CLI help up to date with new capabilities; track CLI standard library milestones in the roadmap.
 
 ### Open Questions & Deferred Work
 - **Range Literals**: Clarify the intended runtime value for `start..end`/`start...end` (eager list, lazy iterator, or compile-time error) and queue the implementation or guardrail.

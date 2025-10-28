@@ -130,7 +130,7 @@ cargo run -p tea-cli -- --emit llvm-ir --no-run examples/language/basics/fib.tea
 cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/basics/fib.tea
 ```
 
-Both the VM and LLVM pipelines cover integers/floats (with Int→Float promotion), comparisons, control flow (`if`, `while`, `until`), recursion, `var` locals, list/dict literals, structs, lambda literals, and generic functions/structs (including those imported from modules). See [docs/aot-backend.md](docs/aot-backend.md) for the latest capabilities and limitations.
+Both the VM and LLVM pipelines cover integers/floats (with Int→Float promotion), comparisons, control flow (`if`, `while`, `until`), recursion, `var` locals, list/dict literals, structs, lambda literals, and generic functions/structs (including those imported from modules). See [docs/explanation/aot-backend.md](docs/explanation/aot-backend.md) for the latest capabilities and limitations.
 
 ### Packaging CLI Binaries
 
@@ -161,7 +161,7 @@ make codegen
 cargo build
 ```
 
-The project uses specification-driven code generation. See [docs/CODEGEN.md](docs/CODEGEN.md) for details on how language structure is defined in `docs/grammar.ebnf`, `docs/ast.yaml`, and `docs/tokens.toml` and automatically generates tree-sitter queries and AST code.
+The project uses specification-driven code generation. See [docs/explanation/compiler-codegen.md](docs/explanation/compiler-codegen.md) for details on how language structure is defined in `spec/grammar.ebnf`, `spec/ast.yaml`, and `spec/tokens.toml` and automatically generates tree-sitter queries and AST code.
 
 ### Language Capabilities
 
@@ -173,7 +173,7 @@ The project uses specification-driven code generation. See [docs/CODEGEN.md](doc
 - List literals and indexing (`var xs = [1, 2, 3]`; `xs[0]`)
 - Dictionary literals and member/index access (`var point = { x: 1 }`; `point.x` / `point["x"]`)
 - String literals and a builtin `print` function
-- CLI-focused helpers: `std.io` for streaming stdin/stdout, `std.fs` for globbing, directory walking, atomic writes, and metadata, `std.path` for join/normalize/relative utilities, `std.env` for reading/updating environment state and resolving common directories, `std.process` for spawning commands and capturing their output, plus `std.json` / `std.yaml` for encoding and decoding structured data (available in both the VM and LLVM backends). Upcoming modules for networking live in `docs/cli-stdlib-roadmap.md`.
+- CLI-focused helpers: `std.io` for streaming stdin/stdout, `std.fs` for globbing, directory walking, atomic writes, and metadata, `std.path` for join/normalize/relative utilities, `std.env` for reading/updating environment state and resolving common directories, `std.process` for spawning commands and capturing their output, plus `std.json` / `std.yaml` for encoding and decoding structured data (available in both the VM and LLVM backends). Upcoming modules for networking live in [docs/roadmap/cli-stdlib.md](docs/roadmap/cli-stdlib.md).
 - Type annotations on variables (`Bool`, `Int`, `Float`, `String`, `Nil`, `Void`) plus container/function forms (`List[Int]`, `Dict[String, Int]`, `Func(Int) -> Int`) and required parameter annotations in function definitions
 - Generic functions and structs that specialise automatically wherever they are called—even across modules brought in via `use`.
 
@@ -194,7 +194,8 @@ Additional language constructs (pattern matching, richer modules, native code ge
 
 ### Further Reading
 
-- [Code generation system](docs/CODEGEN.md)
-- [Tea LSP installation & editor setup](docs/tea-lsp-setup.md)
-- [LLVM backend architecture notes](docs/aot-backend.md)
-- [Type checker overview](docs/type-checking.md)
+- [Documentation Index](docs/README.md)
+- [Code generation system](docs/explanation/compiler-codegen.md)
+- [LSP installation & editor setup](docs/how-to/lsp-setup.md)
+- [AOT backend architecture](docs/explanation/aot-backend.md)
+- [Type system reference](docs/reference/language/type-system.md)

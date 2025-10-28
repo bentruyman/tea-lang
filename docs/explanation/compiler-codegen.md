@@ -1,16 +1,16 @@
-# Code Generation System
+# Compiler Code Generation
 
 Tea uses a specification-driven approach where language structure is defined in machine-readable formats and code is generated for different consumers (tree-sitter, compiler, LSP).
 
 ## Specification Files
 
-### `docs/grammar.ebnf`
+### `spec/grammar.ebnf`
 Canonical EBNF grammar defining Tea's syntax. This serves as:
 - Documentation for language syntax
 - Reference for implementing parsers
 - Basis for railroad diagrams and language tutorials
 
-### `docs/ast.yaml`
+### `spec/ast.yaml`
 Complete AST node schema matching `tea-compiler/src/ast.rs`. Includes:
 - All node types (statements, expressions, patterns)
 - Field names and types
@@ -19,7 +19,7 @@ Complete AST node schema matching `tea-compiler/src/ast.rs`. Includes:
 
 This is the single source of truth for AST structure.
 
-### `docs/tokens.toml`
+### `spec/tokens.toml`
 Token definitions including:
 - **Keywords** - with semantic types and contextual usage
 - **Operators** - with precedence and associativity
@@ -32,7 +32,7 @@ Token definitions including:
 ## Generated Files
 
 ### `tree-sitter-tea/queries/highlights.scm`
-Generated from `docs/tokens.toml` by `scripts/codegen-highlights.js`.
+Generated from `spec/tokens.toml` by `scripts/codegen-highlights.js`.
 
 Contains tree-sitter query patterns for syntax highlighting:
 - Safe keywords (in top-level array)
@@ -42,7 +42,7 @@ Contains tree-sitter query patterns for syntax highlighting:
 **Important:** This file handles the tree-sitter ABI 14 requirement for Neovim 0.11 compatibility.
 
 ### `tea-compiler/src/ast.rs`
-Generated from `docs/ast.yaml` by `scripts/codegen-ast.js`.
+Generated from `spec/ast.yaml` by `scripts/codegen-ast.js`.
 
 This is the **primary AST** used by the entire compiler, parser, typechecker, and runtime. It includes:
 - All statement and expression node types
@@ -50,7 +50,7 @@ This is the **primary AST** used by the entire compiler, parser, typechecker, an
 - Implementation methods for SourceSpan and Module
 - Complete derive macros for each type
 
-**Important:** This file is generated and should not be edited directly. All changes should be made to `docs/ast.yaml`.
+**Important:** This file is generated and should not be edited directly. All changes should be made to `spec/ast.yaml`.
 
 ## Running Code Generation
 
@@ -68,19 +68,19 @@ bun run codegen:ast
 ## Development Workflow
 
 1. **Adding a new keyword:**
-   - Add to `docs/tokens.toml` under `[keywords]`
+   - Add to `spec/tokens.toml` under `[keywords]`
    - Add to `[tree_sitter]` section (safe or contextual)
    - Run `bun run codegen:highlights`
    - Regenerate tree-sitter parser with ABI 14: `cd tree-sitter-tea && bunx tree-sitter generate --abi 14`
 
 2. **Adding a new AST node:**
-   - Add to `docs/ast.yaml` under `nodes`
+   - Add to `spec/ast.yaml` under `nodes`
    - Run `bun run codegen:ast`
    - Verify output in `tea-compiler/src/ast.rs` matches intended structure
    - Run `cargo test` to ensure no regressions
 
 3. **Updating grammar:**
-   - Update `docs/grammar.ebnf`
+   - Update `spec/grammar.ebnf`
    - Update tree-sitter grammar in `tree-sitter-tea/grammar.js`
    - Update parser in `tea-compiler/src/parser/`
    - Regenerate tree-sitter with `npx tree-sitter generate --abi 14`
@@ -118,8 +118,8 @@ Or use the install script: `cd tree-sitter-tea && ./install-nvim.sh`
 
 ## Future Enhancements
 
-- Generate LSP semantic token mappings from `docs/tokens.toml`
-- Generate railroad diagrams from `docs/grammar.ebnf`
-- Generate parser scaffolding from `docs/ast.yaml`
+- Generate LSP semantic token mappings from `spec/tokens.toml`
+- Generate railroad diagrams from `spec/grammar.ebnf`
+- Generate parser scaffolding from `spec/ast.yaml`
 - Add validation that generated `ast.rs` compiles before committing changes to `ast.yaml`
 - Generate visitor patterns and AST traversal helpers

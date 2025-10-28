@@ -1,4 +1,4 @@
-# Type Checking Plan
+# Type System
 
 Goal: make type annotations meaningful and catch obvious mismatches before bytecode generation.
 

@@ -1,4 +1,4 @@
-# tea-lang Semantics
+# Language Semantics
 
 This document captures the first working cut of tea-lang. It is the contract for the compiler, runtime, and standard library. Revisit and version it as the language evolves. The current prototype only implements the subset called out in **Prototype Scope**; other sections describe the intended design.
 

@@ -27,7 +27,10 @@ pub fn format_source(input: &str) -> String {
                 .map(|state| {
                     matches!(
                         state.kind,
-                        BlockKind::Function | BlockKind::Match | BlockKind::MatchCase
+                        BlockKind::Function
+                            | BlockKind::Match
+                            | BlockKind::MatchCase
+                            | BlockKind::Loop
                     ) && !state.saw_content
                 })
                 .unwrap_or(false);
@@ -65,6 +68,7 @@ pub fn format_source(input: &str) -> String {
         let is_function_line = is_function_header(code_trimmed);
         let is_test_line = is_test_header(code_trimmed);
         let is_conditional_line = is_conditional_header(code_trimmed);
+        let is_loop_line = is_loop_header(code_trimmed);
         let parent_has_content = block_stack
             .last()
             .map(|state| state.saw_content)
@@ -72,7 +76,7 @@ pub fn format_source(input: &str) -> String {
 
         let should_insert_blank_before = if is_function_line || is_test_line {
             true
-        } else if is_conditional_line {
+        } else if is_conditional_line || is_loop_line {
             parent_has_content
                 || (block_stack.is_empty() && saw_any_line && !last_significant_was_comment)
         } else {
@@ -164,6 +168,8 @@ pub fn format_source(input: &str) -> String {
                 kind
             } else if is_conditional_line {
                 BlockKind::Conditional
+            } else if is_loop_line {
+                BlockKind::Loop
             } else {
                 BlockKind::Other
             };
@@ -192,7 +198,11 @@ pub fn format_source(input: &str) -> String {
         if let Some(kind) = closed_block {
             if matches!(
                 kind,
-                BlockKind::Function | BlockKind::Conditional | BlockKind::Test | BlockKind::Match
+                BlockKind::Function
+                    | BlockKind::Conditional
+                    | BlockKind::Test
+                    | BlockKind::Match
+                    | BlockKind::Loop
             ) {
                 pending_blank_after_block = Some(kind);
             } else {
@@ -219,6 +229,7 @@ enum BlockKind {
     Test,
     Match,
     MatchCase,
+    Loop,
     Other,
 }
 
@@ -1639,6 +1650,12 @@ fn is_conditional_header(code: &str) -> bool {
     }
 
     false
+}
+
+fn is_loop_header(code: &str) -> bool {
+    line_starts_with_keyword(code, "for")
+        || line_starts_with_keyword(code, "while")
+        || line_starts_with_keyword(code, "until")
 }
 
 fn is_test_header(code: &str) -> bool {

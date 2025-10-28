@@ -136,6 +136,8 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::For) => self.parse_for_loop(),
             TokenKind::Keyword(Keyword::While) => self.parse_loop(LoopKind::While),
             TokenKind::Keyword(Keyword::Until) => self.parse_loop(LoopKind::Until),
+            TokenKind::Keyword(Keyword::Break) => self.parse_break(),
+            TokenKind::Keyword(Keyword::Continue) => self.parse_continue(),
             TokenKind::Keyword(Keyword::Return) => self.parse_return(),
             TokenKind::Keyword(Keyword::Match) => self.parse_match_statement(),
             TokenKind::Keyword(Keyword::Throw) => self.parse_throw(),
@@ -1277,6 +1279,22 @@ impl<'a> Parser<'a> {
             span,
             expression: Some(expression),
         }))
+    }
+
+    fn parse_break(&mut self) -> Result<Statement> {
+        let break_token = self.peek().clone();
+        let span = Self::span_from_token(&break_token);
+        self.advance(); // consume 'break'
+        self.expect_newline("expected newline after break")?;
+        Ok(Statement::Break(BreakStatement { span }))
+    }
+
+    fn parse_continue(&mut self) -> Result<Statement> {
+        let continue_token = self.peek().clone();
+        let span = Self::span_from_token(&continue_token);
+        self.advance(); // consume 'continue'
+        self.expect_newline("expected newline after continue")?;
+        Ok(Statement::Continue(ContinueStatement { span }))
     }
 
     fn parse_expression_statement(&mut self) -> Result<Statement> {

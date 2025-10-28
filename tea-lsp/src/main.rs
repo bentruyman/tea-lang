@@ -916,6 +916,9 @@ fn collect_symbols(
                         self.visit_expression(expr);
                     }
                 }
+                Statement::Break(_) | Statement::Continue(_) => {
+                    // No expressions to visit in break/continue
+                }
                 Statement::Throw(throw_stmt) => {
                     self.visit_expression(&throw_stmt.expression);
                 }

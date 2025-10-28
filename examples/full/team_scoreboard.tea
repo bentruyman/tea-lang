@@ -23,6 +23,7 @@ const teams = [
 debug.print("Team scoreboard")
 
 var index = 0
+
 while index < util.len(teams)
   debug.print(format_team(teams[index]))
   index = index + 1
@@ -61,6 +62,7 @@ debug.print(describe_margin(champion))
 
 def find_team(name: String) -> Team ! TeamError.NotFound
   var idx = 0
+
   while idx < util.len(teams)
     var candidate = teams[idx]
 

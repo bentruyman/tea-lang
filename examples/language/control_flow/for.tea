@@ -1,0 +1,67 @@
+use debug = "std.debug"
+
+# Expect: 1, 2, 3, 10, 20, Breaking at 3, 1, 2, Skipping 3, 4, 1, 2, 2, 4
+
+# Basic iteration
+def basic_iteration() -> Void
+  var numbers = [1, 2, 3]
+
+  for num of numbers
+    debug.print(num)
+  end
+end
+
+# Empty list
+def empty_list() -> Void
+  var empty = []
+
+  for item of empty
+    debug.print("should not print")
+  end
+end
+
+# With break
+def with_break() -> Void
+  var numbers = [10, 20, 30, 40]
+
+  for num of numbers
+    if num == 30
+      debug.print("Breaking at 3")
+      break
+    end
+
+    debug.print(num)
+  end
+end
+
+# With continue
+def with_continue() -> Void
+  var numbers = [1, 2, 3, 4]
+
+  for num of numbers
+    if num == 3
+      debug.print("Skipping 3")
+      continue
+    end
+
+    debug.print(num)
+  end
+end
+
+# Nested loops
+def nested_loops() -> Void
+  var outer = [1, 2]
+  var inner = [1, 2]
+
+  for i of outer
+    for j of inner
+      var product = i * j
+      debug.print(product)
+    end
+  end
+end
+
+basic_iteration()
+with_break()
+with_continue()
+nested_loops()

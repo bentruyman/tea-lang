@@ -120,6 +120,10 @@ impl Resolver {
             Statement::Error(error_stmt) => self.resolve_error(error_stmt),
             Statement::Conditional(cond_stmt) => self.resolve_conditional(cond_stmt),
             Statement::Loop(loop_stmt) => self.resolve_loop(loop_stmt),
+            Statement::Break(_) | Statement::Continue(_) => {
+                // Break and continue are valid loop control statements
+                // No resolution needed as they don't reference variables
+            }
             Statement::Throw(throw_stmt) => self.resolve_throw(throw_stmt),
             Statement::Return(ret_stmt) => self.resolve_return(ret_stmt),
             Statement::Match(match_stmt) => self.resolve_match_statement(match_stmt),
@@ -267,18 +271,47 @@ impl Resolver {
     fn resolve_loop(&mut self, loop_stmt: &LoopStatement) {
         match loop_stmt.kind {
             LoopKind::For => {
-                self.diagnostics.push_error_with_span(
-                    "for loops are not supported by the resolver yet",
-                    Some(loop_stmt.span),
-                );
+                if let LoopHeader::For { pattern, iterator } = &loop_stmt.header {
+                    // Resolve the iterator expression first (in outer scope)
+                    self.resolve_expression(iterator);
+
+                    // Extract identifier from pattern
+                    // For now, we only support simple identifier patterns
+                    if let ExpressionKind::Identifier(ident) = &pattern.kind {
+                        // Create a new scope for the loop body with the loop variable
+                        self.push_scope();
+                        self.declare_binding(
+                            &ident.name,
+                            ident.span,
+                            BindingKind::Variable,
+                            false, // Don't check shadowing for loop vars
+                        );
+                        // Mark the loop variable as used to avoid "unused variable" warnings
+                        // since it's implicitly used by the iteration
+                        self.mark_binding_used(&ident.name);
+                        self.resolve_block(&loop_stmt.body);
+                        self.pop_scope();
+                    } else {
+                        self.diagnostics.push_error_with_span(
+                            "for loop pattern must be a simple identifier",
+                            Some(pattern.span),
+                        );
+                        self.resolve_block(&loop_stmt.body);
+                    }
+                } else {
+                    self.diagnostics.push_error_with_span(
+                        "internal error: for loop without for header",
+                        Some(loop_stmt.span),
+                    );
+                }
             }
             LoopKind::While | LoopKind::Until => {
                 if let LoopHeader::Condition(condition) = &loop_stmt.header {
                     self.resolve_expression(condition);
                 }
+                self.resolve_block(&loop_stmt.body);
             }
         }
-        self.resolve_block(&loop_stmt.body);
     }
 
     fn resolve_return(&mut self, return_stmt: &ReturnStatement) {

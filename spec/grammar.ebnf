@@ -15,8 +15,11 @@ statement = use_statement
           | error_definition
           | if_statement
           | unless_statement
+          | for_statement
           | while_statement
           | until_statement
+          | break_statement
+          | continue_statement
           | test_block
           | match_statement
           | throw_statement
@@ -101,9 +104,15 @@ if_statement = "if" expression block [ "else" block ] "end" ;
 
 unless_statement = "unless" expression block "end" ;
 
+for_statement = "for" identifier "of" expression block "end" ;
+
 while_statement = "while" expression block "end" ;
 
 until_statement = "until" expression block "end" ;
+
+break_statement = "break" ;
+
+continue_statement = "continue" ;
 
 match_statement = "match" expression { match_case_block } "end" ;
 

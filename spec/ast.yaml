@@ -58,6 +58,10 @@ nodes:
           type: ConditionalStatement
       - Loop:
           type: LoopStatement
+      - Break:
+          type: BreakStatement
+      - Continue:
+          type: ContinueStatement
       - Throw:
           type: ThrowStatement
       - Return:
@@ -405,6 +409,20 @@ nodes:
         type: SourceSpan
       expression:
         type: Option<Expression>
+
+  BreakStatement:
+    description: Break out of loop
+    derives: ["Debug", "Clone"]
+    fields:
+      span:
+        type: SourceSpan
+
+  ContinueStatement:
+    description: Continue to next loop iteration
+    derives: ["Debug", "Clone"]
+    fields:
+      span:
+        type: SourceSpan
 
   ExpressionStatement:
     description: Statement consisting of a single expression

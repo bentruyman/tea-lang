@@ -11,16 +11,17 @@ mod stdlib;
 mod typechecker;
 
 pub use crate::ast::{
-    AssignmentExpression, BinaryExpression, BinaryOperator, Block, CallExpression, CatchArm,
-    CatchClause, CatchHandler, CatchKind, ConditionalKind, ConditionalStatement, DictEntry,
-    DictLiteral, ErrorAnnotation, ErrorField, ErrorStatement, ErrorTypeSpecifier, ErrorVariant,
-    Expression, ExpressionKind, ExpressionStatement, FunctionParameter, FunctionStatement,
-    Identifier, IndexExpression, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
-    LambdaExpression, ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchArm,
-    MatchArmBlock, MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module,
-    RangeExpression, ReturnStatement, SourceSpan, Statement, StructField, StructStatement,
-    ThrowStatement, TryExpression, TypeExpression, UnaryExpression, UnaryOperator, UseStatement,
-    VarBinding, VarStatement,
+    AssignmentExpression, BinaryExpression, BinaryOperator, Block, BreakStatement, CallExpression,
+    CatchArm, CatchClause, CatchHandler, CatchKind, ConditionalKind, ConditionalStatement,
+    ContinueStatement, DictEntry, DictLiteral, ErrorAnnotation, ErrorField, ErrorStatement,
+    ErrorTypeSpecifier, ErrorVariant, Expression, ExpressionKind, ExpressionStatement,
+    FunctionParameter, FunctionStatement, Identifier, IndexExpression,
+    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression,
+    ListLiteral, Literal, LoopHeader, LoopKind, LoopStatement, MatchArm, MatchArmBlock,
+    MatchExpression, MatchPattern, MatchStatement, MemberExpression, Module, RangeExpression,
+    ReturnStatement, SourceSpan, Statement, StructField, StructStatement, ThrowStatement,
+    TryExpression, TypeExpression, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
+    VarStatement,
 };
 pub use crate::compiler::{Compilation, CompileOptions, Compiler};
 pub use crate::diagnostics::{Diagnostic, DiagnosticLevel, Diagnostics};

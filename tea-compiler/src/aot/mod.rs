@@ -2031,6 +2031,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_throw(throw_stmt, function, locals, return_type)?;
                 Ok(true)
             }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // TODO: Implement break/continue for AOT compiler
+                Err(anyhow!(
+                    "break/continue not yet supported in AOT compilation"
+                ))
+            }
         }
     }
 

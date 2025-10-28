@@ -45,8 +45,11 @@ module.exports = grammar({
       $.error_definition,
       $.if_statement,
       $.unless_statement,
+      $.for_statement,
       $.while_statement,
       $.until_statement,
+      $.break_statement,
+      $.continue_statement,
       $.test_block,
       $.match_statement,
       $.throw_statement,
@@ -225,6 +228,15 @@ module.exports = grammar({
       "end"
     ),
 
+    for_statement: $ => seq(
+      "for",
+      field("pattern", $.identifier),
+      "of",
+      field("iterator", $._expression),
+      field("body", $.block),
+      "end"
+    ),
+
     while_statement: $ => seq(
       "while",
       field("condition", $._expression),
@@ -238,6 +250,10 @@ module.exports = grammar({
       field("body", $.block),
       "end"
     ),
+
+    break_statement: $ => "break",
+
+    continue_statement: $ => "continue",
 
     match_statement: $ => seq(
       "match",

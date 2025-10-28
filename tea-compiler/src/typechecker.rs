@@ -1155,6 +1155,10 @@ impl TypeChecker {
             }
             Statement::Conditional(cond) => self.check_conditional(cond),
             Statement::Loop(loop_stmt) => self.check_loop(loop_stmt),
+            Statement::Break(_) | Statement::Continue(_) => {
+                // Break and continue are checked in the context of loops
+                // No additional type checking needed here
+            }
             Statement::Return(ret) => self.check_return(ret),
             Statement::Function(func) => self.check_function(func),
             Statement::Test(test_stmt) => self.check_test(test_stmt),
@@ -1351,15 +1355,58 @@ impl TypeChecker {
                     "loop condition",
                     Some(condition.span),
                 );
+                self.check_statements(&statement.body.statements);
             }
             LoopKind::For => {
-                self.report_error(
-                    "for loops are not supported by the type checker yet",
-                    Some(statement.span),
-                );
+                let LoopHeader::For { pattern, iterator } = &statement.header else {
+                    self.report_error(
+                        "internal error: for loop without for header",
+                        Some(statement.span),
+                    );
+                    return;
+                };
+
+                // Infer the type of the iterator expression
+                let iterator_type = self.infer_expression(iterator);
+
+                // Ensure it's a List type
+                let element_type = match &iterator_type {
+                    Type::List(element_type) => element_type.as_ref().clone(),
+                    _ => {
+                        self.report_error(
+                            format!(
+                                "cannot iterate over type {}, expected List[T]",
+                                iterator_type.describe()
+                            ),
+                            Some(iterator.span),
+                        );
+                        Type::Unknown
+                    }
+                };
+
+                // Extract the loop variable name from the pattern
+                // For now, we only support simple identifier patterns
+                if let ExpressionKind::Identifier(ident) = &pattern.kind {
+                    // Create a new scope for the loop body
+                    self.push_scope();
+
+                    // Bind the loop variable to the element type
+                    self.insert(ident.name.clone(), element_type.clone(), false);
+                    self.binding_types.insert(ident.span, element_type);
+
+                    // Check the loop body
+                    self.check_statements(&statement.body.statements);
+
+                    self.pop_scope();
+                } else {
+                    self.report_error(
+                        "for loop pattern must be a simple identifier",
+                        Some(pattern.span),
+                    );
+                    self.check_statements(&statement.body.statements);
+                }
             }
         }
-        self.check_statements(&statement.body.statements);
     }
 
     fn check_match_statement(&mut self, statement: &MatchStatement) {

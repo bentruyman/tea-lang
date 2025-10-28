@@ -687,6 +687,9 @@ impl ModuleExpander {
                     self.rewrite_expression_identifiers(expression, rename_map);
                 }
             }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No identifiers to rewrite
+            }
             Statement::Throw(throw_stmt) => {
                 self.rewrite_expression_identifiers(&mut throw_stmt.expression, rename_map);
             }
@@ -901,6 +904,9 @@ impl ModuleExpander {
                 if let Some(expression) = &mut ret_stmt.expression {
                     self.rewrite_expression_alias(expression, alias_maps);
                 }
+            }
+            Statement::Break(_) | Statement::Continue(_) => {
+                // No aliases to rewrite
             }
             Statement::Throw(throw_stmt) => {
                 self.rewrite_expression_alias(&mut throw_stmt.expression, alias_maps);

@@ -815,11 +815,36 @@ impl CodeGenerator {
             }
             ExpressionKind::Unary(unary) => self.compile_unary(unary, chunk, resolver),
             ExpressionKind::Assignment(assignment) => {
-                if let ExpressionKind::Identifier(identifier) = &assignment.target.kind {
-                    self.compile_expression(&assignment.value, chunk, resolver)?;
-                    resolver.store(self, chunk, &identifier.name)
-                } else {
-                    Err(CodegenError::Unsupported("complex assignment targets").into())
+                match &assignment.target.kind {
+                    ExpressionKind::Identifier(identifier) => {
+                        self.compile_expression(&assignment.value, chunk, resolver)?;
+                        resolver.store(self, chunk, &identifier.name)
+                    }
+                    ExpressionKind::Index(index_expr) => {
+                        // For dict[key] = value or list[index] = value
+                        // We need to: load collection, push index, push value, SetIndex, store back
+
+                        // Get the base identifier (e.g., 'result' in result[key])
+                        if let ExpressionKind::Identifier(identifier) = &index_expr.object.kind {
+                            // Load the collection
+                            resolver.load(self, chunk, &identifier.name)?;
+                            // Push the index
+                            self.compile_expression(&index_expr.index, chunk, resolver)?;
+                            // Push the new value
+                            self.compile_expression(&assignment.value, chunk, resolver)?;
+                            // SetIndex creates a new collection with updated value
+                            chunk.emit(Instruction::SetIndex);
+                            // Store the new collection back
+                            resolver.store(self, chunk, &identifier.name)?;
+                            Ok(())
+                        } else {
+                            Err(CodegenError::Unsupported(
+                                "indexed assignment only supports simple identifiers as base",
+                            )
+                            .into())
+                        }
+                    }
+                    _ => Err(CodegenError::Unsupported("complex assignment targets").into()),
                 }
             }
             ExpressionKind::Call(call) => self.compile_call(call, expression.span, chunk, resolver),

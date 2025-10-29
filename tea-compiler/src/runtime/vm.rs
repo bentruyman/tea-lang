@@ -544,6 +544,43 @@ impl Vm {
                         }
                     }
                 }
+                Instruction::SetIndex => {
+                    let new_value = self.pop()?;
+                    let index_value = self.pop()?;
+                    let collection = self.pop()?;
+                    match (collection, index_value) {
+                        (Value::List(list), Value::Int(index)) => {
+                            if index < 0 {
+                                bail!(VmError::Runtime("negative index".to_string()));
+                            }
+                            let idx = index as usize;
+                            let mut new_list = (*list).clone();
+                            if idx >= new_list.len() {
+                                bail!(VmError::Runtime("index out of bounds".to_string()));
+                            }
+                            new_list[idx] = new_value;
+                            self.stack.push(Value::List(Rc::new(new_list)));
+                        }
+                        (Value::Dict(map), Value::String(key)) => {
+                            let mut new_map = (*map).clone();
+                            new_map.insert(key, new_value);
+                            self.stack.push(Value::Dict(Rc::new(new_map)));
+                        }
+                        (Value::List(_), _) => {
+                            bail!(VmError::Runtime("list index must be an Int".to_string()));
+                        }
+                        (Value::Dict(_), _) => {
+                            bail!(VmError::Runtime(
+                                "dictionary index must be a String".to_string()
+                            ));
+                        }
+                        _ => {
+                            bail!(VmError::Runtime(
+                                "indexed assignment requires a list or dictionary".to_string()
+                            ));
+                        }
+                    }
+                }
                 Instruction::MakeDict(count) => {
                     if self.stack.len() < count * 2 {
                         bail!(VmError::Runtime(

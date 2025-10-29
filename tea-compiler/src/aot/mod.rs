@@ -2832,7 +2832,126 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     Err(self.undefined_identifier_error(&identifier.name, assignment.target.span))
                 }
             }
-            _ => bail!("only identifier assignment supported"),
+            ExpressionKind::Index(index_expr) => {
+                // Handle indexed assignment: dict[key] = value or list[index] = value
+                if let ExpressionKind::Identifier(identifier) = &index_expr.object.kind {
+                    self.compile_indexed_assignment(
+                        &identifier.name,
+                        &index_expr.index,
+                        &assignment.value,
+                        function,
+                        locals,
+                    )
+                } else {
+                    bail!("indexed assignment only supports simple identifiers as base")
+                }
+            }
+            _ => bail!("only identifier and indexed assignment supported"),
+        }
+    }
+
+    fn compile_indexed_assignment(
+        &mut self,
+        base_name: &str,
+        index: &Expression,
+        value: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Load the current collection (dict or list)
+        let (collection_ptr, collection_ty, is_local, _is_mutable) =
+            if let Some(variable) = locals.get(base_name) {
+                if !variable.mutable {
+                    bail!("cannot mutate const '{}'", base_name);
+                }
+                let pointer = variable.pointer.ok_or_else(|| {
+                    anyhow!("Cannot assign to immutable parameter '{}'", base_name)
+                })?;
+                (pointer, variable.ty.clone(), true, true)
+            } else if let Some(slot) = self.global_slots.get(base_name).cloned() {
+                if !slot.mutable {
+                    bail!("cannot mutate const '{}'", base_name);
+                }
+                (
+                    slot.pointer.as_pointer_value(),
+                    slot.ty.clone(),
+                    false,
+                    true,
+                )
+            } else {
+                bail!("undefined variable '{}'", base_name);
+            };
+
+        // Load the collection from memory
+        let loaded = self.load_from_pointer(collection_ptr, &collection_ty, base_name)?;
+
+        match loaded {
+            ExprValue::Dict {
+                pointer,
+                value_type: _,
+            } => {
+                // Compile the key expression
+                let key_expr = self.compile_expression(index, function, locals)?;
+                let key_ptr = match key_expr {
+                    ExprValue::String(ptr) => ptr,
+                    _ => bail!("dictionary index expects a String key"),
+                };
+
+                // Compile the new value
+                let new_value = self.compile_expression(value, function, locals)?;
+
+                // Call tea_dict_set to mutate the dictionary in place
+                let dict_set = self.ensure_dict_set();
+                let tea_value = self.expr_to_tea_value(new_value)?;
+                self.call_function(
+                    dict_set,
+                    &[pointer.into(), key_ptr.into(), tea_value.into()],
+                    "dict_set",
+                )?;
+
+                Ok(ExprValue::Void)
+            }
+            ExprValue::List {
+                pointer,
+                element_type,
+            } => {
+                // Compile the index expression
+                let index_expr = self.compile_expression(index, function, locals)?;
+                let index_value = index_expr.into_int()?;
+
+                // Compile the new value
+                let new_value = self.compile_expression(value, function, locals)?;
+
+                // Call list_set which returns a new list
+                let list_set = self.ensure_list_set();
+                let tea_value = self.expr_to_tea_value(new_value)?;
+                let new_list_ptr = self
+                    .call_function(
+                        list_set,
+                        &[pointer.into(), index_value.into(), tea_value.into()],
+                        "list_set",
+                    )?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected list pointer"))?
+                    .into_pointer_value();
+
+                // Store the new list back
+                let new_list = ExprValue::List {
+                    pointer: new_list_ptr,
+                    element_type,
+                };
+                self.store_expr_in_pointer(collection_ptr, &collection_ty, new_list, base_name)?;
+
+                if !is_local {
+                    if let Some(slot_mut) = self.global_slots.get_mut(base_name) {
+                        slot_mut.initialized = true;
+                    }
+                }
+
+                Ok(ExprValue::Void)
+            }
+            _ => bail!("indexed assignment requires a list or dictionary"),
         }
     }
 

@@ -494,7 +494,19 @@ impl Resolver {
         }
         match &assignment.target.kind {
             ExpressionKind::Identifier(_) => {}
-            ExpressionKind::Member(_) | ExpressionKind::Index(_) => {
+            ExpressionKind::Index(_) => {
+                // Allow indexed assignment (e.g., dict[key] = value, list[index] = value)
+                if let Some(name) = Self::root_identifier_name(&assignment.target) {
+                    if matches!(self.binding_kind(name), Some(BindingKind::Const)) {
+                        self.diagnostics.push_error_with_span(
+                            format!("cannot mutate const '{name}'"),
+                            Some(assignment.target.span),
+                        );
+                    }
+                }
+            }
+            ExpressionKind::Member(_) => {
+                // Member assignment (e.g., obj.field = value) not yet supported
                 if let Some(name) = Self::root_identifier_name(&assignment.target) {
                     if matches!(self.binding_kind(name), Some(BindingKind::Const)) {
                         self.diagnostics.push_error_with_span(
@@ -503,15 +515,13 @@ impl Resolver {
                         );
                     } else {
                         self.diagnostics.push_error_with_span(
-                            "assignment targets other than simple identifiers are not supported yet"
-                                .to_string(),
+                            "member assignment is not supported yet".to_string(),
                             Some(assignment.target.span),
                         );
                     }
                 } else {
                     self.diagnostics.push_error_with_span(
-                        "assignment targets other than simple identifiers are not supported yet"
-                            .to_string(),
+                        "member assignment is not supported yet".to_string(),
                         Some(assignment.target.span),
                     );
                 }

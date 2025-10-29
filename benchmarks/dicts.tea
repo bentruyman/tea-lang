@@ -4,11 +4,11 @@
 use debug = "std.debug"
 
 def build_dict(n: Int) -> Dict[String, Int]
-  var result = {}
+  var result = { "_": 0 }
   var i = 0
 
   while i < n
-    result[`key_{i}`] = i
+    result[`key_${i}`] = i
     i = i + 1
   end
 
@@ -20,7 +20,7 @@ def lookup_dict(dict: Dict[String, Int], count: Int) -> Int
   var i = 0
 
   while i < count
-    const key = `key_{i}`
+    const key = `key_${i}`
     total = total + dict[key]
     i = i + 1
   end

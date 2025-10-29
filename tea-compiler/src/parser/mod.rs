@@ -1485,6 +1485,7 @@ impl<'a> Parser<'a> {
                 token_span,
                 ExpressionKind::Literal(Literal::Nil),
             )),
+            TokenKind::Keyword(Keyword::Def) => self.parse_anonymous_function(token_span),
             TokenKind::Keyword(Keyword::Match) => self.parse_match_expression(token_span),
             TokenKind::Keyword(Keyword::If) => self.parse_if_expression(token_span, terminator),
             TokenKind::Keyword(Keyword::Try) => {
@@ -2210,6 +2211,109 @@ impl<'a> Parser<'a> {
                 body,
             }),
         ))
+    }
+
+    fn parse_anonymous_function(&mut self, start_span: SourceSpan) -> Result<Expression> {
+        // Parse parameter list: def(x: Int, y: Int)
+        self.expect_token(TokenKind::LParen, "expected '(' after 'def'")?;
+        let mut parameters = Vec::new();
+
+        loop {
+            self.skip_newlines();
+            if matches!(self.peek_kind(), TokenKind::RParen) {
+                self.advance();
+                break;
+            }
+
+            let name_token = self.advance().clone();
+            let span = Self::span_from_token(&name_token);
+
+            if !matches!(name_token.kind, TokenKind::Identifier) {
+                self.diagnostics.push_error_with_span(
+                    format!("expected parameter name, found {:?}", name_token.kind),
+                    Some(span),
+                );
+                bail!("invalid parameter name");
+            }
+
+            let name = name_token.lexeme;
+
+            // Parse type annotation (required)
+            let type_annotation = if matches!(self.peek_kind(), TokenKind::Colon) {
+                self.advance();
+                let tokens = self.collect_type_tokens();
+                Some(TypeExpression { tokens })
+            } else {
+                self.diagnostics.push_error_with_span(
+                    "anonymous function parameters must have type annotations",
+                    Some(span),
+                );
+                bail!("missing type annotation on parameter");
+            };
+
+            parameters.push(FunctionParameter {
+                name,
+                span,
+                type_annotation,
+                default_value: None,
+            });
+
+            match self.peek_kind() {
+                TokenKind::Comma => {
+                    self.advance();
+                }
+                TokenKind::RParen => {
+                    self.advance();
+                    break;
+                }
+                other => {
+                    let span = Self::span_from_token(&self.peek().clone());
+                    self.diagnostics.push_error_with_span(
+                        format!("expected ',' or ')' in parameter list, found {:?}", other),
+                        Some(span),
+                    );
+                    bail!("invalid parameter separator");
+                }
+            }
+        }
+
+        // Parse optional return type annotation
+        if matches!(self.peek_kind(), TokenKind::Arrow) {
+            self.advance();
+            // Skip the return type tokens (we don't store them on lambdas)
+            self.collect_type_tokens();
+        }
+
+        self.skip_newlines();
+
+        // Parse function body (must be a block ending with 'end')
+        let mut statements = Vec::new();
+        loop {
+            self.skip_newlines();
+            if matches!(self.peek_kind(), TokenKind::Keyword(Keyword::End)) {
+                let end_token = self.advance().clone();
+                let body_span = Self::span_from_token(&end_token);
+                let span = Self::union_spans(&start_span, &body_span);
+                let id = self.allocate_lambda_id();
+
+                return Ok(Self::make_expression(
+                    span,
+                    ExpressionKind::Lambda(LambdaExpression {
+                        id,
+                        parameters,
+                        body: LambdaBody::Block(Block { statements }),
+                    }),
+                ));
+            }
+            if self.is_at_end() {
+                self.diagnostics.push_error_with_span(
+                    "unterminated anonymous function, expected 'end'",
+                    Some(start_span),
+                );
+                bail!("unterminated anonymous function");
+            }
+            statements.push(self.parse_statement()?);
+        }
     }
 
     fn parse_braced_block(&mut self) -> Result<(Block, SourceSpan)> {

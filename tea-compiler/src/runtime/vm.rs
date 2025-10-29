@@ -361,10 +361,33 @@ impl Vm {
                     }
                     self.stack.push(value);
                 }
-                Instruction::Add => self.perform_numeric_binary(
-                    |a, b| Ok(Value::Int(a + b)),
-                    |a, b| Ok(Value::Float(a + b)),
-                )?,
+                Instruction::Add => {
+                    let right = self.pop()?;
+                    let left = self.pop()?;
+
+                    // Handle string concatenation
+                    if let (Value::String(a), Value::String(b)) = (&left, &right) {
+                        let mut result = String::with_capacity(a.len() + b.len());
+                        result.push_str(a);
+                        result.push_str(b);
+                        self.stack.push(Value::String(result));
+                    } else {
+                        // Handle numeric addition
+                        let result = match (left, right) {
+                            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+                            (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+                            (Value::Int(a), Value::Float(b)) => Value::Float(a as f64 + b),
+                            (Value::Float(a), Value::Int(b)) => Value::Float(a + b as f64),
+                            _ => {
+                                return Err(VmError::Runtime(
+                                    "addition requires numeric or string operands".to_string(),
+                                )
+                                .into());
+                            }
+                        };
+                        self.stack.push(result);
+                    }
+                }
                 Instruction::Subtract => self.perform_numeric_binary(
                     |a, b| Ok(Value::Int(a - b)),
                     |a, b| Ok(Value::Float(a - b)),

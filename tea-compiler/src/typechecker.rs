@@ -3744,8 +3744,43 @@ impl TypeChecker {
         let left = self.infer_expression(&binary.left);
         let right = self.infer_expression(&binary.right);
         match binary.operator {
-            BinaryOperator::Add
-            | BinaryOperator::Subtract
+            BinaryOperator::Add => {
+                // Handle string concatenation
+                if matches!(left, Type::String) && matches!(right, Type::String) {
+                    return Type::String;
+                }
+
+                // Handle numeric addition
+                if left != Type::Unknown && !left.is_numeric() {
+                    self.report_error(
+                        format!(
+                            "addition requires numeric or string operands, found {}",
+                            left.describe()
+                        ),
+                        Some(binary.left.span),
+                    );
+                }
+                if right != Type::Unknown && !right.is_numeric() {
+                    self.report_error(
+                        format!(
+                            "addition requires numeric or string operands, found {}",
+                            right.describe()
+                        ),
+                        Some(binary.right.span),
+                    );
+                }
+
+                if left.is_numeric() && right.is_numeric() {
+                    if matches!(left, Type::Float) || matches!(right, Type::Float) {
+                        Type::Float
+                    } else {
+                        Type::Int
+                    }
+                } else {
+                    Type::Unknown
+                }
+            }
+            BinaryOperator::Subtract
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
             | BinaryOperator::Modulo => {

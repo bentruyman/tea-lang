@@ -7481,7 +7481,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     self.builder.build_float_add(lhs, rhs, "faddtmp"),
                 )?))
             }
-            _ => bail!("add expects numeric operands"),
+            (ExprValue::String(lhs), ExprValue::String(rhs)) => {
+                let result = self.concat_string_values(lhs, rhs)?;
+                Ok(ExprValue::String(result))
+            }
+            _ => bail!("add expects numeric or string operands"),
         }
     }
 

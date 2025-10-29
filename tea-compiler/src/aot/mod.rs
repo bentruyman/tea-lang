@@ -683,6 +683,12 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_print_closure: Option<FunctionValue<'ctx>>,
     builtin_print_struct: Option<FunctionValue<'ctx>>,
     builtin_print_error: Option<FunctionValue<'ctx>>,
+    builtin_exit_fn: Option<FunctionValue<'ctx>>,
+    builtin_dict_delete_fn: Option<FunctionValue<'ctx>>,
+    builtin_dict_clear_fn: Option<FunctionValue<'ctx>>,
+    builtin_fmax_fn: Option<FunctionValue<'ctx>>,
+    builtin_fmin_fn: Option<FunctionValue<'ctx>>,
+    builtin_list_append_fn: Option<FunctionValue<'ctx>>,
     builtin_assert_fn: Option<FunctionValue<'ctx>>,
     builtin_assert_eq_fn: Option<FunctionValue<'ctx>>,
     builtin_assert_ne_fn: Option<FunctionValue<'ctx>>,
@@ -905,6 +911,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_print_closure: None,
             builtin_print_struct: None,
             builtin_print_error: None,
+            builtin_exit_fn: None,
+            builtin_dict_delete_fn: None,
+            builtin_dict_clear_fn: None,
+            builtin_fmax_fn: None,
+            builtin_fmin_fn: None,
+            builtin_list_append_fn: None,
             builtin_assert_fn: None,
             builtin_assert_eq_fn: None,
             builtin_assert_ne_fn: None,
@@ -4570,6 +4582,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     ) -> Result<ExprValue<'ctx>> {
         match kind {
             StdFunctionKind::Print => self.compile_print_call(&call.arguments, function, locals),
+            StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
+            StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
+            StdFunctionKind::Delete => self.compile_delete_call(&call.arguments, function, locals),
+            StdFunctionKind::Clear => self.compile_clear_call(&call.arguments, function, locals),
+            StdFunctionKind::Max => self.compile_max_call(&call.arguments, function, locals),
+            StdFunctionKind::Min => self.compile_min_call(&call.arguments, function, locals),
+            StdFunctionKind::Append => self.compile_append_call(&call.arguments, function, locals),
             StdFunctionKind::Assert => self.compile_assert_call(&call.arguments, function, locals),
             StdFunctionKind::AssertEq => {
                 self.compile_assert_eq_call(&call.arguments, function, locals)
@@ -7576,6 +7595,265 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::Void)
     }
 
+    fn compile_length_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Reuse the existing util_len_call logic
+        self.compile_util_len_call(arguments, function, locals)
+    }
+
+    fn compile_exit_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("exit expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for exit");
+        }
+        let code_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let code = match code_expr {
+            ExprValue::Int(v) => v,
+            _ => bail!("exit expects an Int argument"),
+        };
+        let func = self.ensure_exit_fn();
+        self.call_function(func, &[code.into()], "tea_exit")?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_delete_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("delete expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for delete");
+        }
+        let dict_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let key_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        let dict_ptr = match dict_expr {
+            ExprValue::Dict { pointer, .. } => pointer,
+            _ => bail!("delete expects a Dict as first argument"),
+        };
+        let key_ptr = match key_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("delete expects a String as second argument"),
+        };
+
+        let func = self.ensure_dict_delete_fn();
+        let result = self
+            .call_function(func, &[dict_ptr.into(), key_ptr.into()], "tea_dict_delete")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_dict_delete returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::Dict {
+            pointer: result,
+            value_type: Box::new(ValueType::Void),
+        })
+    }
+
+    fn compile_clear_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("clear expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for clear");
+        }
+        let dict_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+
+        let dict_ptr = match dict_expr {
+            ExprValue::Dict { pointer, .. } => pointer,
+            _ => bail!("clear expects a Dict argument"),
+        };
+
+        let func = self.ensure_dict_clear_fn();
+        let result = self
+            .call_function(func, &[dict_ptr.into()], "tea_dict_clear")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_dict_clear returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::Dict {
+            pointer: result,
+            value_type: Box::new(ValueType::Void),
+        })
+    }
+
+    fn compile_max_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("max expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for max");
+        }
+        let a_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let b_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        match (a_expr, b_expr) {
+            (ExprValue::Int(a), ExprValue::Int(b)) => {
+                let cmp = map_builder_error(self.builder.build_int_compare(
+                    inkwell::IntPredicate::SGT,
+                    a,
+                    b,
+                    "max_cmp",
+                ))?;
+                let result = map_builder_error(self.builder.build_select(cmp, a, b, "max"))?;
+                Ok(ExprValue::Int(result.into_int_value()))
+            }
+            (ExprValue::Float(a), ExprValue::Float(b)) => {
+                let func = self.ensure_fmax_fn();
+                let result = self
+                    .call_function(func, &[a.into(), b.into()], "fmax")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmax returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            (ExprValue::Int(a), ExprValue::Float(b)) => {
+                let a_float = self.cast_int_to_float(a, "max_int_to_float")?;
+                let func = self.ensure_fmax_fn();
+                let result = self
+                    .call_function(func, &[a_float.into(), b.into()], "fmax")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmax returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            (ExprValue::Float(a), ExprValue::Int(b)) => {
+                let b_float = self.cast_int_to_float(b, "max_int_to_float")?;
+                let func = self.ensure_fmax_fn();
+                let result = self
+                    .call_function(func, &[a.into(), b_float.into()], "fmax")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmax returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            _ => bail!("max expects two numbers (Int or Float)"),
+        }
+    }
+
+    fn compile_min_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("min expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for min");
+        }
+        let a_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let b_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        match (a_expr, b_expr) {
+            (ExprValue::Int(a), ExprValue::Int(b)) => {
+                let cmp = map_builder_error(self.builder.build_int_compare(
+                    inkwell::IntPredicate::SLT,
+                    a,
+                    b,
+                    "min_cmp",
+                ))?;
+                let result = map_builder_error(self.builder.build_select(cmp, a, b, "min"))?;
+                Ok(ExprValue::Int(result.into_int_value()))
+            }
+            (ExprValue::Float(a), ExprValue::Float(b)) => {
+                let func = self.ensure_fmin_fn();
+                let result = self
+                    .call_function(func, &[a.into(), b.into()], "fmin")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmin returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            (ExprValue::Int(a), ExprValue::Float(b)) => {
+                let a_float = self.cast_int_to_float(a, "min_int_to_float")?;
+                let func = self.ensure_fmin_fn();
+                let result = self
+                    .call_function(func, &[a_float.into(), b.into()], "fmin")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmin returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            (ExprValue::Float(a), ExprValue::Int(b)) => {
+                let b_float = self.cast_int_to_float(b, "min_int_to_float")?;
+                let func = self.ensure_fmin_fn();
+                let result = self
+                    .call_function(func, &[a.into(), b_float.into()], "fmin")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("fmin returned no value"))?
+                    .into_float_value();
+                Ok(ExprValue::Float(result))
+            }
+            _ => bail!("min expects two numbers (Int or Float)"),
+        }
+    }
+
+    fn compile_append_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("append expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for append");
+        }
+        let list_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let value_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        let list_ptr = match &list_expr {
+            ExprValue::List { pointer, .. } => *pointer,
+            _ => bail!("append expects a List as first argument"),
+        };
+
+        let value = self.expr_to_tea_value(value_expr)?;
+        let func = self.ensure_list_append_fn();
+        let result = self
+            .call_function(func, &[list_ptr.into(), value.into()], "tea_list_append")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_list_append returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer: result,
+            element_type: Box::new(ValueType::Void),
+        })
+    }
+
     fn build_numeric_add(
         &mut self,
         left: ExprValue<'ctx>,
@@ -9144,6 +9422,93 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_print_closure", fn_type, Some(Linkage::External));
         self.builtin_print_closure = Some(func);
+        func
+    }
+
+    fn ensure_exit_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_exit_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.int_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_exit", fn_type, Some(Linkage::External));
+        self.builtin_exit_fn = Some(func);
+        func
+    }
+
+    fn ensure_dict_delete_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_dict_delete_fn {
+            return func;
+        }
+        let fn_type = self.dict_ptr_type().fn_type(
+            &[self.dict_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_dict_delete", fn_type, Some(Linkage::External));
+        self.builtin_dict_delete_fn = Some(func);
+        func
+    }
+
+    fn ensure_dict_clear_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_dict_clear_fn {
+            return func;
+        }
+        let fn_type = self
+            .dict_ptr_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_dict_clear", fn_type, Some(Linkage::External));
+        self.builtin_dict_clear_fn = Some(func);
+        func
+    }
+
+    fn ensure_fmax_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_fmax_fn {
+            return func;
+        }
+        let fn_type = self
+            .float_type()
+            .fn_type(&[self.float_type().into(), self.float_type().into()], false);
+        let func = self
+            .module
+            .add_function("fmax", fn_type, Some(Linkage::External));
+        self.builtin_fmax_fn = Some(func);
+        func
+    }
+
+    fn ensure_fmin_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_fmin_fn {
+            return func;
+        }
+        let fn_type = self
+            .float_type()
+            .fn_type(&[self.float_type().into(), self.float_type().into()], false);
+        let func = self
+            .module
+            .add_function("fmin", fn_type, Some(Linkage::External));
+        self.builtin_fmin_fn = Some(func);
+        func
+    }
+
+    fn ensure_list_append_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_list_append_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.list_ptr_type().into(), self.value_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_list_append", fn_type, Some(Linkage::External));
+        self.builtin_list_append_fn = Some(func);
         func
     }
 

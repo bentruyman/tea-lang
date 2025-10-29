@@ -114,7 +114,7 @@ fn rejects_assignment_to_const() {
 
 #[test]
 fn suggests_import_for_std_function() {
-    let source = "print(\"hello\")\n";
+    let source = "to_string(42)\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
         SourceId(0),
@@ -132,9 +132,9 @@ fn suggests_import_for_std_function() {
         diagnostics.iter().any(|diagnostic| {
             diagnostic
                 .message
-                .contains("add `use debug = \"std.debug\"` to import it")
+                .contains("add `use util = \"std.util\"` to import it")
         }),
-        "expected suggestion to import std.debug, found {:?}",
+        "expected suggestion to import std.util, found {:?}",
         diagnostics
             .iter()
             .map(|d| d.message.clone())

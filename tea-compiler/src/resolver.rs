@@ -80,9 +80,14 @@ pub struct ResolverOutput {
 
 impl Resolver {
     pub fn new() -> Self {
+        let mut builtins = HashSet::new();
+        for builtin in stdlib::BUILTINS {
+            builtins.insert(builtin.name.to_string());
+        }
+
         Self {
             scopes: vec![HashMap::new()],
-            builtins: HashSet::new(),
+            builtins,
             diagnostics: Diagnostics::new(),
             lambda_stack: Vec::new(),
             lambda_captures: HashMap::new(),

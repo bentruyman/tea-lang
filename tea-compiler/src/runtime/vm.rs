@@ -1058,6 +1058,144 @@ impl Vm {
                     "print builtin should not use BuiltinCall instruction".to_string(),
                 ))
             }
+            StdFunctionKind::Length => {
+                if args.len() != 1 {
+                    bail!(VmError::Runtime(format!(
+                        "length expected 1 argument but got {}",
+                        args.len()
+                    )));
+                }
+                let length = match &args[0] {
+                    Value::String(text) => text.chars().count() as i64,
+                    Value::List(items) => items.len() as i64,
+                    Value::Dict(map) => map.len() as i64,
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "length expects a String, List, or Dict".to_string()
+                        ))
+                    }
+                };
+                self.stack.push(Value::Int(length));
+            }
+            StdFunctionKind::Exit => {
+                if args.len() != 1 {
+                    bail!(VmError::Runtime(format!(
+                        "exit expected 1 argument but got {}",
+                        args.len()
+                    )));
+                }
+                let code = match args[0] {
+                    Value::Int(n) => n as i32,
+                    _ => {
+                        bail!(VmError::Runtime("exit expects an Int".to_string()))
+                    }
+                };
+                std::process::exit(code);
+            }
+            StdFunctionKind::Delete => {
+                if args.len() != 2 {
+                    bail!(VmError::Runtime(format!(
+                        "delete expected 2 arguments but got {}",
+                        args.len()
+                    )));
+                }
+                let dict = match &args[0] {
+                    Value::Dict(map) => map,
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "delete expects a Dict as first argument".to_string()
+                        ))
+                    }
+                };
+                let key = match &args[1] {
+                    Value::String(k) => k.as_str(),
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "delete expects a String as second argument".to_string()
+                        ))
+                    }
+                };
+                let mut new_dict = (**dict).clone();
+                new_dict.remove(key);
+                self.stack.push(Value::Dict(std::rc::Rc::new(new_dict)));
+            }
+            StdFunctionKind::Clear => {
+                if args.len() != 1 {
+                    bail!(VmError::Runtime(format!(
+                        "clear expected 1 argument but got {}",
+                        args.len()
+                    )));
+                }
+                match args[0] {
+                    Value::Dict(_) => {
+                        self.stack.push(Value::Dict(std::rc::Rc::new(
+                            std::collections::HashMap::new(),
+                        )));
+                    }
+                    _ => {
+                        bail!(VmError::Runtime("clear expects a Dict".to_string()))
+                    }
+                }
+            }
+            StdFunctionKind::Max => {
+                if args.len() != 2 {
+                    bail!(VmError::Runtime(format!(
+                        "max expected 2 arguments but got {}",
+                        args.len()
+                    )));
+                }
+                let result = match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Value::Int(*a.max(b)),
+                    (Value::Float(a), Value::Float(b)) => Value::Float(a.max(*b)),
+                    (Value::Int(a), Value::Float(b)) => Value::Float((*a as f64).max(*b)),
+                    (Value::Float(a), Value::Int(b)) => Value::Float(a.max(*b as f64)),
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "max expects two numbers (Int or Float)".to_string()
+                        ))
+                    }
+                };
+                self.stack.push(result);
+            }
+            StdFunctionKind::Min => {
+                if args.len() != 2 {
+                    bail!(VmError::Runtime(format!(
+                        "min expected 2 arguments but got {}",
+                        args.len()
+                    )));
+                }
+                let result = match (&args[0], &args[1]) {
+                    (Value::Int(a), Value::Int(b)) => Value::Int(*a.min(b)),
+                    (Value::Float(a), Value::Float(b)) => Value::Float(a.min(*b)),
+                    (Value::Int(a), Value::Float(b)) => Value::Float((*a as f64).min(*b)),
+                    (Value::Float(a), Value::Int(b)) => Value::Float(a.min(*b as f64)),
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "min expects two numbers (Int or Float)".to_string()
+                        ))
+                    }
+                };
+                self.stack.push(result);
+            }
+            StdFunctionKind::Append => {
+                if args.len() != 2 {
+                    bail!(VmError::Runtime(format!(
+                        "append expected 2 arguments but got {}",
+                        args.len()
+                    )));
+                }
+                let list = match &args[0] {
+                    Value::List(items) => items,
+                    _ => {
+                        bail!(VmError::Runtime(
+                            "append expects a List as first argument".to_string()
+                        ))
+                    }
+                };
+                let mut new_list = (**list).clone();
+                new_list.push(args[1].clone());
+                self.stack.push(Value::List(std::rc::Rc::new(new_list)));
+            }
             StdFunctionKind::Assert => {
                 if !(1..=2).contains(&args.len()) {
                     bail!(VmError::Runtime(format!(

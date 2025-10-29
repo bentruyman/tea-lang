@@ -276,6 +276,12 @@ impl CodeGenerator {
     }
 
     pub fn compile_module(mut self, module: &Module) -> Result<Program> {
+        // Register global built-in functions
+        for function in crate::stdlib::BUILTINS {
+            self.builtins
+                .insert(function.name.to_string(), function.kind);
+        }
+
         self.collect_functions(&module.statements);
         self.collect_structs(&module.statements);
         self.collect_errors(&module.statements)?;

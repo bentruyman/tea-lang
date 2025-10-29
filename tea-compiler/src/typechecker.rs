@@ -364,6 +364,7 @@ impl TypeChecker {
             suppress_list_element_errors: false,
         };
         checker.register_builtin_structs();
+        checker.register_builtin_functions();
         checker
     }
 
@@ -569,6 +570,23 @@ impl TypeChecker {
         };
         self.structs
             .insert("ProcessResult".to_string(), process_result);
+    }
+
+    fn register_builtin_functions(&mut self) {
+        for function in stdlib::BUILTINS {
+            let signature = self.std_function_signature(function);
+            self.builtins
+                .insert(function.name.to_string(), function.kind);
+            self.functions
+                .insert(function.name.to_string(), signature.clone());
+            self.assign_global(
+                function.name.to_string(),
+                Type::Function(
+                    signature.params.clone(),
+                    Box::new(signature.return_type.clone()),
+                ),
+            );
+        }
     }
 
     fn collect_enums(&mut self, statements: &[Statement]) {

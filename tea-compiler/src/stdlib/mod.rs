@@ -1,4 +1,5 @@
 mod assert;
+mod builtins;
 mod cli;
 mod debug;
 mod docs;
@@ -14,9 +15,18 @@ mod yaml;
 
 use docs::function_doc;
 
+pub use builtins::BUILTINS;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StdFunctionKind {
     Print,
+    Length,
+    Exit,
+    Delete,
+    Clear,
+    Max,
+    Min,
+    Append,
     Assert,
     AssertEq,
     AssertNe,

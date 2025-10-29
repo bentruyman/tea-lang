@@ -1,0 +1,28 @@
+# Benchmark: Integer arithmetic in tight loops
+# Tests basic arithmetic operations and loop performance
+
+use debug = "std.debug"
+
+def sum_to_n(n: Int) -> Int
+  var total = 0
+  var i = 1
+
+  while i <= n
+    total = total + i
+    i = i + 1
+  end
+
+  return total
+end
+
+var i = 0
+var result = 0
+const iterations = 10000
+const n = 1000
+
+while i < iterations
+  result = sum_to_n(n)
+  i = i + 1
+end
+
+debug.print(result)

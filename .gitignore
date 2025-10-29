@@ -6,3 +6,13 @@ package-lock.json
 # Generated files (run `make codegen` to regenerate)
 tree-sitter-tea/queries/highlights.scm
 tea-compiler/src/ast.rs
+
+# Benchmark generated files
+benchmark_results/*
+benchmarks/*.o
+benchmarks/*.stub.rs
+benchmarks/*_aot
+benchmarks/*_lto
+benchmarks/*_no_lto
+benchmarks/*_test
+benchmarks/*_with_metadata

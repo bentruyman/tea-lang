@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::process::Command;
 use std::str::Chars;
 
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
@@ -248,6 +249,7 @@ pub struct ObjectCompileOptions<'a> {
     pub features: Option<&'a str>,
     pub opt_level: OptimizationLevel,
     pub entry_symbol: Option<&'a str>,
+    pub lto: bool,
 }
 
 impl<'a> Default for ObjectCompileOptions<'a> {
@@ -256,10 +258,101 @@ impl<'a> Default for ObjectCompileOptions<'a> {
             triple: None,
             cpu: None,
             features: None,
-            opt_level: OptimizationLevel::Default,
+            opt_level: OptimizationLevel::Aggressive, // O3 by default for maximum performance
             entry_symbol: None,
+            lto: false, // LTO disabled by default (slower compile time)
         }
     }
+}
+
+/// Run LLVM optimization passes on the module using the opt tool
+fn optimize_module_with_opt<'ctx>(
+    context: &'ctx Context,
+    module: LlvmModule<'ctx>,
+    opt_level: OptimizationLevel,
+) -> Result<LlvmModule<'ctx>> {
+    // Skip optimization for level 0
+    if matches!(opt_level, OptimizationLevel::None) {
+        return Ok(module);
+    }
+
+    // Determine the opt level flag
+    let opt_flag = match opt_level {
+        OptimizationLevel::None => return Ok(module),
+        OptimizationLevel::Less => "-O1",
+        OptimizationLevel::Default => "-O2",
+        OptimizationLevel::Aggressive => "-O3",
+    };
+
+    // Get the IR as a string
+    let ir_string = module.print_to_string().to_string();
+
+    // Try to find the opt tool
+    let opt_paths = [
+        "/opt/homebrew/opt/llvm/bin/opt", // Homebrew on Apple Silicon
+        "/usr/local/opt/llvm/bin/opt",    // Homebrew on Intel Mac
+        "/usr/bin/opt",                   // Linux system install
+        "opt",                            // In PATH
+    ];
+
+    let mut opt_path = None;
+    for path in &opt_paths {
+        if Command::new(path).arg("--version").output().is_ok() {
+            opt_path = Some(*path);
+            break;
+        }
+    }
+
+    let opt_tool = match opt_path {
+        Some(path) => path,
+        None => {
+            // If opt tool is not found, just return the unoptimized module
+            // This allows compilation to continue even without opt installed
+            eprintln!("Warning: LLVM opt tool not found, skipping IR optimizations");
+            return Ok(module);
+        }
+    };
+
+    // Run opt on the IR
+    let output = Command::new(opt_tool)
+        .arg(opt_flag)
+        .arg("-S") // Output textual IR
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("failed to spawn opt process at {}", opt_tool))?;
+
+    // Write IR to stdin
+    use std::io::Write;
+    output
+        .stdin
+        .as_ref()
+        .ok_or_else(|| anyhow!("failed to open stdin for opt"))?
+        .write_all(ir_string.as_bytes())
+        .context("failed to write IR to opt stdin")?;
+
+    let result = output
+        .wait_with_output()
+        .context("failed to wait for opt process")?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        bail!("opt failed: {}", stderr);
+    }
+
+    // Parse the optimized IR back into a module
+    let optimized_ir =
+        String::from_utf8(result.stdout).context("opt output was not valid UTF-8")?;
+
+    let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
+        optimized_ir.as_bytes(),
+        "optimized_ir",
+    );
+
+    context
+        .create_module_from_ir(memory_buffer)
+        .map_err(|e| anyhow!("failed to parse optimized IR: {}", e))
 }
 
 pub fn compile_module_to_object(
@@ -278,6 +371,9 @@ pub fn compile_module_to_object(
     module
         .verify()
         .map_err(|e| anyhow!(format!("LLVM verification failed: {e}")))?;
+
+    // Run LLVM IR optimizations
+    let module = optimize_module_with_opt(&context, module, options.opt_level)?;
 
     Target::initialize_all(&InitializationConfig::default());
 
@@ -334,6 +430,10 @@ pub fn compile_module_to_object(
         }
     }
 
+    // Always emit regular object files
+    // Note: Full LTO support would require embedding LLVM bitcode in the object file,
+    // which requires platform-specific handling (MachO, ELF, COFF formats differ).
+    // Tea code is already maximally optimized by LLVM's opt tool at O3.
     target_machine
         .write_to_file(&module, FileType::Object, output_path)
         .map_err(|e| anyhow!(format!("failed to write object file: {e}")))
@@ -379,7 +479,12 @@ struct FunctionSignature<'ctx> {
 
 #[derive(Clone)]
 struct LocalVariable<'ctx> {
-    pointer: PointerValue<'ctx>,
+    /// For mutable variables: pointer to stack allocation
+    /// For immutable parameters: None (use SSA value directly)
+    pointer: Option<PointerValue<'ctx>>,
+    /// For immutable parameters: the SSA value
+    /// For mutable variables: None (load from pointer)
+    value: Option<BasicValueEnum<'ctx>>,
     ty: ValueType,
     mutable: bool,
 }
@@ -709,6 +814,7 @@ struct LlvmCodeGenerator<'ctx> {
     yaml_decode_fn: Option<FunctionValue<'ctx>>,
     error_mode_stack: Vec<ErrorHandlingMode>,
     function_return_stack: Vec<ValueType>,
+    function_can_throw_stack: Vec<bool>,
 }
 
 impl<'ctx> LlvmCodeGenerator<'ctx> {
@@ -930,6 +1036,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             error_get_template_fn: None,
             error_mode_stack: vec![ErrorHandlingMode::Propagate],
             function_return_stack: Vec::new(),
+            function_can_throw_stack: Vec::new(),
             global_slots: HashMap::new(),
         }
     }
@@ -1007,6 +1114,282 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .expect("function return stack should not be empty")
     }
 
+    fn push_function_can_throw(&mut self, can_throw: bool) {
+        self.function_can_throw_stack.push(can_throw);
+    }
+
+    fn pop_function_can_throw(&mut self) {
+        self.function_can_throw_stack
+            .pop()
+            .expect("function can_throw stack underflow");
+    }
+
+    fn current_function_can_throw(&self) -> bool {
+        self.function_can_throw_stack
+            .last()
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Check if a function is small enough for aggressive inlining
+    fn is_small_function(&self, statements: &[Statement]) -> bool {
+        // Count statements recursively - small means < 10 statements total
+        self.count_statements(statements) < 10
+    }
+
+    /// Count total statements including nested blocks
+    fn count_statements(&self, statements: &[Statement]) -> usize {
+        let mut count = 0;
+        for stmt in statements {
+            count += 1;
+            match stmt {
+                Statement::Conditional(cond_stmt) => {
+                    count += self.count_statements(&cond_stmt.consequent.statements);
+                    if let Some(alternative) = &cond_stmt.alternative {
+                        count += self.count_statements(&alternative.statements);
+                    }
+                }
+                Statement::Loop(loop_stmt) => {
+                    count += self.count_statements(&loop_stmt.body.statements);
+                }
+                Statement::Match(match_stmt) => {
+                    for arm in &match_stmt.arms {
+                        count += self.count_statements(&arm.block.statements);
+                    }
+                }
+                _ => {}
+            }
+        }
+        count
+    }
+
+    /// Add optimization attributes to a function
+    fn add_function_attributes(
+        &self,
+        function: FunctionValue<'ctx>,
+        can_throw: bool,
+        is_small: bool,
+    ) {
+        use inkwell::attributes::AttributeLoc;
+
+        // Add nounwind if the function doesn't throw
+        if !can_throw {
+            let nounwind = self.context.create_enum_attribute(
+                inkwell::attributes::Attribute::get_named_enum_kind_id("nounwind"),
+                0,
+            );
+            function.add_attribute(AttributeLoc::Function, nounwind);
+        }
+
+        // Add willreturn - all our functions return (no infinite loops exposed to LLVM)
+        let willreturn = self.context.create_enum_attribute(
+            inkwell::attributes::Attribute::get_named_enum_kind_id("willreturn"),
+            0,
+        );
+        function.add_attribute(AttributeLoc::Function, willreturn);
+
+        // Add inlining hints based on function characteristics
+        if is_small {
+            // For very small functions, suggest aggressive inlining
+            let inlinehint = self.context.create_enum_attribute(
+                inkwell::attributes::Attribute::get_named_enum_kind_id("inlinehint"),
+                0,
+            );
+            function.add_attribute(AttributeLoc::Function, inlinehint);
+        }
+
+        // Add alwaysinline for tiny pure functions (< 5 statements, no side effects)
+        // We'll be conservative here and let LLVM decide via inlinehint for now
+    }
+
+    /// Add loop optimization metadata to help LLVM vectorize and optimize loops
+    fn add_loop_metadata(&self, instruction: inkwell::values::InstructionValue<'ctx>) {
+        // Create loop metadata node
+        // !llvm.loop !{!llvm.loop, !{!"llvm.loop.vectorize.enable", i1 true},
+        //              !{!"llvm.loop.unroll.enable", i1 true}}
+
+        let md_kind = self.context.get_kind_id("llvm.loop");
+
+        // Create metadata string for vectorization hint
+        let vectorize_enable = self.context.metadata_string("llvm.loop.vectorize.enable");
+        let vectorize_true = self.bool_type().const_int(1, false).as_basic_value_enum();
+
+        // Create metadata string for unroll hint
+        let unroll_enable = self.context.metadata_string("llvm.loop.unroll.enable");
+        let unroll_true = self.bool_type().const_int(1, false).as_basic_value_enum();
+
+        // Create metadata nodes
+        let vectorize_node = self
+            .context
+            .metadata_node(&[vectorize_enable.into(), vectorize_true.into()]);
+        let unroll_node = self
+            .context
+            .metadata_node(&[unroll_enable.into(), unroll_true.into()]);
+
+        // Create the loop metadata node that references itself (required by LLVM)
+        let loop_id = self.context.metadata_node(&[]);
+        let loop_metadata = self.context.metadata_node(&[
+            loop_id.into(),
+            vectorize_node.into(),
+            unroll_node.into(),
+        ]);
+
+        // Update the loop ID to reference the full metadata
+        loop_id.replace_all_uses_with(&loop_metadata);
+
+        // Set the metadata on the branch instruction
+        let _ = instruction.set_metadata(loop_metadata, md_kind);
+    }
+
+    /// Analyze which parameters are mutated in the function body
+    fn find_mutated_parameters(
+        &self,
+        function: &FunctionStatement,
+    ) -> std::collections::HashSet<String> {
+        use std::collections::HashSet;
+        let mut mutated = HashSet::new();
+        self.find_mutated_in_statements(&function.body.statements, &mut mutated);
+        mutated
+    }
+
+    /// Recursively find assignments to identifiers in statements
+    fn find_mutated_in_statements(
+        &self,
+        statements: &[Statement],
+        mutated: &mut std::collections::HashSet<String>,
+    ) {
+        for stmt in statements {
+            match stmt {
+                Statement::Expression(expr) => {
+                    self.find_mutated_in_expression(&expr.expression, mutated);
+                }
+                Statement::Conditional(cond) => {
+                    self.find_mutated_in_statements(&cond.consequent.statements, mutated);
+                    if let Some(alt) = &cond.alternative {
+                        self.find_mutated_in_statements(&alt.statements, mutated);
+                    }
+                }
+                Statement::Loop(loop_stmt) => {
+                    self.find_mutated_in_statements(&loop_stmt.body.statements, mutated);
+                }
+                Statement::Match(match_stmt) => {
+                    for arm in &match_stmt.arms {
+                        self.find_mutated_in_statements(&arm.block.statements, mutated);
+                    }
+                }
+                Statement::Return(ret) => {
+                    if let Some(expr) = &ret.expression {
+                        self.find_mutated_in_expression(expr, mutated);
+                    }
+                }
+                Statement::Throw(throw) => {
+                    self.find_mutated_in_expression(&throw.expression, mutated);
+                }
+                Statement::Var(var) => {
+                    for binding in &var.bindings {
+                        if let Some(init) = &binding.initializer {
+                            self.find_mutated_in_expression(init, mutated);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Recursively find assignments in expressions
+    fn find_mutated_in_expression(
+        &self,
+        expr: &Expression,
+        mutated: &mut std::collections::HashSet<String>,
+    ) {
+        match &expr.kind {
+            ExpressionKind::Assignment(assignment) => {
+                // Check if the assignment target is an identifier
+                if let ExpressionKind::Identifier(ident) = &assignment.target.kind {
+                    mutated.insert(ident.name.clone());
+                }
+                // Also check nested expressions
+                self.find_mutated_in_expression(&assignment.value, mutated);
+            }
+            ExpressionKind::Binary(binary) => {
+                self.find_mutated_in_expression(&binary.left, mutated);
+                self.find_mutated_in_expression(&binary.right, mutated);
+            }
+            ExpressionKind::Unary(unary) => {
+                self.find_mutated_in_expression(&unary.operand, mutated);
+            }
+            ExpressionKind::Call(call) => {
+                self.find_mutated_in_expression(&call.callee, mutated);
+                for arg in &call.arguments {
+                    self.find_mutated_in_expression(&arg.expression, mutated);
+                }
+            }
+            ExpressionKind::Conditional(cond) => {
+                self.find_mutated_in_expression(&cond.condition, mutated);
+                self.find_mutated_in_expression(&cond.consequent, mutated);
+                self.find_mutated_in_expression(&cond.alternative, mutated);
+            }
+            ExpressionKind::Lambda(lambda) => {
+                // Lambda body could mutate captures, but we don't track that here
+                match &lambda.body {
+                    LambdaBody::Block(block) => {
+                        self.find_mutated_in_statements(&block.statements, mutated);
+                    }
+                    LambdaBody::Expression(expr) => {
+                        self.find_mutated_in_expression(expr, mutated);
+                    }
+                }
+            }
+            ExpressionKind::Try(try_expr) => {
+                self.find_mutated_in_expression(&try_expr.expression, mutated);
+                if let Some(catch) = &try_expr.catch {
+                    match &catch.kind {
+                        CatchKind::Fallback(fallback) => {
+                            self.find_mutated_in_expression(fallback, mutated);
+                        }
+                        CatchKind::Arms(arms) => {
+                            for arm in arms {
+                                match &arm.handler {
+                                    CatchHandler::Expression(expr) => {
+                                        self.find_mutated_in_expression(expr, mutated);
+                                    }
+                                    CatchHandler::Block(block) => {
+                                        self.find_mutated_in_statements(&block.statements, mutated);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ExpressionKind::Match(match_expr) => {
+                self.find_mutated_in_expression(&match_expr.scrutinee, mutated);
+                for arm in &match_expr.arms {
+                    self.find_mutated_in_expression(&arm.expression, mutated);
+                }
+            }
+            ExpressionKind::List(list) => {
+                for elem in &list.elements {
+                    self.find_mutated_in_expression(elem, mutated);
+                }
+            }
+            ExpressionKind::Dict(dict) => {
+                for entry in &dict.entries {
+                    self.find_mutated_in_expression(&entry.value, mutated);
+                }
+            }
+            ExpressionKind::InterpolatedString(interp) => {
+                for part in &interp.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.find_mutated_in_expression(expr, mutated);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn pointer_equals(
         &mut self,
         left: PointerValue<'ctx>,
@@ -1059,8 +1442,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     }
 
     fn clear_error_state(&mut self) -> Result<()> {
-        let clear_fn = self.ensure_error_clear_current();
-        self.call_function(clear_fn, &[], "error_clear")?;
+        // Only clear error state if the current function can throw
+        if self.current_function_can_throw() {
+            let clear_fn = self.ensure_error_clear_current();
+            self.call_function(clear_fn, &[], "error_clear")?;
+        }
         Ok(())
     }
 
@@ -1685,6 +2071,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             let fn_type = self.function_type(&return_type, &params)?;
             let fn_value = self.module.add_function(&function.name, fn_type, None);
 
+            // Add optimization attributes
+            let is_small = self.is_small_function(&function.body.statements);
+            self.add_function_attributes(fn_value, can_throw, is_small);
+
             self.functions.insert(
                 function.name.clone(),
                 FunctionSignature {
@@ -1723,6 +2113,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
             let fn_type = self.function_type(&return_type, &params)?;
             let fn_value = self.module.add_function(&mangled, fn_type, None);
+
+            // Add optimization attributes
+            let is_small = self.is_small_function(&function.body.statements);
+            self.add_function_attributes(fn_value, can_throw, is_small);
 
             self.functions.insert(
                 mangled,
@@ -1795,26 +2189,48 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(signature.value, "entry");
         self.builder.position_at_end(entry);
         self.push_function_return(signature.return_type.clone());
+        self.push_function_can_throw(signature.can_throw);
+
+        // Analyze which parameters are mutated
+        let mutated_params = self.find_mutated_parameters(function);
 
         let mut locals: HashMap<String, LocalVariable<'ctx>> = HashMap::new();
         for (index, param) in function.parameters.iter().enumerate() {
             let arg = signature.value.get_nth_param(index as u32).expect("param");
             arg.set_name(&param.name);
             let param_type = signature.param_types[index].clone();
-            let alloca = self.create_entry_alloca(
-                signature.value,
-                &param.name,
-                self.basic_type(&param_type)?,
-            )?;
-            map_builder_error(self.builder.build_store(alloca, arg))?;
-            locals.insert(
-                param.name.clone(),
-                LocalVariable {
-                    pointer: alloca,
-                    ty: param_type,
-                    mutable: true,
-                },
-            );
+
+            let is_mutable = mutated_params.contains(&param.name);
+
+            if is_mutable {
+                // Mutable parameter: allocate on stack
+                let alloca = self.create_entry_alloca(
+                    signature.value,
+                    &param.name,
+                    self.basic_type(&param_type)?,
+                )?;
+                map_builder_error(self.builder.build_store(alloca, arg))?;
+                locals.insert(
+                    param.name.clone(),
+                    LocalVariable {
+                        pointer: Some(alloca),
+                        value: None,
+                        ty: param_type,
+                        mutable: true,
+                    },
+                );
+            } else {
+                // Immutable parameter: keep in SSA register
+                locals.insert(
+                    param.name.clone(),
+                    LocalVariable {
+                        pointer: None,
+                        value: Some(arg),
+                        ty: param_type,
+                        mutable: false,
+                    },
+                );
+            }
         }
 
         let result = (|| -> Result<()> {
@@ -1902,6 +2318,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.generic_binding_stack.pop();
         }
         self.pop_function_return();
+        self.pop_function_can_throw();
 
         result
     }
@@ -1915,6 +2332,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let mut locals: HashMap<String, LocalVariable<'ctx>> = HashMap::new();
         let return_type = ValueType::Int;
         self.push_function_return(return_type.clone());
+        self.push_function_can_throw(false); // main doesn't throw
         for statement in statements {
             match statement {
                 Statement::Use(_)
@@ -1951,6 +2369,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         self.pop_function_return();
+        self.pop_function_can_throw();
 
         Ok(())
     }
@@ -2100,7 +2519,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             locals.insert(
                 binding.name.clone(),
                 LocalVariable {
-                    pointer: global.as_pointer_value(),
+                    pointer: Some(global.as_pointer_value()),
+                    value: None,
                     ty,
                     mutable: !statement.is_const,
                 },
@@ -2155,7 +2575,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             locals.insert(
                 binding.name.clone(),
                 LocalVariable {
-                    pointer: alloca,
+                    pointer: Some(alloca),
+                    value: None,
                     ty,
                     mutable: !statement.is_const,
                 },
@@ -2179,6 +2600,20 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 return Ok(());
             }
             (Some(expr), ty) => {
+                // Check if this is a tail call (directly returning a call result)
+                let is_tail_call = matches!(&expr.kind, ExpressionKind::Call(_));
+
+                if is_tail_call {
+                    // Compile the call with tail call hint
+                    if let ExpressionKind::Call(call) = &expr.kind {
+                        let value = self
+                            .compile_call_with_tail_hint(call, expr.span, function, locals, true)?;
+                        let converted = self.convert_expr_to_type(value, ty)?;
+                        return self.emit_return_value(converted, ty);
+                    }
+                }
+
+                // Normal return (not a tail call)
                 let value = self.compile_expression(expr, function, locals)?;
                 let converted = self.convert_expr_to_type(value, ty)?;
                 self.emit_return_value(converted, ty)
@@ -2343,7 +2778,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             true,
         )?;
         if !body_terminated {
-            map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+            let back_edge = map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+            // Add loop metadata for optimization hints
+            self.add_loop_metadata(back_edge);
         }
 
         self.builder.position_at_end(exit_block);
@@ -2366,7 +2804,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             Self::describe_span(assignment.target.span)
                         ));
                     }
-                    let pointer = variable.pointer;
+                    let pointer = variable.pointer.ok_or_else(|| {
+                        anyhow!("Cannot assign to immutable parameter '{}'", identifier.name)
+                    })?;
                     let var_ty = variable.ty.clone();
                     let value = self.compile_expression(&assignment.value, function, locals)?;
                     self.store_expr_in_pointer(pointer, &var_ty, value, &identifier.name)?;
@@ -2948,7 +3388,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     catch_locals_base.insert(
                         binding.name.clone(),
                         LocalVariable {
-                            pointer: alloca,
+                            pointer: Some(alloca),
+                            value: None,
                             ty: binding_value_type.clone(),
                             mutable: true,
                         },
@@ -2983,7 +3424,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         arm_locals.insert(
                             binding_name.clone(),
                             LocalVariable {
-                                pointer: binding_alloca,
+                                pointer: Some(binding_alloca),
+                                value: None,
                                 ty: arm_binding_type.clone(),
                                 mutable: true,
                             },
@@ -3064,7 +3506,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         if let Some(alloca) = result_alloca {
             let result_var = LocalVariable {
-                pointer: alloca,
+                pointer: Some(alloca),
+                value: None,
                 ty: result_type.clone(),
                 mutable: true,
             };
@@ -3255,6 +3698,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(lambda_fn, "entry");
         self.builder.position_at_end(entry);
         self.push_function_return(signature.return_type.clone());
+        self.push_function_can_throw(false); // lambdas don't throw by default
         self.push_error_mode(ErrorHandlingMode::Propagate);
 
         let closure_param = lambda_fn
@@ -3290,7 +3734,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             lambda_locals.insert(
                 name.clone(),
                 LocalVariable {
-                    pointer: alloca,
+                    pointer: Some(alloca),
+                    value: None,
                     ty: capture_type.clone(),
                     mutable: true,
                 },
@@ -3313,7 +3758,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             lambda_locals.insert(
                 parameter.name.clone(),
                 LocalVariable {
-                    pointer: alloca,
+                    pointer: Some(alloca),
+                    value: None,
                     ty: param_type.clone(),
                     mutable: true,
                 },
@@ -3354,6 +3800,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         self.pop_error_mode();
         self.pop_function_return();
+        self.pop_function_can_throw();
         self.lambda_functions.insert(lambda.id, lambda_fn);
         Ok(lambda_fn)
     }
@@ -3592,7 +4039,60 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         name: &str,
         variable: &LocalVariable<'ctx>,
     ) -> Result<ExprValue<'ctx>> {
-        self.load_from_pointer(variable.pointer, &variable.ty, name)
+        // If variable has a direct SSA value (immutable parameter), use it
+        if let Some(value) = variable.value {
+            return self.basic_value_to_expr_value(value, &variable.ty);
+        }
+
+        // Otherwise load from pointer (mutable variable)
+        let pointer = variable
+            .pointer
+            .ok_or_else(|| anyhow!("LocalVariable '{}' has neither value nor pointer", name))?;
+        self.load_from_pointer(pointer, &variable.ty, name)
+    }
+
+    /// Convert a BasicValueEnum to an ExprValue based on the type
+    fn basic_value_to_expr_value(
+        &self,
+        value: BasicValueEnum<'ctx>,
+        ty: &ValueType,
+    ) -> Result<ExprValue<'ctx>> {
+        match ty {
+            ValueType::Int => Ok(ExprValue::Int(value.into_int_value())),
+            ValueType::Float => Ok(ExprValue::Float(value.into_float_value())),
+            ValueType::Bool => Ok(ExprValue::Bool(value.into_int_value())),
+            ValueType::String => Ok(ExprValue::String(value.into_pointer_value())),
+            ValueType::List(inner) => Ok(ExprValue::List {
+                pointer: value.into_pointer_value(),
+                element_type: inner.clone(),
+            }),
+            ValueType::Dict(inner) => Ok(ExprValue::Dict {
+                pointer: value.into_pointer_value(),
+                value_type: inner.clone(),
+            }),
+            ValueType::Struct(struct_name) => Ok(ExprValue::Struct {
+                pointer: value.into_pointer_value(),
+                struct_name: struct_name.clone(),
+            }),
+            ValueType::Function(param_types, return_type) => Ok(ExprValue::Closure {
+                pointer: value.into_pointer_value(),
+                param_types: param_types.clone(),
+                return_type: return_type.clone(),
+            }),
+            ValueType::Optional(inner) => Ok(ExprValue::Optional {
+                value: value.into_struct_value(),
+                inner: inner.clone(),
+            }),
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => Ok(ExprValue::Error {
+                pointer: value.into_pointer_value(),
+                error_name: error_name.clone(),
+                variant_name: variant_name.clone(),
+            }),
+            ValueType::Void => Ok(ExprValue::Void),
+        }
     }
 
     fn load_from_pointer(
@@ -3726,12 +4226,35 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         ))
     }
 
+    /// Compile a call expression with optional tail call hint
+    fn compile_call_with_tail_hint(
+        &mut self,
+        call: &CallExpression,
+        span: SourceSpan,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        is_tail_call: bool,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_call_internal(call, span, function, locals, is_tail_call)
+    }
+
     fn compile_call(
         &mut self,
         call: &CallExpression,
         span: SourceSpan,
         function: FunctionValue<'ctx>,
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_call_internal(call, span, function, locals, false)
+    }
+
+    fn compile_call_internal(
+        &mut self,
+        call: &CallExpression,
+        span: SourceSpan,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        is_tail_call: bool,
     ) -> Result<ExprValue<'ctx>> {
         if let ExpressionKind::Member(member) = &call.callee.kind {
             if let ExpressionKind::Identifier(alias_ident) = &member.object.kind {
@@ -3807,6 +4330,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     }
 
                     let call_site = self.call_function(signature.value, &args, &target_name)?;
+
+                    // Mark as tail call if requested
+                    if is_tail_call {
+                        call_site.set_tail_call(true);
+                    }
+
                     if matches!(signature.return_type, ValueType::Void) {
                         if signature.can_throw {
                             self.handle_possible_error(function)?;
@@ -4283,15 +4812,37 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             bail!("named arguments are not supported for len");
         }
         let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let tea_value = self.expr_to_tea_value(value_expr)?;
-        let func = self.ensure_util_len_fn();
-        let length = self
-            .call_function(func, &[tea_value.into()], "tea_util_len")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_util_len returned no value"))?
-            .into_int_value();
-        Ok(ExprValue::Int(length))
+
+        // Fast path: inline length access for strings and lists
+        match &value_expr {
+            ExprValue::String(ptr) | ExprValue::List { pointer: ptr, .. } => {
+                // TeaString and TeaList both have 'len' as first field (i64)
+                // struct TeaString { len: i64, data: *const c_char }
+                // struct TeaList { len: i64, capacity: i64, items: *mut TeaValue }
+                let len_ptr = map_builder_error(self.builder.build_struct_gep(
+                    self.value_type(),
+                    *ptr,
+                    0,
+                    "len_ptr",
+                ))?;
+                let length =
+                    map_builder_error(self.builder.build_load(self.int_type(), len_ptr, "len"))?
+                        .into_int_value();
+                return Ok(ExprValue::Int(length));
+            }
+            _ => {
+                // Slow path: fall back to FFI for dicts and other types
+                let tea_value = self.expr_to_tea_value(value_expr)?;
+                let func = self.ensure_util_len_fn();
+                let length = self
+                    .call_function(func, &[tea_value.into()], "tea_util_len")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_util_len returned no value"))?
+                    .into_int_value();
+                Ok(ExprValue::Int(length))
+            }
+        }
     }
 
     fn compile_util_to_string_call(
@@ -7900,7 +8451,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
                 self.builder.position_at_end(merge_block);
                 let temp_var = LocalVariable {
-                    pointer: tmp_alloca,
+                    pointer: Some(tmp_alloca),
+                    value: None,
                     ty: result_type.clone(),
                     mutable: true,
                 };

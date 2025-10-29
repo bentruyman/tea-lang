@@ -1,0 +1,49 @@
+# Benchmark: Struct field access
+# Tests struct allocation and field access performance
+
+use debug = "std.debug"
+use util = "std.util"
+
+struct Point
+x: Int
+y: Int
+end
+
+def make_points(n: Int) -> List[Point]
+  var result = []
+  var i = 0
+
+  while i < n
+    result = result +[Point(x: i, y: i * 2)]
+    i = i + 1
+  end
+
+  return result
+end
+
+def sum_points(points: List[Point]) -> Int
+  var total = 0
+  var i = 0
+
+  while i < util.len(points)
+    const p = points[i]
+    total = total + p.x + p.y
+    i = i + 1
+  end
+
+  return total
+end
+
+const iterations = 100
+const point_count = 1000
+
+var i = 0
+var result = 0
+
+while i < iterations
+  const points = make_points(point_count)
+  result = sum_points(points)
+  i = i + 1
+end
+
+debug.print(result)

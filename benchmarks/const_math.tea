@@ -1,0 +1,20 @@
+# Benchmark: Constant arithmetic that should be folded
+# Tests whether constants are evaluated at compile time
+
+use debug = "std.debug"
+
+def compute(iterations: Int) -> Int
+  var sum = 0
+  var i = 0
+
+  while i < iterations
+    # These are constants that should be folded at compile time
+    sum = sum +(10 + 20) * 3 - 15 / 3
+    i = i + 1
+  end
+
+  return sum
+end
+
+const result = compute(1000000)
+debug.print(result)

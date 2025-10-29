@@ -1,0 +1,36 @@
+# Benchmark: Closure calls
+# Tests closure allocation and invocation overhead
+
+use debug = "std.debug"
+
+def make_adder(x: Int) -> Func(Int) -> Int
+  return def(y: Int) -> Int
+  return x + y
+end
+end
+
+def call_closure_many_times(f: Func(Int) -> Int, n: Int) -> Int
+  var result = 0
+  var i = 0
+
+  while i < n
+    result = f(i)
+    i = i + 1
+  end
+
+  return result
+end
+
+const iterations = 1000
+const inner_count = 1000
+
+var i = 0
+var result = 0
+
+while i < iterations
+  const adder = make_adder(42)
+  result = call_closure_many_times(adder, inner_count)
+  i = i + 1
+end
+
+debug.print(result)

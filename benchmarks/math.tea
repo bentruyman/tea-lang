@@ -1,0 +1,29 @@
+# Benchmark: Mixed arithmetic operations
+# Tests integer and float arithmetic performance
+
+use debug = "std.debug"
+
+def compute(n: Int) -> Int
+  var result = 0
+  var i = 0
+
+  while i < n
+    result = result + i * 2 - i / 2
+    i = i + 1
+  end
+
+  return result
+end
+
+const iterations = 1000
+const n = 10000
+
+var i = 0
+var result = 0
+
+while i < iterations
+  result = compute(n)
+  i = i + 1
+end
+
+debug.print(result)

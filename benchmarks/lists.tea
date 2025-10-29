@@ -1,0 +1,43 @@
+# Benchmark: List operations
+# Tests list allocation, append, and random access
+
+use debug = "std.debug"
+use util = "std.util"
+
+def build_list(n: Int) -> List[Int]
+  var result = []
+  var i = 0
+
+  while i < n
+    result = result +[i]
+    i = i + 1
+  end
+
+  return result
+end
+
+def sum_list(list: List[Int]) -> Int
+  var total = 0
+  var i = 0
+
+  while i < util.len(list)
+    total = total + list[i]
+    i = i + 1
+  end
+
+  return total
+end
+
+const iterations = 100
+const list_size = 1000
+
+var i = 0
+var result = 0
+
+while i < iterations
+  const list = build_list(list_size)
+  result = sum_list(list)
+  i = i + 1
+end
+
+debug.print(result)

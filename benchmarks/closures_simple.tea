@@ -1,0 +1,33 @@
+# Benchmark: Function calls
+# Tests function call overhead
+
+use debug = "std.debug"
+
+def add(a: Int, b: Int) -> Int
+  return a + b
+end
+
+def call_many_times(n: Int) -> Int
+  var result = 0
+  var i = 0
+
+  while i < n
+    result = add(result, i)
+    i = i + 1
+  end
+
+  return result
+end
+
+const iterations = 1000
+const inner_count = 10000
+
+var i = 0
+var result = 0
+
+while i < iterations
+  result = call_many_times(inner_count)
+  i = i + 1
+end
+
+debug.print(result)

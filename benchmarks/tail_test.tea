@@ -1,0 +1,13 @@
+# Tail recursion depth test
+use debug = "std.debug"
+
+def countdown(n: Int) -> Void
+  if n <= 0
+    debug.print("Done!")
+    return
+  end
+
+  countdown(n - 1)
+end
+
+countdown(100000)

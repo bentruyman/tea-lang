@@ -1,0 +1,27 @@
+# Benchmark: List length access
+# Tests performance of len() operation on lists
+
+use util = "std.util"
+use debug = "std.debug"
+
+def compute_lengths(list1: List[Int], list2: List[Int], list3: List[Int]) -> Int
+  var total = 0
+  var i = 0
+
+  while i < 10000
+    total = total + util.len(list1)
+    total = total + util.len(list2)
+    total = total + util.len(list3)
+    i = i + 1
+  end
+
+  return total
+end
+
+# Create some lists
+const list1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+const list2 = [1, 2, 3, 4, 5]
+const list3 = [1, 2, 3]
+
+const total = compute_lengths(list1, list2, list3)
+debug.print(`Total: {total}`)

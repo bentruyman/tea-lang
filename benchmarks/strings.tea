@@ -1,0 +1,30 @@
+# Benchmark: String concatenation
+# Tests string allocation and concatenation performance
+
+use debug = "std.debug"
+use util = "std.util"
+
+def build_string(count: Int) -> String
+  var result = ""
+  var i = 0
+
+  while i < count
+    result = result + "x"
+    i = i + 1
+  end
+
+  return result
+end
+
+const iterations = 100
+const string_length = 1000
+
+var i = 0
+var result = ""
+
+while i < iterations
+  result = build_string(string_length)
+  i = i + 1
+end
+
+debug.print(`Built string of length {util.len(result)}`)

@@ -1,0 +1,18 @@
+# Tail recursion test
+
+use debug = "std.debug"
+
+def factorial_tail(n: Int, acc: Int) -> Int
+  if n <= 1
+    return acc
+  else
+    return factorial_tail(n - 1, acc * n)
+  end
+end
+
+def factorial(n: Int) -> Int
+  return factorial_tail(n, 1)
+end
+
+const result = factorial(10)
+debug.print(`Result: {result}`)

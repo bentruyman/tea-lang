@@ -1,0 +1,43 @@
+# Benchmark: Dictionary operations
+# Tests dictionary insert and lookup performance
+
+use debug = "std.debug"
+
+def build_dict(n: Int) -> Dict[String, Int]
+  var result = {}
+  var i = 0
+
+  while i < n
+    result[`key_{i}`] = i
+    i = i + 1
+  end
+
+  return result
+end
+
+def lookup_dict(dict: Dict[String, Int], count: Int) -> Int
+  var total = 0
+  var i = 0
+
+  while i < count
+    const key = `key_{i}`
+    total = total + dict[key]
+    i = i + 1
+  end
+
+  return total
+end
+
+const iterations = 100
+const dict_size = 500
+
+var i = 0
+var result = 0
+
+while i < iterations
+  const dict = build_dict(dict_size)
+  result = lookup_dict(dict, dict_size)
+  i = i + 1
+end
+
+debug.print(result)

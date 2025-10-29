@@ -1,6 +1,21 @@
 # Tea Language Benchmarks
 
-This directory contains benchmarks for measuring and comparing the performance of the Tea AOT compiler against the VM interpreter.
+This directory contains benchmarks for measuring and comparing the performance of the Tea AOT compiler against equivalent Rust and JavaScript programs.
+
+## Directory Structure
+
+- **tea/** - Tea language benchmark programs
+- **rust/** - Equivalent Rust implementations for performance comparison
+- **js/** - Equivalent JavaScript implementations (run with Bun)
+
+## Pairing Requirement
+
+Each benchmark requires **at minimum** Tea and Rust implementations with **matching names**:
+
+- `tea/loops.tea` ↔ `rust/loops.rs` (↔ `js/loops.js` optional)
+- `tea/fib.tea` ↔ `rust/fib.rs` (↔ `js/fib.js` optional)
+
+The benchmark script automatically discovers and runs only paired benchmarks (Tea + Rust required). JavaScript implementations are optional and included when using the `--include-js` flag.
 
 ## ⚡ Quick Answer
 
@@ -16,19 +31,26 @@ tea build myprogram.tea  # O3 + auto-detected CPU by default!
 
 For details, see [User Guide](../benchmark_results/USER_GUIDE.md) or [New Defaults](../benchmark_results/NEW_DEFAULTS.md).
 
-## Benchmark Programs
+## Current Benchmark Programs
 
-- **loops.tea** - Integer arithmetic in tight loops (10,000 iterations × sum to 1,000)
-- **fib.tea** - Recursive fibonacci (fib(35), heavy function call overhead)
-- **strings.tea** - String concatenation (100 iterations × 1,000 character string)
-- **lists.tea** - List operations: build, append, and sum (100 iterations × 1,000 elements)
-- **dicts.tea** - Dictionary insert and lookup (100 iterations × 500 key-value pairs)
-- **closures.tea** - Closure allocation and invocation (1,000 closures × 1,000 calls each)
-- **structs.tea** - Struct allocation and field access (100 iterations × 1,000 points)
+Currently paired benchmarks (both Tea and Rust implementations exist):
 
-## Reference Implementations
+- **loops** - Integer arithmetic in tight loops (10,000 iterations × sum to 1,000)
+- **fib** - Recursive fibonacci (fib(35), heavy function call overhead)
+- **strings** - String concatenation (100 iterations × 1,000 character string)
+- **dicts** - Dictionary insert and lookup (100 iterations × 500 key-value pairs)
+- **math** - Mixed arithmetic operations (1,000 iterations × 10,000 computations)
 
-For some benchmarks, equivalent Rust implementations are provided in `reference_*.rs` files to establish an aspirational performance baseline.
+## Adding New Benchmarks
+
+To add a new benchmark:
+
+1. Create `tea/{name}.tea` with your Tea implementation
+2. Create `rust/{name}.rs` with an equivalent Rust implementation
+3. Ensure both programs produce identical output
+4. Run `./scripts/bench.sh {name}` to verify
+
+Both files must use the same basename for the benchmark script to discover the pair.
 
 ## Running Benchmarks
 
@@ -42,28 +64,38 @@ cargo install hyperfine
 
 ### Run All Benchmarks
 
+By default, compares **Tea AOT** vs **Rust** only:
+
 ```bash
 ./scripts/bench.sh all
 ```
 
-This will:
+To include JavaScript (Bun):
 
-1. Build each benchmark with multiple optimization configurations:
-   - O2 with generic CPU
-   - O3 with generic CPU
-   - O3 with native CPU features
-2. Build Rust reference implementations (where available)
-3. Run each benchmark comparing:
-   - Tea AOT binaries (different opt levels)
-   - Rust -O reference
-   - Tea VM (bytecode interpreter)
-4. Generate results in `benchmark_results/`
+```bash
+./scripts/bench.sh --include-js all
+```
+
+To include the Tea VM (bytecode interpreter):
+
+```bash
+./scripts/bench.sh --include-vm all
+```
+
+To include everything:
+
+```bash
+./scripts/bench.sh --include-js --include-vm all
+```
 
 ### Run Specific Benchmark
 
 ```bash
 ./scripts/bench.sh loops
 ./scripts/bench.sh fib 5 20  # 5 warmup runs, 20 measured runs
+./scripts/bench.sh --include-js loops  # Include JS comparison
+./scripts/bench.sh --include-vm loops  # Include VM comparison
+./scripts/bench.sh --include-js --include-vm fib  # Include both
 ```
 
 ### Clean Artifacts
@@ -72,26 +104,40 @@ This will:
 ./scripts/bench.sh clean
 ```
 
-## Optimization Configurations
+### Help
 
-**Note**: `tea build` now uses **O3 + auto-detected CPU** by default, giving you maximum performance out of the box!
+```bash
+./scripts/bench.sh --help
+```
 
-The benchmark script tests different AOT configurations:
+## Compilation Settings
 
-1. **Default**: `tea build` (no flags)
-   - ✅ **O3 aggressive optimizations**
-   - ✅ **Auto-detected CPU** (apple-m4, x86-64-v3, etc.)
-   - ✅ **Maximum performance by default!**
+### Tea AOT
 
-2. **Portable**: `--cpu generic`
-   - O3 aggressive optimizations
-   - Generic CPU features for cross-platform distribution
-   - Slightly slower than auto-detected but works everywhere
+`tea build` uses **O3 + auto-detected CPU** by default for maximum performance:
 
-3. **Fast compilation**: `--opt-level 1` or `--opt-level 2`
-   - Lower optimization levels
-   - Faster compilation during development
-   - Good but not maximum performance
+- ✅ **O3 aggressive optimizations**
+- ✅ **Auto-detected CPU features** (apple-m4, x86-64-v3, etc.)
+
+### Rust
+
+Rust benchmarks are compiled with:
+
+```bash
+rustc -O -C target-cpu=native
+```
+
+This ensures fair comparison by matching Tea's optimization level and CPU-specific tuning.
+
+### JavaScript (Bun)
+
+JavaScript benchmarks run directly with Bun's JIT compiler:
+
+```bash
+bun script.js
+```
+
+Bun is a fast JavaScript runtime with native-speed performance for many workloads.
 
 ## Results
 
@@ -100,21 +146,39 @@ Benchmark results are saved to `benchmark_results/`:
 - Individual benchmark results: `{name}.json` and `{name}.md`
 - Combined summary: `summary_{timestamp}.md`
 
+## What Gets Compared
+
+**Default mode** (no flags):
+
+- Tea AOT vs Rust
+
+**With `--include-js` flag**:
+
+- Tea AOT vs Rust vs JavaScript (Bun)
+
+**With `--include-vm` flag**:
+
+- Tea AOT vs Rust vs Tea VM (bytecode)
+
+**With both flags**:
+
+- Tea AOT vs Rust vs JavaScript (Bun) vs Tea VM (bytecode)
+
+The VM and JS are excluded by default to focus on the Tea AOT vs Rust comparison. The VM is primarily used for development/debugging, while JS (Bun) provides an interesting reference point for dynamic language performance.
+
 ## Metrics
 
-For each configuration, we measure:
+For each benchmark, hyperfine measures:
 
-- **Mean runtime** (milliseconds)
-- **Standard deviation**
+- **Mean runtime** with standard deviation
 - **Min/Max times**
-- **Relative speedup** compared to baseline
+- **Relative speedup** between implementations
 
 ## Goals
 
-The benchmarks help us:
+These benchmarks help us:
 
-1. Track AOT compiler performance over time
-2. Identify optimization opportunities
-3. Validate that optimizations improve performance
-4. Compare Tea performance against native code
-5. Understand the overhead of different language features
+1. Track Tea AOT compiler performance over time
+2. Compare Tea against equivalent Rust programs
+3. Identify optimization opportunities
+4. Validate that Tea can match or approach Rust performance

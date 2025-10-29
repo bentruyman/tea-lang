@@ -1,5 +1,5 @@
-// Reference implementation in Rust for comparison
-// Compile with: rustc -O reference_fib.rs
+// Equivalent Rust implementation for benchmarking
+// Compile with: rustc -O -C target-cpu=native fib.rs
 
 fn fib(n: i64) -> i64 {
     if n <= 1 {
@@ -9,7 +9,7 @@ fn fib(n: i64) -> i64 {
 }
 
 fn main() {
-    let n = 35;
+    let n = 40;
     let result = fib(n);
     println!("{}", result);
 }

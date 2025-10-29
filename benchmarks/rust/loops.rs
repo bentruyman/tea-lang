@@ -1,5 +1,5 @@
-// Reference implementation in Rust for comparison
-// Compile with: rustc -O reference_loops.rs
+// Equivalent Rust implementation for benchmarking
+// Compile with: rustc -O -C target-cpu=native loops.rs
 
 fn sum_to_n(n: i64) -> i64 {
     let mut total = 0;
@@ -12,7 +12,7 @@ fn sum_to_n(n: i64) -> i64 {
 }
 
 fn main() {
-    let iterations = 10000;
+    let iterations = 100000;
     let n = 1000;
     
     let mut i = 0;

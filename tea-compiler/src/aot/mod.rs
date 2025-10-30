@@ -1200,6 +1200,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         );
         function.add_attribute(AttributeLoc::Function, willreturn);
 
+        // Add nosync - Tea functions don't use synchronization primitives
+        // This helps LLVM understand that functions can be safely parallelized/vectorized
+        let nosync = self.context.create_enum_attribute(
+            inkwell::attributes::Attribute::get_named_enum_kind_id("nosync"),
+            0,
+        );
+        function.add_attribute(AttributeLoc::Function, nosync);
+
+        // Add nofree - Tea functions use RAII and don't call free() directly
+        // This helps with alias analysis for vectorization
+        let nofree = self.context.create_enum_attribute(
+            inkwell::attributes::Attribute::get_named_enum_kind_id("nofree"),
+            0,
+        );
+        function.add_attribute(AttributeLoc::Function, nofree);
+
         // Add inlining hints based on function characteristics
         if is_small {
             // For very small functions, suggest aggressive inlining
@@ -1216,24 +1232,57 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     /// Add loop optimization metadata to help LLVM vectorize and optimize loops
     fn add_loop_metadata(&self, instruction: inkwell::values::InstructionValue<'ctx>) {
-        // Create loop metadata node
-        // !llvm.loop !{!llvm.loop, !{!"llvm.loop.vectorize.enable", i1 true},
+        // Create comprehensive loop metadata for SIMD vectorization
+        // !llvm.loop !{!llvm.loop,
+        //              !{!"llvm.loop.vectorize.enable", i1 true},
+        //              !{!"llvm.loop.vectorize.width", i32 4},
+        //              !{!"llvm.loop.vectorize.scalable.enable", i1 false},
+        //              !{!"llvm.loop.interleave.count", i32 4},
         //              !{!"llvm.loop.unroll.enable", i1 true}}
 
         let md_kind = self.context.get_kind_id("llvm.loop");
 
-        // Create metadata string for vectorization hint
+        // Enable vectorization
         let vectorize_enable = self.context.metadata_string("llvm.loop.vectorize.enable");
         let vectorize_true = self.bool_type().const_int(1, false).as_basic_value_enum();
-
-        // Create metadata string for unroll hint
-        let unroll_enable = self.context.metadata_string("llvm.loop.unroll.enable");
-        let unroll_true = self.bool_type().const_int(1, false).as_basic_value_enum();
-
-        // Create metadata nodes
         let vectorize_node = self
             .context
             .metadata_node(&[vectorize_enable.into(), vectorize_true.into()]);
+
+        // Set preferred vector width (4-wide SIMD)
+        let vectorize_width_key = self.context.metadata_string("llvm.loop.vectorize.width");
+        let vectorize_width_value = self
+            .context
+            .i32_type()
+            .const_int(4, false)
+            .as_basic_value_enum();
+        let vectorize_width_node = self
+            .context
+            .metadata_node(&[vectorize_width_key.into(), vectorize_width_value.into()]);
+
+        // Disable scalable vectors (use fixed-width SIMD)
+        let scalable_key = self
+            .context
+            .metadata_string("llvm.loop.vectorize.scalable.enable");
+        let scalable_false = self.bool_type().const_int(0, false).as_basic_value_enum();
+        let scalable_node = self
+            .context
+            .metadata_node(&[scalable_key.into(), scalable_false.into()]);
+
+        // Set interleave count for additional parallelism
+        let interleave_key = self.context.metadata_string("llvm.loop.interleave.count");
+        let interleave_value = self
+            .context
+            .i32_type()
+            .const_int(4, false)
+            .as_basic_value_enum();
+        let interleave_node = self
+            .context
+            .metadata_node(&[interleave_key.into(), interleave_value.into()]);
+
+        // Enable loop unrolling
+        let unroll_enable = self.context.metadata_string("llvm.loop.unroll.enable");
+        let unroll_true = self.bool_type().const_int(1, false).as_basic_value_enum();
         let unroll_node = self
             .context
             .metadata_node(&[unroll_enable.into(), unroll_true.into()]);
@@ -1243,6 +1292,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let loop_metadata = self.context.metadata_node(&[
             loop_id.into(),
             vectorize_node.into(),
+            vectorize_width_node.into(),
+            scalable_node.into(),
+            interleave_node.into(),
             unroll_node.into(),
         ]);
 

@@ -7,6 +7,10 @@ members = [
   "tea-runtime",
   "tea-support",
 ]
+# tea-llvm-vendor is excluded by default - only build when LLVM libs are vendored
+exclude = [
+  "tea-llvm-vendor",
+]
 
 [workspace.package]
 edition = "2021"

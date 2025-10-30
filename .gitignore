@@ -16,3 +16,9 @@ benchmarks/*_lto
 benchmarks/*_no_lto
 benchmarks/*_test
 benchmarks/*_with_metadata
+
+# Vendored LLVM build artifacts (run scripts/llvm/build-all-macos-arm64.sh to regenerate)
+tea-llvm-vendor/llvm-project/
+tea-llvm-vendor/build-*/
+tea-llvm-vendor/install-*/
+tea-llvm-vendor/runtime-artifacts-*/

@@ -15,6 +15,8 @@ _Coming soon: Getting Started with Tea, Building Your First CLI Tool_
 Task-focused guides for specific goals.
 
 - [Setting up the Tea LSP](how-to/lsp-setup.md)
+- [Building Vendor Artifacts](how-to/building-vendor-artifacts.md)
+- [Single Binary Usage](how-to/single-binary-usage.md)
 
 ### Reference
 
@@ -29,6 +31,8 @@ Architecture decisions, design rationale, and deep dives.
 
 - [AOT Backend Architecture](explanation/aot-backend.md)
 - [Compiler Code Generation](explanation/compiler-codegen.md)
+- [Zero-Dependency Implementation](explanation/zero-dependency-implementation.md)
+- [Static LLVM Embedding](explanation/static-llvm-embedding.md)
 
 ### Roadmap
 

@@ -1,0 +1,15 @@
+[package]
+name = "tea-llvm-vendor"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Vendored static LLVM and LLD libraries for tea-lang"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# No runtime dependencies - this crate only provides static linking
+
+[build-dependencies]
+# No build dependencies needed - build.rs just emits link directives

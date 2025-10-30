@@ -38,6 +38,7 @@ Subcommands:
   tea build <INPUT>        Compile a tea-lang file to a native executable.
   tea fmt [PATH]...       Format tea-lang sources in place (defaults to current directory).
   tea test [PATH]...       Discover and run tea-lang test blocks.
+  tea about                Show license and attribution information.
 
 See `tea <subcommand> --help` for command-specific options.";
 
@@ -234,6 +235,10 @@ struct TestCli {
     update_snapshots: bool,
 }
 
+#[derive(Parser)]
+#[command(name = "tea", about = "Show license and attribution information")]
+struct AboutCli {}
+
 fn main() -> Result<()> {
     let raw: Vec<OsString> = std::env::args_os().collect();
     if raw.get(1).map(|arg| arg == "build").unwrap_or(false) {
@@ -244,6 +249,9 @@ fn main() -> Result<()> {
     }
     if raw.get(1).map(|arg| arg == "test").unwrap_or(false) {
         return handle_test(raw);
+    }
+    if raw.get(1).map(|arg| arg == "about").unwrap_or(false) {
+        return handle_about(raw);
     }
 
     let run_cli = RunCli::parse_from(raw);
@@ -285,6 +293,93 @@ fn handle_test(raw: Vec<OsString>) -> Result<()> {
     }
     let cli = TestCli::parse_from(args);
     run_test(&cli)
+}
+
+fn handle_about(raw: Vec<OsString>) -> Result<()> {
+    let mut args = raw.clone();
+    if !args.is_empty() {
+        args.remove(1); // drop the literal "about"
+    }
+    let _cli = AboutCli::parse_from(args);
+    run_about()
+}
+
+fn run_about() -> Result<()> {
+    println!("Tea Programming Language");
+    println!();
+    println!("Version: {}", env!("CARGO_PKG_VERSION"));
+    println!("Repository: {}", env!("CARGO_PKG_REPOSITORY"));
+    println!();
+    println!("License: MIT");
+    println!("Copyright (c) 2025 tea-lang contributors");
+    println!();
+    println!("Permission is hereby granted, free of charge, to any person obtaining a copy");
+    println!("of this software and associated documentation files (the \"Software\"), to deal");
+    println!("in the Software without restriction, including without limitation the rights");
+    println!("to use, copy, modify, merge, publish, distribute, sublicense, and/or sell");
+    println!("copies of the Software, and to permit persons to whom the Software is");
+    println!("furnished to do so, subject to the following conditions:");
+    println!();
+    println!("The above copyright notice and this permission notice shall be included in all");
+    println!("copies or substantial portions of the Software.");
+    println!();
+    println!("THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR");
+    println!("IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,");
+    println!("FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE");
+    println!("AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER");
+    println!("LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,");
+    println!("OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE");
+    println!("SOFTWARE.");
+    println!();
+    println!("{}", "=".repeat(80));
+    println!();
+
+    #[cfg(feature = "llvm-aot")]
+    {
+        println!("This software includes LLVM and LLD.");
+        println!();
+        println!("LLVM is distributed under the Apache License v2.0 with LLVM Exceptions.");
+        println!("See https://llvm.org/LICENSE.txt for the full license text.");
+        println!();
+        println!("Copyright (c) 2003-2025 University of Illinois at Urbana-Champaign.");
+        println!("All rights reserved.");
+        println!();
+        println!("As an exception, if portions of LLVM are embedded into compiled object code,");
+        println!("you may redistribute such embedded portions without complying with the");
+        println!("conditions of Sections 4(a), 4(b) and 4(d) of the Apache License.");
+        println!();
+
+        if let Some(llvm_version) = get_embedded_llvm_version() {
+            println!("Embedded LLVM Version: {}", llvm_version);
+            println!();
+        }
+
+        println!("For more information about LLVM, visit https://llvm.org");
+        println!();
+    }
+
+    #[cfg(not(feature = "llvm-aot"))]
+    {
+        println!("This build does not include embedded LLVM.");
+        println!("To enable native compilation, rebuild with: --features tea-cli/llvm-aot");
+        println!();
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "llvm-aot")]
+fn get_embedded_llvm_version() -> Option<String> {
+    // Try to read LLVM version from metadata.json
+    let metadata_path = tea_llvm_vendor::install_dir().join("metadata.json");
+    if let Ok(contents) = std::fs::read_to_string(metadata_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
+            if let Some(version) = json.get("llvm_version").and_then(|v| v.as_str()) {
+                return Some(version.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn run_fmt(cli: &FmtCli) -> Result<()> {
@@ -681,43 +776,24 @@ fn run_build(cli: BuildCli) -> Result<()> {
 }
 
 #[cfg(feature = "llvm-aot")]
-fn detect_native_cpu() -> Option<&'static str> {
-    // Detect the native CPU for optimal performance
+fn detect_native_cpu() -> &'static str {
+    // Use generic CPU targeting to avoid LLVM warnings
+    // TargetMachine will still apply architecture-specific optimizations
     #[cfg(target_arch = "aarch64")]
     {
-        // Apple Silicon detection
-        if cfg!(target_os = "macos") {
-            // Try to detect specific Apple CPU
-            if let Ok(output) = std::process::Command::new("sysctl")
-                .arg("-n")
-                .arg("machdep.cpu.brand_string")
-                .output()
-            {
-                let brand = String::from_utf8_lossy(&output.stdout);
-                if brand.contains("M4") {
-                    return Some("apple-m4");
-                } else if brand.contains("M3") {
-                    return Some("apple-m3");
-                } else if brand.contains("M2") {
-                    return Some("apple-m2");
-                } else if brand.contains("M1") {
-                    return Some("apple-m1");
-                }
-            }
-            // Default for Apple Silicon
-            return Some("apple-a14");
-        }
-        // Other ARM64 platforms
-        Some("generic")
+        // For Apple Silicon, use "generic" which enables all standard arm64 features
+        // LLVM will still optimize well for the target architecture
+        "generic"
     }
     #[cfg(target_arch = "x86_64")]
     {
-        // x86-64 detection - use a baseline that works well
-        Some("x86-64-v3")
+        // For x86_64, use x86-64-v2 baseline (SSE3, SSSE3, SSE4.1, SSE4.2)
+        // This ensures broad compatibility while enabling modern optimizations
+        "x86-64"
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        Some("generic")
+        "generic"
     }
 }
 
@@ -740,11 +816,11 @@ fn build_with_llvm(cli: &BuildCli, compilation: &tea_compiler::Compilation) -> R
     object_options.entry_symbol = Some("tea_main");
     object_options.triple = cli.target.as_deref();
 
-    // Auto-detect CPU if not specified for maximum performance
+    // Default to native CPU for maximum performance unless overridden
     if let Some(cpu) = cli.cpu.as_deref() {
         object_options.cpu = Some(cpu);
-    } else if let Some(detected_cpu) = detect_native_cpu() {
-        object_options.cpu = Some(detected_cpu);
+    } else {
+        object_options.cpu = Some(detect_native_cpu());
     }
 
     if let Some(features) = cli.features.as_deref() {
@@ -785,33 +861,45 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         println!("Object file written to {}", object_path.display());
     }
 
-    let stub_path = object_path.with_extension("stub.rs");
-    fs::write(&stub_path, STUB_SOURCE)?;
+    // Try direct linking first (zero dependencies if vendored artifacts exist)
+    let link_result = link_directly(&object_path, &output, cli.target.as_deref());
 
-    let runtime_rlib = locate_runtime_rlib(current_profile())?;
-    let rustc_path = cli
-        .rustc
-        .clone()
-        .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("rustc"));
-    let rustc_info = detect_rustc_info(&rustc_path);
+    let rustc_info = if link_result.is_ok() {
+        // Direct linking succeeded - no rustc needed!
+        RustcInfo::default()
+    } else {
+        // Fall back to rustc linking
+        // Silently fall back - rustc will provide its own error messages if it fails
+        let stub_path = object_path.with_extension("stub.rs");
+        fs::write(&stub_path, STUB_SOURCE)?;
 
-    link_with_rustc(
-        &rustc_path,
-        &stub_path,
-        &object_path,
-        &runtime_rlib,
-        &output,
-        cli.target.as_deref(),
-        cli.linker.as_deref(),
-        &cli.linker_args,
-        cli.lto,
-    )?;
+        let runtime_rlib = locate_runtime_rlib(current_profile())?;
+        let rustc_path = cli
+            .rustc
+            .clone()
+            .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
+            .unwrap_or_else(|| PathBuf::from("rustc"));
+        let rustc_info = detect_rustc_info(&rustc_path);
+
+        link_with_rustc(
+            &rustc_path,
+            &stub_path,
+            &object_path,
+            &runtime_rlib,
+            &output,
+            cli.target.as_deref(),
+            cli.linker.as_deref(),
+            &cli.linker_args,
+            cli.lto,
+        )?;
+
+        let _ = fs::remove_file(&stub_path);
+        rustc_info
+    };
 
     if !cli.emit.contains(&Emit::Obj) {
         let _ = fs::remove_file(&object_path);
     }
-    let _ = fs::remove_file(&stub_path);
 
     let build_time = build_timestamp()?;
     let sha256 = compute_sha256(&output)?;
@@ -980,6 +1068,7 @@ fn runtime_target_dir() -> PathBuf {
         .unwrap_or_else(|_| workspace_root().join("target"))
 }
 
+#[cfg(feature = "llvm-aot")]
 fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>> {
     if let Ok(path) = std::env::var("TEA_RUNTIME_RLIB") {
         let candidate = PathBuf::from(path);
@@ -1009,6 +1098,7 @@ fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>
     Ok(None)
 }
 
+#[cfg(feature = "llvm-aot")]
 fn build_runtime_archive(target_dir: &Path) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(workspace_root());
@@ -1026,6 +1116,7 @@ fn build_runtime_archive(target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "llvm-aot")]
 fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     let target_dir = runtime_target_dir();
     if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
@@ -1041,6 +1132,110 @@ fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     bail!(
         "unable to locate tea-runtime rlib; run `cargo build -p tea-runtime` to build the runtime archive"
     );
+}
+
+#[cfg(feature = "llvm-aot")]
+fn link_directly(object_path: &Path, output: &Path, _target: Option<&str>) -> Result<()> {
+    // Use vendored artifacts to link directly without rustc
+    #[cfg(feature = "tea-llvm-vendor")]
+    {
+        use tea_llvm_vendor::{entry_stub_path, runtime_staticlib_path};
+
+        if let Some(parent) = output.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+        let entry_stub = entry_stub_path();
+        let runtime_lib = runtime_staticlib_path();
+
+        // Check if vendored artifacts exist
+        if !entry_stub.exists() {
+            bail!(
+                "Entry stub not found at {}\nRun: ./scripts/llvm/build-entry-stub.sh",
+                entry_stub.display()
+            );
+        }
+        if !runtime_lib.exists() {
+            bail!(
+                "Runtime library not found at {}\nRun: ./scripts/llvm/build-runtime-staticlib.sh",
+                runtime_lib.display()
+            );
+        }
+
+        // Get SDK path for system libraries
+        let sdk_path = Command::new("xcrun")
+            .arg("--show-sdk-path")
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.trim().to_string());
+
+        // Use system linker (ld) on macOS
+        // macOS always has /usr/bin/ld available
+        let mut cmd = Command::new("ld");
+
+        // Architecture and platform
+        cmd.arg("-arch").arg("arm64");
+        cmd.arg("-platform_version")
+            .arg("macos")
+            .arg("15.0") // min version
+            .arg("15.0"); // sdk version
+
+        // SDK path for system libraries
+        if let Some(sdk) = sdk_path {
+            cmd.arg("-syslibroot").arg(sdk);
+        }
+
+        // Output
+        cmd.arg("-o").arg(output);
+
+        // Entry point
+        cmd.arg("-e").arg("_main");
+
+        // Input objects (order matters!)
+        cmd.arg(&entry_stub); // Provides _main
+        cmd.arg(object_path); // User's Tea code (provides _tea_main)
+
+        // Runtime library
+        cmd.arg(&runtime_lib);
+
+        // System libraries
+        cmd.arg("-lSystem"); // libc, libm, etc.
+        cmd.arg("-lc++"); // C++ stdlib (for runtime deps)
+
+        // Dynamic linking (default on macOS)
+        cmd.arg("-dynamic");
+
+        let output_result = cmd
+            .output()
+            .with_context(|| format!("failed to invoke linker (ld) - is it in PATH?"))?;
+
+        if !output_result.status.success() {
+            let stderr = String::from_utf8_lossy(&output_result.stderr);
+            let stdout = String::from_utf8_lossy(&output_result.stdout);
+            bail!(
+                "Linking failed with status {}:\n{}\n{}",
+                output_result.status,
+                stdout.trim_end(),
+                stderr.trim_end()
+            );
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(feature = "tea-llvm-vendor"))]
+    {
+        bail!("Direct linking requires tea-llvm-vendor feature to be enabled")
+    }
 }
 
 #[cfg(feature = "llvm-aot")]

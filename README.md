@@ -79,9 +79,23 @@ add(5, true)  # Error: expected Int, found Bool
 Build a standalone binary with the LLVM backend:
 
 ```bash
-cargo run -p tea-cli -- build hello.tea
+# First-time setup: install build tools (if not already installed)
+brew install cmake ninja git
+
+# Build vendored LLVM/LLD (30-60 min, one-time only)
+make vendor  # macOS arm64 only for now
+
+# Build tea with static LLVM
+cargo build -p tea-cli --release --features tea-cli/llvm-aot
+
+# Compile Tea to native binary (no third-party deps needed!)
+./target/release/tea-cli build hello.tea
 ./bin/hello
 ```
+
+**Note**: Static LLVM embedding currently supports macOS arm64. The compiled `tea` binary includes everything needed to produce native executables with **ZERO third-party dependencies** - no LLVM, no Clang, no Rustc required!
+
+**Important**: Without building the vendored LLVM, `tea-cli` will use your system LLVM (if installed), which means the binary won't be truly self-contained.
 
 ## Examples
 
@@ -98,6 +112,7 @@ Explore more in the [`examples/`](examples/) directory:
 - **[Language Semantics](docs/reference/language/semantics.md)** – types, scoping, modules
 - **[Standard Library](docs/roadmap/cli-stdlib.md)** – available modules and roadmap
 - **[AOT Backend](docs/explanation/aot-backend.md)** – LLVM compilation details
+- **[Zero-Dependency Implementation](docs/explanation/zero-dependency-implementation.md)** – complete guide to single-binary distribution
 - **[LSP Setup](docs/how-to/lsp-setup.md)** – editor integration
 
 ## Development
@@ -116,8 +131,10 @@ make test     # Run test suite
 - `tea-compiler/` – Lexer, parser, typechecker, and codegen
 - `tea-runtime/` – VM and runtime support for compiled binaries
 - `tea-lsp/` – Language server for editor integration
+- `tea-llvm-vendor/` – Vendored static LLVM + LLD libraries
 - `spec/` – Language specification (grammar, AST, tokens)
 - `examples/` – Sample Tea programs
+- `scripts/llvm/` – Build scripts for vendored LLVM artifacts
 
 ### Contributing
 

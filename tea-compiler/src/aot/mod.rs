@@ -872,6 +872,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         );
         tea_closure.set_body(&[ptr_type.into(), ptr_type.into(), i64.into()], false);
 
+        // Register global built-in functions
+        let mut builtin_functions = HashMap::new();
+        for builtin in stdlib::BUILTINS {
+            builtin_functions.insert(builtin.name.to_string(), builtin.kind);
+        }
+
         Self {
             context,
             module,
@@ -900,7 +906,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             generic_binding_stack: Vec::new(),
             lambda_functions: HashMap::new(),
             lambda_capture_types: HashMap::new(),
-            builtin_functions: HashMap::new(),
+            builtin_functions,
             module_builtins: HashMap::new(),
             builtin_print_int: None,
             builtin_print_float: None,

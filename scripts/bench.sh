@@ -31,6 +31,13 @@ if ! command -v hyperfine &> /dev/null; then
     exit 1
 fi
 
+# Ensure jq is installed (for summarizing relative results)
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}Error: jq is not installed${NC}"
+    echo "Install it with: brew install jq (macOS) or your package manager"
+    exit 1
+fi
+
 # Check if bun is available (optional)
 if command -v bun &> /dev/null; then
     HAS_BUN=true
@@ -70,18 +77,18 @@ build_tea() {
     local output="${BIN_DIR}/${name}_aot"
     
     if [ ! -f "${input}" ]; then
-        echo -e "${RED}Tea file not found: ${input}${NC}"
+        echo -e "${RED}Tea file not found: ${input}${NC}" >&2
         return 1
     fi
     
-    echo -e "${YELLOW}Building ${name}.tea with AOT compiler...${NC}"
+    echo -e "${YELLOW}Building ${name}.tea with AOT compiler...${NC}" >&2
     
     cargo run -p tea-cli --quiet --release -- build \
         --output "${output}" \
-        "${input}" 2>&1 | grep -v "^Compiling\|^Finished\|^Running" || true
+        "${input}" 2>&1 | grep -v "^Compiling\|^Finished\|^Running" >&2 || true
     
     if [ ! -f "${output}" ]; then
-        echo -e "${RED}Failed to build ${name}${NC}"
+        echo -e "${RED}Failed to build ${name}${NC}" >&2
         return 1
     fi
     
@@ -95,15 +102,16 @@ build_rust() {
     local output="${BIN_DIR}/${name}_rust"
     
     if [ ! -f "${source}" ]; then
-        echo -e "${RED}Rust file not found: ${source}${NC}"
+        echo -e "${RED}Rust file not found: ${source}${NC}" >&2
         return 1
     fi
     
-    echo -e "${YELLOW}Building ${name}.rs with Rust...${NC}"
-    rustc -O -C target-cpu=native "${source}" -o "${output}" 2>/dev/null
+    echo -e "${YELLOW}Building ${name}.rs with Rust...${NC}" >&2
+    
+    rustc -O -C target-cpu=native "${source}" -o "${output}" 2>&1 >&2
     
     if [ ! -f "${output}" ]; then
-        echo -e "${RED}Failed to build Rust ${name}${NC}"
+        echo -e "${RED}Failed to build ${name}${NC}" >&2
         return 1
     fi
     
@@ -222,6 +230,54 @@ run_all() {
             if [ -f "${RESULTS_DIR}/${bench}.md" ]; then
                 echo "## ${bench}" >> "${summary_file}"
                 echo "" >> "${summary_file}"
+
+                # Add a short relative summary (Ratios vs Tea AOT)
+                json_file="${RESULTS_DIR}/${bench}.json"
+                if [ -f "${json_file}" ]; then
+                    tea_mean=$(jq -r '.results[0].mean' "${json_file}")
+                    results_len=$(jq -r '.results | length' "${json_file}")
+
+                    if [ -n "${tea_mean}" ] && [ "${tea_mean}" != "null" ]; then
+                        echo "Relative to Tea AOT:" >> "${summary_file}"
+
+                        # Rust is always the second entry
+                        if [ "${results_len}" -ge 2 ]; then
+                            rust_mean=$(jq -r '.results[1].mean' "${json_file}")
+                            if [ -n "${rust_mean}" ] && [ "${rust_mean}" != "null" ]; then
+                                rust_ratio=$(awk "BEGIN { printf \"%.2f\", ${rust_mean}/${tea_mean} }")
+                                echo "- Rust: ${rust_ratio}x" >> "${summary_file}"
+                            fi
+                        fi
+
+                        # JavaScript (Bun) may be present as the 3rd entry when included
+                        if [ "${INCLUDE_JS}" = true ] && [ "${HAS_BUN}" = true ] && [ "${results_len}" -ge 3 ]; then
+                            js_mean=$(jq -r '.results[2].mean' "${json_file}")
+                            if [ -n "${js_mean}" ] && [ "${js_mean}" != "null" ]; then
+                                js_ratio=$(awk "BEGIN { printf \"%.2f\", ${js_mean}/${tea_mean} }")
+                                echo "- JavaScript (Bun): ${js_ratio}x" >> "${summary_file}"
+                            fi
+                        fi
+
+                        # VM may be present as 3rd (when JS excluded) or 4th (when JS included)
+                        if [ "${INCLUDE_VM}" = true ]; then
+                            if [ "${INCLUDE_JS}" = true ] && [ "${HAS_BUN}" = true ]; then
+                                vm_index=3
+                            else
+                                vm_index=2
+                            fi
+                            if [ "${results_len}" -ge $((vm_index+1)) ]; then
+                                vm_mean=$(jq -r ".results[${vm_index}].mean" "${json_file}")
+                                if [ -n "${vm_mean}" ] && [ "${vm_mean}" != "null" ]; then
+                                    vm_ratio=$(awk "BEGIN { printf \"%.2f\", ${vm_mean}/${tea_mean} }")
+                                    echo "- Tea VM (bytecode): ${vm_ratio}x" >> "${summary_file}"
+                                fi
+                            fi
+                        fi
+
+                        echo "" >> "${summary_file}"
+                    fi
+                fi
+
                 cat "${RESULTS_DIR}/${bench}.md" >> "${summary_file}"
                 echo "" >> "${summary_file}"
             fi
@@ -307,6 +363,10 @@ case "${COMMAND:-all}" in
         ;;
     *)
         # Run a specific benchmark
-        benchmark_program "${COMMAND}" "${ARGS[@]:-3 10}"
+        if [ ${#ARGS[@]} -eq 0 ]; then
+            benchmark_program "${COMMAND}" 3 10
+        else
+            benchmark_program "${COMMAND}" "${ARGS[@]}"
+        fi
         ;;
 esac

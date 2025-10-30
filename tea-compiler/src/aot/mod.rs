@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::iter::Peekable;
-use std::process::Command;
 use std::str::Chars;
 
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
@@ -266,6 +265,7 @@ impl<'a> Default for ObjectCompileOptions<'a> {
 }
 
 /// Run LLVM optimization passes on the module using the opt tool
+/// This is CRITICAL for function inlining to work with alwaysinline attribute
 fn optimize_module_with_opt<'ctx>(
     context: &'ctx Context,
     module: LlvmModule<'ctx>,
@@ -288,11 +288,14 @@ fn optimize_module_with_opt<'ctx>(
     let ir_string = module.print_to_string().to_string();
 
     // Try to find the opt tool
+    // Use LLVM 17 to match inkwell's version
     let opt_paths = [
-        "/opt/homebrew/opt/llvm/bin/opt", // Homebrew on Apple Silicon
-        "/usr/local/opt/llvm/bin/opt",    // Homebrew on Intel Mac
-        "/usr/bin/opt",                   // Linux system install
-        "opt",                            // In PATH
+        "/opt/homebrew/opt/llvm@17/bin/opt", // Homebrew LLVM 17 on Apple Silicon (matches inkwell)
+        "/usr/local/opt/llvm@17/bin/opt",    // Homebrew LLVM 17 on Intel Mac
+        "/opt/homebrew/opt/llvm/bin/opt",    // Homebrew on Apple Silicon (fallback)
+        "/usr/local/opt/llvm/bin/opt",       // Homebrew on Intel Mac (fallback)
+        "/usr/bin/opt",                      // Linux system install
+        "opt",                               // In PATH
     ];
 
     let mut opt_path = None;
@@ -307,43 +310,47 @@ fn optimize_module_with_opt<'ctx>(
         Some(path) => path,
         None => {
             // If opt tool is not found, just return the module
-            // The module is already optimized via LLVM's PassManager
-            // External opt is only useful for debugging/inspection
+            // WARNING: Without opt, function inlining (alwaysinline) will NOT work!
+            // This will result in significantly slower binaries.
+            eprintln!("Warning: LLVM opt tool not found. Function inlining disabled.");
+            eprintln!("Install LLVM 17 for optimal performance: brew install llvm@17");
             return Ok(module);
         }
     };
 
-    // Run opt on the IR
-    let output = Command::new(opt_tool)
+    // Run opt on the IR to perform optimizations including function inlining
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(opt_tool)
         .arg(opt_flag)
         .arg("-S") // Output textual IR
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("failed to spawn opt process at {}", opt_tool))?;
 
     // Write IR to stdin
-    use std::io::Write;
-    output
+    child
         .stdin
-        .as_ref()
+        .as_mut()
         .ok_or_else(|| anyhow!("failed to open stdin for opt"))?
         .write_all(ir_string.as_bytes())
         .context("failed to write IR to opt stdin")?;
 
-    let result = output
+    let output = child
         .wait_with_output()
         .context("failed to wait for opt process")?;
 
-    if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         bail!("opt failed: {}", stderr);
     }
 
     // Parse the optimized IR back into a module
     let optimized_ir =
-        String::from_utf8(result.stdout).context("opt output was not valid UTF-8")?;
+        String::from_utf8(output.stdout).context("opt output was not valid UTF-8")?;
 
     let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
         optimized_ir.as_bytes(),
@@ -431,9 +438,9 @@ pub fn compile_module_to_object(
     }
 
     // Always emit regular object files
-    // Note: Full LTO support would require embedding LLVM bitcode in the object file,
-    // which requires platform-specific handling (MachO, ELF, COFF formats differ).
-    // Tea code is already maximally optimized by LLVM's opt tool at O3.
+    // Note: Function inlining with alwaysinline attribute happens during code generation
+    // at the optimization level specified. LLVM 17+ moved to a new PassManager API
+    // which is more complex. For now, we rely on the optimization level set on target_machine.
     target_machine
         .write_to_file(&module, FileType::Object, output_path)
         .map_err(|e| anyhow!(format!("failed to write object file: {e}")))
@@ -695,7 +702,8 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_fail_fn: Option<FunctionValue<'ctx>>,
     util_len_fn: Option<FunctionValue<'ctx>>,
     util_to_string_fn: Option<FunctionValue<'ctx>>,
-    string_concat_fn: Option<FunctionValue<'ctx>>,
+    malloc_fn: Option<FunctionValue<'ctx>>,
+    memcpy_fn: Option<FunctionValue<'ctx>>,
     util_clamp_int_fn: Option<FunctionValue<'ctx>>,
     util_is_nil_fn: Option<FunctionValue<'ctx>>,
     util_is_bool_fn: Option<FunctionValue<'ctx>>,
@@ -929,7 +937,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_fail_fn: None,
             util_len_fn: None,
             util_to_string_fn: None,
-            string_concat_fn: None,
+            malloc_fn: None,
+            memcpy_fn: None,
             util_clamp_int_fn: None,
             util_is_nil_fn: None,
             util_is_bool_fn: None,
@@ -1151,8 +1160,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     /// Check if a function is small enough for aggressive inlining
     fn is_small_function(&self, statements: &[Statement]) -> bool {
-        // Count statements recursively - small means < 10 statements total
-        self.count_statements(statements) < 10
+        // Count statements recursively
+        // Increased threshold to 20 for more aggressive inlining
+        // This helps with functions like sum_to_n in benchmarks
+        self.count_statements(statements) < 20
     }
 
     /// Count total statements including nested blocks
@@ -1222,18 +1233,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         );
         function.add_attribute(AttributeLoc::Function, nofree);
 
-        // Add inlining hints based on function characteristics
+        // Add aggressive inlining for small functions
         if is_small {
-            // For very small functions, suggest aggressive inlining
-            let inlinehint = self.context.create_enum_attribute(
-                inkwell::attributes::Attribute::get_named_enum_kind_id("inlinehint"),
+            // Use alwaysinline instead of inlinehint for guaranteed inlining
+            // This is crucial for performance in tight loops (e.g., sum_to_n called 100k times)
+            let alwaysinline = self.context.create_enum_attribute(
+                inkwell::attributes::Attribute::get_named_enum_kind_id("alwaysinline"),
                 0,
             );
-            function.add_attribute(AttributeLoc::Function, inlinehint);
+            function.add_attribute(AttributeLoc::Function, alwaysinline);
         }
-
-        // Add alwaysinline for tiny pure functions (< 5 statements, no side effects)
-        // We'll be conservative here and let LLVM decide via inlinehint for now
     }
 
     /// Add loop optimization metadata to help LLVM vectorize and optimize loops
@@ -2578,7 +2587,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.store_expr_in_pointer(
                 global.as_pointer_value(),
                 &ty,
-                initial_value,
+                initial_value.clone(),
                 &binding.name,
             )?;
             if let Some(slot) = self.global_slots.get_mut(&binding.name) {
@@ -2586,15 +2595,44 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 slot.mutable = !statement.is_const;
                 slot.ty = ty.clone();
             }
-            locals.insert(
-                binding.name.clone(),
-                LocalVariable {
-                    pointer: Some(global.as_pointer_value()),
-                    value: None,
-                    ty,
-                    mutable: !statement.is_const,
-                },
-            );
+
+            // Optimization: For const globals, keep the value in SSA form instead of pointer
+            // This avoids loading from memory on every access
+            if statement.is_const {
+                if let Some(basic_value) = initial_value.into_basic_value() {
+                    locals.insert(
+                        binding.name.clone(),
+                        LocalVariable {
+                            pointer: None,
+                            value: Some(basic_value),
+                            ty,
+                            mutable: false,
+                        },
+                    );
+                } else {
+                    // Void type - still need to track but no value
+                    locals.insert(
+                        binding.name.clone(),
+                        LocalVariable {
+                            pointer: None,
+                            value: None,
+                            ty,
+                            mutable: false,
+                        },
+                    );
+                }
+            } else {
+                // Mutable globals need the pointer for assignments
+                locals.insert(
+                    binding.name.clone(),
+                    LocalVariable {
+                        pointer: Some(global.as_pointer_value()),
+                        value: None,
+                        ty,
+                        mutable: true,
+                    },
+                );
+            }
         }
         Ok(())
     }
@@ -2639,18 +2677,48 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
             };
 
-            let alloca =
-                self.create_entry_alloca(function, &binding.name, self.basic_type(&ty)?)?;
-            self.store_expr_in_pointer(alloca, &ty, initial_value, &binding.name)?;
-            locals.insert(
-                binding.name.clone(),
-                LocalVariable {
-                    pointer: Some(alloca),
-                    value: None,
-                    ty,
-                    mutable: !statement.is_const,
-                },
-            );
+            let is_mutable = !statement.is_const;
+
+            // Optimization: Use SSA values for immutable variables (no memory allocation)
+            if !is_mutable {
+                // For const variables, store the SSA value directly
+                if let Some(basic_value) = initial_value.clone().into_basic_value() {
+                    locals.insert(
+                        binding.name.clone(),
+                        LocalVariable {
+                            pointer: None,
+                            value: Some(basic_value),
+                            ty,
+                            mutable: false,
+                        },
+                    );
+                } else {
+                    // Void type - still store in locals for name tracking
+                    locals.insert(
+                        binding.name.clone(),
+                        LocalVariable {
+                            pointer: None,
+                            value: None,
+                            ty,
+                            mutable: false,
+                        },
+                    );
+                }
+            } else {
+                // For mutable variables, allocate stack space as before
+                let alloca =
+                    self.create_entry_alloca(function, &binding.name, self.basic_type(&ty)?)?;
+                self.store_expr_in_pointer(alloca, &ty, initial_value, &binding.name)?;
+                locals.insert(
+                    binding.name.clone(),
+                    LocalVariable {
+                        pointer: Some(alloca),
+                        value: None,
+                        ty,
+                        mutable: true,
+                    },
+                );
+            }
         }
         Ok(())
     }
@@ -2821,11 +2889,72 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let body_block = self.context.append_basic_block(function, "loop_body");
         let exit_block = self.context.append_basic_block(function, "loop_exit");
 
+        // Identify variables that are mutated in the loop body
+        let mut mutated_vars = std::collections::HashSet::new();
+        self.find_mutated_in_statements(&statement.body.statements, &mut mutated_vars);
+
+        // Save the initial values and types of mutated variables
+        // We'll create PHI nodes for these
+        let mut phi_variables: Vec<(String, BasicValueEnum<'ctx>, ValueType, bool)> = Vec::new();
+
+        for var_name in &mutated_vars {
+            if let Some(var) = locals.get(var_name) {
+                // Only create PHI for mutable variables that have a current value or pointer
+                if var.mutable {
+                    let initial_value = if let Some(ssa_value) = var.value {
+                        // Already an SSA value
+                        ssa_value
+                    } else if let Some(ptr) = var.pointer {
+                        // Load the current value from memory
+                        self.load_from_pointer(ptr, &var.ty, var_name)?
+                            .into_basic_value()
+                            .ok_or_else(|| anyhow!("Cannot create PHI for void type"))?
+                    } else {
+                        continue; // Skip variables without values
+                    };
+
+                    phi_variables.push((
+                        var_name.clone(),
+                        initial_value,
+                        var.ty.clone(),
+                        true, // was_pointer flag
+                    ));
+                }
+            }
+        }
+
+        // Branch to condition block
         if current_block.get_terminator().is_none() {
             map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
         }
 
         self.builder.position_at_end(cond_block);
+
+        // Create PHI nodes for all mutated variables
+        let mut phi_nodes: HashMap<String, (inkwell::values::PhiValue<'ctx>, ValueType)> =
+            HashMap::new();
+
+        for (var_name, initial_value, ty, _) in &phi_variables {
+            let phi = map_builder_error(
+                self.builder
+                    .build_phi(initial_value.get_type(), &format!("{}.phi", var_name)),
+            )?;
+            phi.add_incoming(&[(initial_value, current_block)]);
+            phi_nodes.insert(var_name.clone(), (phi, ty.clone()));
+
+            // Replace the variable in locals with the PHI value
+            locals.insert(
+                var_name.clone(),
+                LocalVariable {
+                    pointer: None,
+                    value: Some(phi.as_basic_value()),
+                    ty: ty.clone(),
+                    mutable: true,
+                },
+            );
+        }
+
+        // Compile the loop condition
         let cond_expr = match &statement.header {
             LoopHeader::Condition(expr) => expr,
             LoopHeader::For { .. } => bail!("for loops unsupported"),
@@ -2840,14 +2969,64 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         )?;
 
         self.builder.position_at_end(body_block);
-        let body_terminated = self.compile_block(
-            &statement.body.statements,
-            function,
-            locals,
-            return_type,
-            true,
-        )?;
+
+        // Create a map to track the "next" values for PHI variables
+        // Start with the PHI values themselves
+        let mut phi_next_values: HashMap<String, BasicValueEnum<'ctx>> = phi_nodes
+            .iter()
+            .map(|(name, (phi, _))| (name.clone(), phi.as_basic_value()))
+            .collect();
+
+        // Compile each statement in the loop body
+        // We need to track assignments to PHI variables manually
+        for (idx, stmt) in statement.body.statements.iter().enumerate() {
+            // Before compiling, temporarily update locals to have latest PHI values
+            for (var_name, next_value) in &phi_next_values {
+                if let Some(var) = locals.get_mut(var_name) {
+                    var.value = Some(*next_value);
+                }
+            }
+
+            // Compile the statement
+            let is_last = idx == statement.body.statements.len() - 1;
+            let terminated =
+                self.compile_statement(stmt, function, locals, return_type, is_last)?;
+
+            // After compiling, check if any PHI variables were assigned
+            for (var_name, (_phi, _ty)) in &phi_nodes {
+                if let Some(var) = locals.get(var_name) {
+                    if let Some(new_value) = var.value {
+                        // Update the "next" value for this PHI variable
+                        phi_next_values.insert(var_name.clone(), new_value);
+                    }
+                }
+            }
+
+            if terminated {
+                break;
+            }
+        }
+
+        let body_terminated = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing block"))?
+            .get_terminator()
+            .is_some();
+
         if !body_terminated {
+            let body_end_block = self
+                .builder
+                .get_insert_block()
+                .ok_or_else(|| anyhow!("missing loop body end block"))?;
+
+            // Add the incoming values from the loop body to the PHI nodes
+            for (var_name, (phi, _ty)) in &phi_nodes {
+                let phi_fallback = phi.as_basic_value();
+                let updated_value = phi_next_values.get(var_name).unwrap_or(&phi_fallback);
+                phi.add_incoming(&[(updated_value, body_end_block)]);
+            }
+
             let back_edge = map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
 
             // Add loop metadata for optimization hints
@@ -2855,6 +3034,31 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         self.builder.position_at_end(exit_block);
+
+        // Restore pointer-based variables after loop (for variables that had pointers)
+        // This allows assignments outside the loop to work correctly
+        // Use the PHI nodes themselves (not the computed values from the loop body)
+        for (var_name, _, ty, was_pointer) in &phi_variables {
+            if *was_pointer {
+                if let Some((phi, _)) = phi_nodes.get(var_name) {
+                    // Allocate stack space and store the final PHI value
+                    let alloca =
+                        self.create_entry_alloca(function, var_name, self.basic_type(ty)?)?;
+                    map_builder_error(self.builder.build_store(alloca, phi.as_basic_value()))?;
+
+                    locals.insert(
+                        var_name.clone(),
+                        LocalVariable {
+                            pointer: Some(alloca),
+                            value: None,
+                            ty: ty.clone(),
+                            mutable: true,
+                        },
+                    );
+                }
+            }
+        }
+
         Ok(false)
     }
 
@@ -2866,7 +3070,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     ) -> Result<ExprValue<'ctx>> {
         match &assignment.target.kind {
             ExpressionKind::Identifier(identifier) => {
-                if let Some(variable) = locals.get(identifier.name.as_str()) {
+                if let Some(variable) = locals.get(identifier.name.as_str()).cloned() {
                     if !variable.mutable {
                         bail!(format!(
                             "cannot assign to const '{}' at {}",
@@ -2874,12 +3078,39 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             Self::describe_span(assignment.target.span)
                         ));
                     }
-                    let pointer = variable.pointer.ok_or_else(|| {
-                        anyhow!("Cannot assign to immutable parameter '{}'", identifier.name)
-                    })?;
+
                     let var_ty = variable.ty.clone();
                     let value = self.compile_expression(&assignment.value, function, locals)?;
-                    self.store_expr_in_pointer(pointer, &var_ty, value, &identifier.name)?;
+                    let converted_value = self.convert_expr_to_type(value, &var_ty)?;
+
+                    // Check if this is an SSA value (PHI node in loop) or pointer
+                    if let Some(pointer) = variable.pointer {
+                        // Traditional pointer-based assignment
+                        self.store_expr_in_pointer(
+                            pointer,
+                            &var_ty,
+                            converted_value,
+                            &identifier.name,
+                        )?;
+                    } else if variable.value.is_some() && variable.mutable {
+                        // SSA value in loop (PHI node) - update the local with the new value
+                        let new_basic_value = converted_value
+                            .into_basic_value()
+                            .ok_or_else(|| anyhow!("Cannot assign void value"))?;
+
+                        locals.insert(
+                            identifier.name.clone(),
+                            LocalVariable {
+                                pointer: None,
+                                value: Some(new_basic_value),
+                                ty: var_ty,
+                                mutable: true,
+                            },
+                        );
+                    } else {
+                        bail!("Cannot assign to immutable parameter '{}'", identifier.name);
+                    }
+
                     Ok(ExprValue::Void)
                 } else if let Some(slot) = self.global_slots.get(identifier.name.as_str()).cloned()
                 {
@@ -8944,14 +9175,118 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         left: PointerValue<'ctx>,
         right: PointerValue<'ctx>,
     ) -> Result<PointerValue<'ctx>> {
-        let func = self.ensure_string_concat_fn();
-        let call = self
-            .call_function(func, &[left.into(), right.into()], "tea_string_concat")?
+        // Inline string concatenation for better performance
+        // struct TeaString { len: i64, data: *const c_char }
+
+        let i64_type = self.int_type();
+        let i8_type = self.context.i8_type();
+        let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+
+        // Create struct type for TeaString: { i64, ptr }
+        let tea_string_type = self
+            .context
+            .struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
+
+        // Load left length and data
+        let left_len_ptr = map_builder_error(self.builder.build_struct_gep(
+            tea_string_type,
+            left,
+            0,
+            "left_len_ptr",
+        ))?;
+        let left_len =
+            map_builder_error(self.builder.build_load(i64_type, left_len_ptr, "left_len"))?
+                .into_int_value();
+
+        let left_data_ptr = map_builder_error(self.builder.build_struct_gep(
+            tea_string_type,
+            left,
+            1,
+            "left_data_ptr",
+        ))?;
+        let left_data = map_builder_error(self.builder.build_load(
+            i8_ptr_type,
+            left_data_ptr,
+            "left_data",
+        ))?
+        .into_pointer_value();
+
+        // Load right length and data
+        let right_len_ptr = map_builder_error(self.builder.build_struct_gep(
+            tea_string_type,
+            right,
+            0,
+            "right_len_ptr",
+        ))?;
+        let right_len = map_builder_error(self.builder.build_load(
+            i64_type,
+            right_len_ptr,
+            "right_len",
+        ))?
+        .into_int_value();
+
+        let right_data_ptr = map_builder_error(self.builder.build_struct_gep(
+            tea_string_type,
+            right,
+            1,
+            "right_data_ptr",
+        ))?;
+        let right_data = map_builder_error(self.builder.build_load(
+            i8_ptr_type,
+            right_data_ptr,
+            "right_data",
+        ))?
+        .into_pointer_value();
+
+        // Calculate combined length
+        let combined_len = map_builder_error(self.builder.build_int_add(
+            left_len,
+            right_len,
+            "combined_len",
+        ))?;
+
+        // Allocate new buffer for combined string (using malloc)
+        let malloc_fn = self.ensure_malloc_fn();
+        let buffer = self
+            .call_function(malloc_fn, &[combined_len.into()], "malloc")?
             .try_as_basic_value()
             .left()
-            .ok_or_else(|| anyhow!("tea_string_concat returned no value"))?
+            .ok_or_else(|| anyhow!("malloc returned no value"))?
             .into_pointer_value();
-        Ok(call)
+
+        // Copy left string into buffer using memcpy
+        let memcpy_fn = self.ensure_memcpy_fn();
+        self.call_function(
+            memcpy_fn,
+            &[buffer.into(), left_data.into(), left_len.into()],
+            "memcpy_left",
+        )?;
+
+        // Calculate destination for right string (buffer + left_len)
+        let right_dest = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_gep(i8_type, buffer, &[left_len], "right_dest"),
+            )?
+        };
+
+        // Copy right string into buffer
+        self.call_function(
+            memcpy_fn,
+            &[right_dest.into(), right_data.into(), right_len.into()],
+            "memcpy_right",
+        )?;
+
+        // Allocate TeaString struct
+        let alloc_fn = self.ensure_alloc_string();
+        let result = self
+            .call_function(alloc_fn, &[buffer.into(), combined_len.into()], "alloc_str")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_alloc_string returned no value"))?
+            .into_pointer_value();
+
+        Ok(result)
     }
 
     fn tea_value_to_expr(
@@ -9661,16 +9996,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
-    fn ensure_string_concat_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.string_concat_fn {
+    fn ensure_malloc_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.malloc_fn {
             return func;
         }
-        let ptr_type = self.string_ptr_type();
-        let fn_type = ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false);
+        let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let fn_type = i8_ptr_type.fn_type(&[self.int_type().into()], false);
         let func = self
             .module
-            .add_function("tea_string_concat", fn_type, Some(Linkage::External));
-        self.string_concat_fn = Some(func);
+            .add_function("malloc", fn_type, Some(Linkage::External));
+        self.malloc_fn = Some(func);
+        func
+    }
+
+    fn ensure_memcpy_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.memcpy_fn {
+            return func;
+        }
+        let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                i8_ptr_type.into(),
+                i8_ptr_type.into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("memcpy", fn_type, Some(Linkage::External));
+        self.memcpy_fn = Some(func);
         func
     }
 

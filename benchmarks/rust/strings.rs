@@ -14,7 +14,7 @@ fn build_string(count: i64) -> String {
 }
 
 fn main() {
-    let iterations = 100;
+    let iterations = 1000;
     let string_length = 1000;
 
     let mut i = 0;

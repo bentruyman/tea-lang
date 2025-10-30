@@ -14,7 +14,7 @@ function buildString(count) {
 }
 
 function main() {
-  const iterations = 100;
+  const iterations = 1000;
   const stringLength = 1000;
 
   let i = 0;

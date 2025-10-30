@@ -1,11 +1,9 @@
-use debug = "std.debug"
-
 # Expect: 0, 1, 2, true
 
 var count = 0
 
 while count < 2
-  debug.print(count)
+  print(count)
   count = count + 1
 end
 
@@ -15,5 +13,5 @@ while flag != true
   flag = true
 end
 
-debug.print(count)
-debug.print(flag)
+print(count)
+print(flag)

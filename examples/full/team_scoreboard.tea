@@ -1,5 +1,4 @@
 # Expect: Team scoreboard, Ada: 7 wins / 3 losses, Grace: 9 wins / 1 loss, Linus: 5 wins / 5 losses, Top team: Grace, Grace is dominating the league, Fan favorite: Grace: 9 wins / 1 loss, Sorry, Unknown is not on the schedule
-use debug = "std.debug"
 use util = "std.util"
 
 struct Team {
@@ -20,12 +19,12 @@ const teams = [
   Team(name: "Linus", wins: 5, losses: 5)
 ]
 
-debug.print("Team scoreboard")
+print("Team scoreboard")
 
 var index = 0
 
 while index < util.len(teams)
-  debug.print(format_team(teams[index]))
+  print(format_team(teams[index]))
   index = index + 1
 end
 
@@ -42,7 +41,7 @@ while next_index < util.len(teams)
   next_index = next_index + 1
 end
 
-debug.print(`Top team: ${champion.name}`)
+print(`Top team: ${champion.name}`)
 
 def describe_margin(team: Team) -> String
   var diff = team.wins - team.losses
@@ -58,7 +57,7 @@ def describe_margin(team: Team) -> String
   `${team.name} is dominating the league`
 end
 
-debug.print(describe_margin(champion))
+print(describe_margin(champion))
 
 def find_team(name: String) -> Team ! TeamError.NotFound
   var idx = 0
@@ -87,5 +86,5 @@ end
 `Fan favorite: ${format_team(team)}`
 end
 
-debug.print(announce_favorite("Grace"))
-debug.print(announce_favorite("Unknown"))
+print(announce_favorite("Grace"))
+print(announce_favorite("Unknown"))

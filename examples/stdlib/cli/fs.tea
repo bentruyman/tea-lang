@@ -1,5 +1,4 @@
 use fs = "std.fs"
-use debug = "std.debug"
 
 # Demonstrates the expanded std.fs helpers:
 # - ensure_dir / ensure_parent for creating directories
@@ -11,17 +10,17 @@ fs.write_text_atomic("tmp/fs-demo/README.txt", "hello from std.fs")
 fs.ensure_parent("tmp/fs-demo/logs/demo.log")
 fs.write_text_atomic("tmp/fs-demo/logs/demo.log", "first entry")
 
-debug.print("list_dir:")
-debug.print(fs.list_dir("tmp/fs-demo"))
+print("list_dir:")
+print(fs.list_dir("tmp/fs-demo"))
 
-debug.print("walk:")
-debug.print(fs.walk("tmp/fs-demo"))
+print("walk:")
+print(fs.walk("tmp/fs-demo"))
 
-debug.print("glob:")
-debug.print(fs.glob("tmp/fs-demo/**/*.txt"))
+print("glob:")
+print(fs.glob("tmp/fs-demo/**/*.txt"))
 
-debug.print("metadata:")
-debug.print(fs.metadata("tmp/fs-demo/README.txt"))
+print("metadata:")
+print(fs.metadata("tmp/fs-demo/README.txt"))
 
 fs.remove("tmp/fs-demo/logs/demo.log")
 fs.remove("tmp/fs-demo/logs")

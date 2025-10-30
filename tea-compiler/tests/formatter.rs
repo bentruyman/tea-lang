@@ -216,21 +216,21 @@ end
 fn tightens_call_whitespace() {
     let input = r#"
 def run()
-debug.print( fib(30) )
-debug .print(fib(30))
+print( fib(30) )
+print (fib(30))
 fib(n-2)
 const multiplier=3
-debug.print (ANSWER)
+print (ANSWER)
 end
 "#;
 
     let expected = [
         "def run()",
-        "  debug.print(fib(30))",
-        "  debug.print(fib(30))",
+        "  print(fib(30))",
+        "  print(fib(30))",
         "  fib(n - 2)",
         "  const multiplier = 3",
-        "  debug.print(ANSWER)",
+        "  print(ANSWER)",
         "end",
     ];
 
@@ -333,21 +333,21 @@ end
 #[test]
 fn pads_functions_with_blank_lines() {
     let input = r#"
-debug.print("Start")
+print("Start")
 def func()
-debug.print("BODY")
+print("BODY")
 end
-debug.print("End")
+print("End")
 "#;
 
     let expected = [
-        "debug.print(\"Start\")",
+        "print(\"Start\")",
         "",
         "def func()",
-        "  debug.print(\"BODY\")",
+        "  print(\"BODY\")",
         "end",
         "",
-        "debug.print(\"End\")",
+        "print(\"End\")",
     ];
 
     assert_lines(&format_source(input), &expected);
@@ -357,11 +357,11 @@ debug.print("End")
 fn collapses_if_keyword_spacing() {
     let input = r#"
 if     true
-debug.print("ok")
+print("ok")
 end
 "#;
 
-    let expected = ["if true", "  debug.print(\"ok\")", "end"];
+    let expected = ["if true", "  print(\"ok\")", "end"];
 
     assert_lines(&format_source(input), &expected);
 }
@@ -428,21 +428,21 @@ var int_box = make_box [ Int ] (identity [ Int ] (42))
 #[test]
 fn pads_conditionals_with_blank_lines() {
     let input = r#"
-debug.print("Start")
+print("Start")
 if ready
-debug.print("BODY")
+print("BODY")
 end
-debug.print("End")
+print("End")
 "#;
 
     let expected = [
-        "debug.print(\"Start\")",
+        "print(\"Start\")",
         "",
         "if ready",
-        "  debug.print(\"BODY\")",
+        "  print(\"BODY\")",
         "end",
         "",
-        "debug.print(\"End\")",
+        "print(\"End\")",
     ];
 
     assert_lines(&format_source(input), &expected);
@@ -452,21 +452,21 @@ debug.print("End")
 fn keeps_else_within_conditional_block() {
     let input = r#"
 if ready
-debug.print("one")
+print("one")
 else
-debug.print("two")
+print("two")
 end
-debug.print("done")
+print("done")
 "#;
 
     let expected = [
         "if ready",
-        "  debug.print(\"one\")",
+        "  print(\"one\")",
         "else",
-        "  debug.print(\"two\")",
+        "  print(\"two\")",
         "end",
         "",
-        "debug.print(\"done\")",
+        "print(\"done\")",
     ];
 
     assert_lines(&format_source(input), &expected);
@@ -477,7 +477,7 @@ fn no_padding_when_conditional_is_block_edge() {
     let input = r#"
 def demo()
 if ready
-debug.print("one")
+print("one")
 end
 end
 "#;
@@ -485,7 +485,7 @@ end
     let expected = [
         "def demo()",
         "  if ready",
-        "    debug.print(\"one\")",
+        "    print(\"one\")",
         "  end",
         "end",
     ];
@@ -551,18 +551,18 @@ fn indents_match_statement_blocks() {
     let input = r#"
 match status
 case 200
-debug.print("ok")
+print("ok")
 case _
-debug.print("fallback")
+print("fallback")
 end
 "#;
 
     let expected = [
         "match status",
         "  case 200",
-        "    debug.print(\"ok\")",
+        "    print(\"ok\")",
         "  case _",
-        "    debug.print(\"fallback\")",
+        "    print(\"fallback\")",
         "end",
     ];
 
@@ -576,7 +576,7 @@ while count<max
 if count>=1 && count<=10
 if value!=expected
 if name=="tea"
-debug.print(count)
+print(count)
 end
 end
 end
@@ -588,7 +588,7 @@ end
         "  if count >= 1 && count <= 10",
         "    if value != expected",
         "      if name == \"tea\"",
-        "        debug.print(count)",
+        "        print(count)",
         "      end",
         "    end",
         "  end",
@@ -601,11 +601,11 @@ end
 #[test]
 fn normalizes_postfix_coalescing() {
     let input = r#"
-debug.print(maybe_name !)
+print(maybe_name !)
 var value = optional  !
 "#;
 
-    let expected = ["debug.print(maybe_name!)", "var value = optional!"];
+    let expected = ["print(maybe_name!)", "var value = optional!"];
 
     assert_lines(&format_source(input), &expected);
 }
@@ -617,7 +617,7 @@ var count = 0
 if count != 1
 count = 1
 end
-debug.print(count)
+print(count)
 "#;
 
     let expected = [
@@ -627,7 +627,7 @@ debug.print(count)
         "  count = 1",
         "end",
         "",
-        "debug.print(count)",
+        "print(count)",
     ];
 
     assert_lines(&format_source(input), &expected);

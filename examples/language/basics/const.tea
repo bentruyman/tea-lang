@@ -2,25 +2,23 @@
 # 42
 # 120
 
-use debug = "std.debug"
-
 const ANSWER = 42
-debug.print(ANSWER)
+print(ANSWER)
 
 def scale(value: Int) -> Int
   const multiplier = 3
   value * multiplier
 end
 
-debug.print(scale(40))
+print(scale(40))
 
 # Attempting to reassign a const like this would raise an error:
 # ANSWER = 0
 
-debug.print("Start")
+print("Start")
 
 def func() -> Void
-  debug.print("BODY")
+  print("BODY")
 end
 
-debug.print("End")
+print("End")

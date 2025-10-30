@@ -1,8 +1,6 @@
-use debug = "std.debug"
-
 def greet(name: String, unread: Int) -> String
   `Hello, ${name}! You have ${unread} unread messages.`
 end
 
-debug.print(greet("Tea", 5))
-debug.print(`Next number: ${5 + 1}`)
+print(greet("Tea", 5))
+print(`Next number: ${5 + 1}`)

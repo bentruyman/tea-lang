@@ -1,8 +1,6 @@
 # Benchmark: Constant arithmetic that should be folded
 # Tests whether constants are evaluated at compile time
 
-use debug = "std.debug"
-
 def compute(iterations: Int) -> Int
   var sum = 0
   var i = 0
@@ -17,4 +15,4 @@ def compute(iterations: Int) -> Int
 end
 
 const result = compute(1000000)
-debug.print(result)
+print(result)

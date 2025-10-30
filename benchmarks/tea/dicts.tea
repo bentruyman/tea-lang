@@ -1,8 +1,6 @@
 # Benchmark: Dictionary operations
 # Tests dictionary insert and lookup performance
 
-use debug = "std.debug"
-
 def build_dict(n: Int) -> Dict[String, Int]
   var result = { "_": 0 }
   var i = 0
@@ -40,4 +38,4 @@ while i < iterations
   i = i + 1
 end
 
-debug.print(result)
+print(result)

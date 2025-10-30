@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId, Vm};
 #[test]
 fn lambda_captures_local_variable() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 def run() -> Int
   var base = 40
@@ -13,7 +13,7 @@ def run() -> Int
   add(2)
 end
 
-debug.print(run())
+print(run())
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -81,7 +81,7 @@ debug.print(run())
 #[test]
 fn anonymous_function_definition_works() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 def make_adder(x: Int) -> Func(Int) -> Int
   return def(y: Int) -> Int
@@ -94,7 +94,7 @@ def run() -> Int
   adder(10)
 end
 
-debug.print(run())
+print(run())
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

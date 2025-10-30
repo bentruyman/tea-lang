@@ -133,10 +133,10 @@ fn build_creates_bundle_and_checksum() {
     fs::write(
         &source_path,
         r#"
-use debug = "std.debug"
+
 
 def main() -> Int
-  debug.print("hello from bundle")
+  print("hello from bundle")
   0
 end
 

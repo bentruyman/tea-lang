@@ -1,4 +1,3 @@
-use debug = "std.debug"
 use http = "std.http"
 
 var hostname = "127.0.0.1"
@@ -11,7 +10,7 @@ var server = http.Server(|req, res| => {
 })
 
 var err, listen = server.listen(port, hostname, || => {
-    debug.print("Server running at http://#{hostname}:#{port}/")
+    print("Server running at http://#{hostname}:#{port}/")
 })
 
 struct App {

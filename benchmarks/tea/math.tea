@@ -1,8 +1,6 @@
 # Benchmark: Mixed arithmetic operations
 # Tests integer and float arithmetic performance
 
-use debug = "std.debug"
-
 def compute(n: Int) -> Int
   var result = 0
   var i = 0
@@ -26,4 +24,4 @@ while i < iterations
   i = i + 1
 end
 
-debug.print(result)
+print(result)

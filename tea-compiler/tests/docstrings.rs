@@ -40,40 +40,26 @@ end
 }
 
 #[test]
-fn stdlib_alias_includes_docstrings() -> anyhow::Result<()> {
-    let source_text = r#"use debug = "std.debug"
+fn builtin_print_works_without_import() -> anyhow::Result<()> {
+    let source_text = r#"
 
 def main() -> Void
-  debug.print("hello")
+  print("hello")
 end
 "#;
 
     let source = SourceFile::new(
         SourceId(0),
-        PathBuf::from("stdlib_docs.tea"),
+        PathBuf::from("builtin_print.tea"),
         source_text.to_string(),
     );
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source)?;
+    let _compilation = compiler.compile(&source)?;
 
     assert!(
         !compiler.diagnostics().has_errors(),
         "unexpected diagnostics: {:?}",
         compiler.diagnostics()
-    );
-
-    let binding = compilation
-        .module_aliases
-        .get("debug")
-        .expect("debug alias to be registered");
-
-    assert_eq!(
-        binding.export_docs.get("print"),
-        Some(&"Write the string representation of a value to stderr.".to_string())
-    );
-    assert_eq!(
-        binding.docstring.as_deref(),
-        Some("Debug utilities such as printing."),
     );
 
     Ok(())

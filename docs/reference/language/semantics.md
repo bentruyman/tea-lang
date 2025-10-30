@@ -54,7 +54,6 @@ This document captures the first working cut of tea-lang. It is the contract for
 ## Statements
 
 - `use alias = "module"` loads std modules or relative paths (`use helpers = "./math"`). Dot access resolves exported constants/functions/structs under the chosen alias. The builtin library currently ships:
-  - `"std.debug"` — exposes `print` for console output.
   - `"std.assert"` — provides `assert`, `assert_eq`, `assert_ne`, and `fail` helpers for runtime checks.
   - `"std.util"` — type guards (`is_nil`/`is_int`/... ), `len`, `to_string`, and `clamp_int` utilities.
   - `"std.fs"` — file helpers for reading/writing text or bytes, creating/removing directories, querying metadata, and streaming chunked reads via handles.

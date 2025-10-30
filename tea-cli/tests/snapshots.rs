@@ -27,8 +27,8 @@ fn cli_capture_runs_command() -> anyhow::Result<()> {
     let emit_path = tmp.path().join("emit.tea");
     fs::write(
         &emit_path,
-        r#"use debug = "std.debug"
-debug.print("cli capture output")
+        r#"
+print("cli capture output")
 "#,
     )?;
 

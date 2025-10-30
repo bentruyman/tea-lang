@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 #[test]
 fn allows_unwrap_after_guard_return() {
     let source = r#"
-use debug = "std.debug"
+
 
 def add(a: Int, b: Int) -> Int
   return a + b
@@ -20,7 +20,7 @@ def demo(x: Int?) -> Int
   add(local!, 2)
 end
 
-debug.print(demo(1))
+print(demo(1))
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -47,7 +47,7 @@ debug.print(demo(1))
 #[test]
 fn allows_guard_assignment_to_prove_non_nil() {
     let source = r#"
-use debug = "std.debug"
+
 
 def greeting(name: String?) -> String
   var local = name
@@ -58,7 +58,7 @@ def greeting(name: String?) -> String
   return local!
 end
 
-debug.print(greeting(nil))
+print(greeting(nil))
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -85,10 +85,10 @@ debug.print(greeting(nil))
 #[test]
 fn coalesce_flows_into_int_arguments() {
     let source = r#"
-use debug = "std.debug"
+
 
 def consume(value: Int) -> Void
-  debug.print(value)
+  print(value)
 end
 
 var number: Int? = nil
@@ -119,10 +119,10 @@ consume(number ?? 42)
 #[test]
 fn rejects_unwrap_without_flow_proof() {
     let source = r#"
-use debug = "std.debug"
+
 
 var maybe_name: String? = nil
-debug.print(maybe_name!)
+print(maybe_name!)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

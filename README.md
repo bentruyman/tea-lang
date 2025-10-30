@@ -3,8 +3,6 @@
 A strongly typed scripting language with Ruby-inspired syntax that compiles to native code or runs on a VM.
 
 ```tea
-use debug = "std.debug"
-
 def greet(name: String) -> String
   "Hello, ${name}!"
 end
@@ -12,7 +10,7 @@ end
 var names = ["Alice", "Bob", "Charlie"]
 
 for person of names
-  debug.print(greet(person))
+  print(greet(person))
 end
 ```
 
@@ -39,10 +37,8 @@ make setup  # Installs dependencies and generates code
 Create `hello.tea`:
 
 ```tea
-use debug = "std.debug"
-
 var greeting = "Hello, Tea!"
-debug.print(greeting)
+print(greeting)
 
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
@@ -51,7 +47,7 @@ for n of numbers
   sum = sum + n
 end
 
-debug.print("Sum: ${sum}")
+print("Sum: ${sum}")
 ```
 
 Run it:

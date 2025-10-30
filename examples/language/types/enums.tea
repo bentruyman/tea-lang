@@ -1,5 +1,3 @@
-use debug = "std.debug"
-
 # Expected output:
 # Current status: Status.Pending
 # Next status: Status.Running
@@ -19,6 +17,6 @@ def advance(status: Status) -> Status
 end
 
 var current = Status.Pending
-debug.print(`Current status: ${current}`)
+print(`Current status: ${current}`)
 current = advance(current)
-debug.print(`Next status: ${current}`)
+print(`Next status: ${current}`)

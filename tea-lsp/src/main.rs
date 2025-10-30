@@ -120,10 +120,11 @@ mod tests {
     #[test]
     fn std_module_member_contains_docstring() {
         let compilation = compile_source(
-            r#"use debug = "std.debug"
+            r#"
+use assert = "std.assert"
 
 def main() -> Void
-  debug.print("hello")
+  assert.assert(true)
 end
 "#,
         );
@@ -136,28 +137,28 @@ end
             &compilation.match_exhaustiveness,
         );
 
-        let debug_binding = analysis
+        let assert_binding = analysis
             .module_aliases
-            .get("debug")
-            .expect("debug alias to be present");
+            .get("assert")
+            .expect("assert alias to be present");
 
-        assert_eq!(
-            debug_binding.docstring.as_deref(),
-            Some("Debug utilities such as printing."),
+        assert!(
+            !assert_binding.docstring.as_deref().unwrap_or("").is_empty(),
+            "assert module should have docstring"
         );
-        assert_eq!(
-            debug_binding.export_docs.get("print"),
-            Some(&"Write the string representation of a value to stderr.".to_string()),
+        assert!(
+            assert_binding.export_docs.get("assert").is_some(),
+            "assert.assert should have docstring"
         );
 
         let symbol_doc = analysis
             .symbols
             .iter()
-            .find(|symbol| symbol.name == "print")
+            .find(|symbol| symbol.name == "assert")
             .and_then(|symbol| symbol.docstring.clone());
-        assert_eq!(
-            symbol_doc.as_deref(),
-            Some("Write the string representation of a value to stderr."),
+        assert!(
+            symbol_doc.is_some(),
+            "assert function should have docstring in symbols"
         );
     }
 
@@ -275,20 +276,20 @@ end
     fn loop_variables_have_type_information() {
         let compilation = compile_source(
             r#"
-use debug = "std.debug"
+
 
 def main() -> Void
   var point = { x: 3, y: 4 }
 
   for key, value of point
-    debug.print(key)
-    debug.print(value)
+    print(key)
+    print(value)
   end
 
   var numbers = [1, 2, 3]
 
   for num of numbers
-    debug.print(num)
+    print(num)
   end
 end
 "#,

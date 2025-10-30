@@ -1,8 +1,6 @@
 # Benchmark: Closure calls
 # Tests closure allocation and invocation overhead
 
-use debug = "std.debug"
-
 def make_adder(x: Int) -> Func(Int) -> Int
   return def(y: Int) -> Int
   return x + y
@@ -33,4 +31,4 @@ while i < iterations
   i = i + 1
 end
 
-debug.print(result)
+print(result)

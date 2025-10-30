@@ -331,13 +331,15 @@ fn optimize_module_with_opt<'ctx>(
         .spawn()
         .with_context(|| format!("failed to spawn opt process at {}", opt_tool))?;
 
-    // Write IR to stdin
-    child
-        .stdin
-        .as_mut()
-        .ok_or_else(|| anyhow!("failed to open stdin for opt"))?
-        .write_all(ir_string.as_bytes())
-        .context("failed to write IR to opt stdin")?;
+    // Write IR to stdin and explicitly close it
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(ir_string.as_bytes())
+            .context("failed to write IR to opt stdin")?;
+        // stdin is dropped here, closing the pipe
+    } else {
+        bail!("failed to open stdin for opt");
+    }
 
     let output = child
         .wait_with_output()

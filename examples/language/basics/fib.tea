@@ -1,5 +1,4 @@
 # Import debug helpers for console output
-use debug = "std.debug"
 
 pub def fib(n: Int) -> Int
   if n <= 1
@@ -9,10 +8,10 @@ pub def fib(n: Int) -> Int
   fib(n - 1) + fib(n - 2)
 end
 
-debug.print(fib(30))
+print(fib(30))
 
 def func() -> Void
   if true
-    debug.print("true")
+    print("true")
   end
 end

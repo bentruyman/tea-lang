@@ -1,8 +1,6 @@
 # Benchmark: Recursive fibonacci
 # Tests function call overhead and recursion performance
 
-use debug = "std.debug"
-
 def fib(n: Int) -> Int
   if n <= 1
     return n
@@ -13,4 +11,4 @@ end
 
 const n = 40
 const result = fib(n)
-debug.print(result)
+print(result)

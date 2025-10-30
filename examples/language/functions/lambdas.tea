@@ -1,5 +1,3 @@
-use debug = "std.debug"
-
 def make_adder(base: Int) -> Func(Int) -> Int
   |value: Int| => base + value
 end
@@ -9,4 +7,4 @@ def run() -> Int
   return add(32)
 end
 
-debug.print(run()) # => 42
+print(run()) # => 42

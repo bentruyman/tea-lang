@@ -1,32 +1,30 @@
-use debug = "std.debug"
-
 # Demonstrate compound assignment operators
 
 # Addition assignment
 var x = 10
-debug.print(`x starts at: ${x}`)
+print(`x starts at: ${x}`)
 x += 5
-debug.print(`After x += 5: ${x}`)
+print(`After x += 5: ${x}`)
 
 # Subtraction assignment
 var y = 20
-debug.print(`y starts at: ${y}`)
+print(`y starts at: ${y}`)
 y -= 7
-debug.print(`After y -= 7: ${y}`)
+print(`After y -= 7: ${y}`)
 
 # Multiplication assignment
 var z = 3
-debug.print(`z starts at: ${z}`)
+print(`z starts at: ${z}`)
 z *= 4
-debug.print(`After z *= 4: ${z}`)
+print(`After z *= 4: ${z}`)
 
 # Works with floats too
 var f = 2.5
-debug.print(`f starts at: ${f}`)
+print(`f starts at: ${f}`)
 f += 1.5
-debug.print(`After f += 1.5: ${f}`)
+print(`After f += 1.5: ${f}`)
 f *= 2.0
-debug.print(`After f *= 2.0: ${f}`)
+print(`After f *= 2.0: ${f}`)
 
 # Useful in loops
 var sum = 0
@@ -35,7 +33,7 @@ for i of[1, 2, 3, 4, 5]
   sum += i
 end
 
-debug.print(`Sum of 1-5: ${sum}`)
+print(`Sum of 1-5: ${sum}`)
 
 # In functions
 def accumulate(values: List[Int]) -> Int
@@ -49,4 +47,4 @@ def accumulate(values: List[Int]) -> Int
 end
 
 var result = accumulate([10, 20, 30])
-debug.print(`Accumulate result: ${result}`)
+print(`Accumulate result: ${result}`)

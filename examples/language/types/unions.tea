@@ -1,5 +1,3 @@
-use debug = "std.debug"
-
 union Result {
   String
   Int
@@ -10,13 +8,13 @@ var x: Result = "hello"
 
 match x
   case is String => 
-    debug.print("We have a string!")
+    print("We have a string!")
   case is Int => 
-    debug.print("We have an int!")
+    print("We have an int!")
   case is Bool => 
-    debug.print("We have a bool!")
+    print("We have a bool!")
 end
 
 if x is String
-  debug.print("x is a String")
+  print("x is a String")
 end

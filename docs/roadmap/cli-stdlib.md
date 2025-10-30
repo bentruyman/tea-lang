@@ -1,10 +1,10 @@
 # CLI & Standard Library Roadmap
 
 This roadmap captures how Tea's standard library will evolve to serve CLI-first
-workflows. It builds on the existing runtime-backed modules (`std.debug`,
-`std.assert`, `std.util`, `std.fs`, `std.io`, `std.json`, `std.yaml`,
-`support.cli`) and identifies the missing capabilities that CLI authors need
-before they can rely on Tea for production tooling.
+workflows. It builds on the existing runtime-backed modules (`std.assert`,
+`std.util`, `std.fs`, `std.io`, `std.json`, `std.yaml`, `support.cli`) and
+identifies the missing capabilities that CLI authors need before they can rely
+on Tea for production tooling.
 
 ## Design Goals
 
@@ -25,7 +25,6 @@ before they can rely on Tea for production tooling.
 
 | Module        | Status       | Notes                                                                |
 | ------------- | ------------ | -------------------------------------------------------------------- |
-| `std.debug`   | ✅           | thin wrapper around runtime print helpers                            |
 | `std.assert`  | ✅           | includes equality, failure, and snapshot assertions                  |
 | `std.util`    | ✅           | predicates and conversions (type checks, `to_string`, `clamp_int`)   |
 | `std.fs`      | ✅ (narrow)  | text/byte read & write, metadata basics                              |

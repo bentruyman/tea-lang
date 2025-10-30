@@ -1,4 +1,3 @@
-use debug = "std.debug"
 use util = "std.util"
 
 # Individual errors act like zero-field structs
@@ -61,15 +60,15 @@ def safe_length(path: String) -> Int
   return util.len(text)
 end
 
-debug.print(shout("tea"))
-debug.print(shout("error") catch "Invalid input")
+print(shout("tea"))
+print(shout("error") catch "Invalid input")
 
-debug.print(file_text("notes.txt"))
-debug.print(file_text("missing.txt"))
-debug.print(file_text("secret.txt"))
+print(file_text("notes.txt"))
+print(file_text("missing.txt"))
+print(file_text("secret.txt"))
 
-debug.print(safe_text("notes.txt"))
-debug.print(safe_text("missing.txt"))
+print(safe_text("notes.txt"))
+print(safe_text("missing.txt"))
 
-debug.print(safe_length("notes.txt"))
-debug.print(safe_length("missing.txt"))
+print(safe_length("notes.txt"))
+print(safe_length("missing.txt"))

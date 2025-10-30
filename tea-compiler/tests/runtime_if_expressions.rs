@@ -4,13 +4,13 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId, Vm};
 #[test]
 fn test_basic_if_expression() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 const x = if (true) 1 else 2
-debug.print(x)
+print(x)
 
 const y = if (false) 10 else 20
-debug.print(y)
+print(y)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -25,10 +25,10 @@ debug.print(y)
 #[test]
 fn test_if_expression_with_strings() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 const greeting = if (true) "hello" else "goodbye"
-debug.print(greeting)
+print(greeting)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -43,10 +43,10 @@ debug.print(greeting)
 #[test]
 fn test_nested_if_expressions() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 const x = if (true) if (false) 1 else 2 else 3
-debug.print(x)
+print(x)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -61,11 +61,11 @@ debug.print(x)
 #[test]
 fn test_if_expression_in_compound_assignment() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 var x = 10
 x += if (true) 5 else 1
-debug.print(x)
+print(x)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -80,14 +80,14 @@ debug.print(x)
 #[test]
 fn test_if_expression_with_function_calls() -> anyhow::Result<()> {
     let source = r#"
-use debug = "std.debug"
+
 
 def add(a: Int, b: Int) -> Int
   return a + b
 end
 
 const result = if (true) add(2, 3) else add(10, 20)
-debug.print(result)
+print(result)
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

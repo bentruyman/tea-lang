@@ -1,14 +1,12 @@
 mod assert;
 mod builtins;
 mod cli;
-mod debug;
 mod docs;
 mod env;
 mod fs;
 mod io;
 mod json;
 mod path;
-mod print;
 mod process;
 mod util;
 mod yaml;
@@ -201,8 +199,6 @@ macro_rules! std_module {
 pub(crate) use std_module;
 
 pub static MODULES: &[StdModule] = &[
-    debug::MODULE,
-    print::MODULE,
     assert::MODULE,
     util::MODULE,
     env::MODULE,
@@ -231,13 +227,9 @@ pub fn module_for_function(name: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::debug;
-
     #[test]
-    fn std_debug_module_has_docstring() {
-        assert!(
-            !debug::MODULE.docstring.is_empty(),
-            "std.debug docstring should not be empty"
-        );
+    fn stdlib_modules_exist() {
+        // Just verify we can access the MODULES array
+        assert!(!super::MODULES.is_empty(), "stdlib should have modules");
     }
 }

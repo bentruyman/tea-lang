@@ -1,8 +1,6 @@
 # Benchmark: Function calls
 # Tests function call overhead
 
-use debug = "std.debug"
-
 def add(a: Int, b: Int) -> Int
   return a + b
 end
@@ -30,4 +28,4 @@ while i < iterations
   i = i + 1
 end
 
-debug.print(result)
+print(result)

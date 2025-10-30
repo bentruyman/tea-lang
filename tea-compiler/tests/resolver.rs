@@ -14,8 +14,8 @@ fn collect_diagnostics(compiler: &Compiler) -> Vec<String> {
 #[test]
 fn rejects_use_of_undefined_binding() {
     let source = r#"
-use debug = "std.debug"
-debug.print(missing)
+
+print(missing)
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(

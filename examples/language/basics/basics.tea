@@ -1,17 +1,15 @@
-use debug = "std.debug"
-
 const language = "tea-lang"
-debug.print(language)
+print(language)
 
 var greeting = "Hello from tea-lang"
 var count = 2
 
 if count == 2
-  debug.print(greeting)
+  print(greeting)
 end
 
 var total = 1 + 2 + 3
-debug.print(total)
+print(total)
 
 def add(a: Int, b: Int) -> Int
   return a + b
@@ -19,7 +17,7 @@ end
 
 var x: Int? = nil
 x = 1
-debug.print(add(x ?? 1, 2))
+print(add(x ?? 1, 2))
 
 var maybe_name: String? = nil
 
@@ -27,4 +25,4 @@ if maybe_name == nil
   maybe_name = "tea"
 end
 
-debug.print(maybe_name!)
+print(maybe_name!)

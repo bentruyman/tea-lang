@@ -4,7 +4,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
 #[test]
 fn rejects_mismatched_annotation() {
-    let source = "use debug = \"std.debug\"\nvar flag: Bool = 1\n";
+    let source = "var flag: Bool = 1\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
     let result = compiler.compile(&source_file);
@@ -32,7 +32,7 @@ fn rejects_untyped_function_parameters() {
 
 #[test]
 fn requires_alias_for_use_statement() {
-    let source = "use \"std.debug\"\nprint(\"hi\")\n";
+    let source = "use \"std.assert\"\nassert(true)\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
         SourceId(0),
@@ -91,10 +91,10 @@ fn rejects_missing_return_value() {
 #[test]
 fn allows_void_return_without_value() {
     let source = r#"
-use debug = "std.debug"
+
 
 def log(message: String) -> Void
-  debug.print(message)
+  print(message)
 end
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -115,10 +115,10 @@ end
 #[test]
 fn rejects_nil_function_without_explicit_return() {
     let source = r#"
-use debug = "std.debug"
+
 
 def make_nil() -> Nil
-  debug.print("noop")
+  print("noop")
 end
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
@@ -618,7 +618,7 @@ fn accepts_lambda_annotations() {
 #[test]
 fn accepts_container_annotations() {
     let source = r#"
-use debug = "std.debug"
+
 
 var values: List[Int] = [1, 2, 3]
 var lookup: Dict[String, Int] = { foo: 42 }
@@ -629,7 +629,7 @@ end
 
 var transformer: Func(Int) -> Int = apply
 
-debug.print(transformer(values[0]))
+print(transformer(values[0]))
 "#;
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(

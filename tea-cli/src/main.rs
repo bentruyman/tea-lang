@@ -686,6 +686,8 @@ fn detect_native_cpu() -> Option<&'static str> {
     #[cfg(target_arch = "aarch64")]
     {
         // Apple Silicon detection
+        // LLVM recognizes "apple-m1" (for M1/M2) and "apple-m2" (for M3/M4)
+        // as CPU targets with specific instruction set features
         if cfg!(target_os = "macos") {
             // Try to detect specific Apple CPU
             if let Ok(output) = std::process::Command::new("sysctl")
@@ -694,18 +696,15 @@ fn detect_native_cpu() -> Option<&'static str> {
                 .output()
             {
                 let brand = String::from_utf8_lossy(&output.stdout);
-                if brand.contains("M4") {
-                    return Some("apple-m4");
-                } else if brand.contains("M3") {
-                    return Some("apple-m3");
-                } else if brand.contains("M2") {
+                // M3 and M4 use similar microarchitecture, use apple-m2 as baseline
+                if brand.contains("M4") || brand.contains("M3") {
                     return Some("apple-m2");
-                } else if brand.contains("M1") {
+                } else if brand.contains("M2") || brand.contains("M1") {
                     return Some("apple-m1");
                 }
             }
-            // Default for Apple Silicon
-            return Some("apple-a14");
+            // Default for Apple Silicon - use apple-m1 as safe baseline
+            return Some("apple-m1");
         }
         // Other ARM64 platforms
         Some("generic")

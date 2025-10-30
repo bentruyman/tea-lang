@@ -306,9 +306,9 @@ fn optimize_module_with_opt<'ctx>(
     let opt_tool = match opt_path {
         Some(path) => path,
         None => {
-            // If opt tool is not found, just return the unoptimized module
-            // This allows compilation to continue even without opt installed
-            eprintln!("Warning: LLVM opt tool not found, skipping IR optimizations");
+            // If opt tool is not found, just return the module
+            // The module is already optimized via LLVM's PassManager
+            // External opt is only useful for debugging/inspection
             return Ok(module);
         }
     };

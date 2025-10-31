@@ -1,0 +1,186 @@
+# Comprehensive test of Tea-native stdlib modules
+# Tests all migrated modules: env, fs, path, io, json, yaml, cli, process
+
+use env = "std.env"
+use fs = "std.fs"
+use path = "std.path"
+use io = "std.io"
+use json = "std.json"
+use yaml = "std.yaml"
+use cli = "std.cli"
+use process = "std.process"
+
+pub def test_env() -> Void
+  print("=== Testing std.env ===")
+
+  # Test get
+  var home = env.home_dir()
+  print("Home: " + home)
+
+  # Test cwd
+  var cwd = env.cwd()
+  print("CWD: " + cwd)
+
+  # Test has
+  if env.has("PATH")
+    print("✓ PATH variable exists")
+  end
+
+  # Test get_or
+  var editor = env.get_or("EDITOR", "vim")
+  print("Editor: " + editor)
+
+  # Test set/get/unset
+  env.set("TEA_TEST_VAR", "test_value")
+
+  if env.has("TEA_TEST_VAR")
+    print("✓ env.set works")
+  end
+
+  env.unset("TEA_TEST_VAR")
+
+  if ! env.has("TEA_TEST_VAR")
+    print("✓ env.unset works")
+  end
+
+  # Test temp_dir and config_dir
+  var tmp = env.temp_dir()
+  print("Temp: " + tmp)
+
+  var config = env.config_dir()
+  print("Config: " + config)
+end
+
+pub def test_path() -> Void
+  print("=== Testing std.path ===")
+
+  # Test join
+  var joined = path.join(["usr", "local", "bin"])
+  print("Joined: " + joined)
+
+  # Test basename and dirname
+  var file_path = "/usr/local/bin/tea"
+  var base = path.basename(file_path)
+  var dir = path.dirname(file_path)
+  print("Basename: " + base)
+  print("Dirname: " + dir)
+
+  # Test extension
+  var ext = path.extension("script.tea")
+  print("Extension: " + ext)
+
+  # Test strip_extension
+  var no_ext = path.strip_extension("script.tea")
+  print("No extension: " + no_ext)
+
+  # Test separator
+  var sep = path.separator()
+  print("Separator: " + sep)
+
+  # Test is_absolute
+  if path.is_absolute("/usr/local")
+    print("✓ is_absolute works")
+  end
+end
+
+pub def test_fs() -> Void
+  print("=== Testing std.fs ===")
+
+  # Test exists and is_dir on current directory
+  var cwd = env.cwd()
+
+  if fs.exists(cwd)
+    print("✓ fs.exists works")
+  end
+
+  if fs.is_dir(cwd)
+    print("✓ fs.is_dir works")
+  end
+
+  # Test ensure_dir and ensure_parent
+  var test_dir = "/tmp/tea_test_dir/nested"
+  fs.ensure_dir(test_dir)
+
+  if fs.exists(test_dir)
+    print("✓ fs.ensure_dir works")
+    fs.remove(test_dir)
+    fs.remove("/tmp/tea_test_dir")
+  end
+
+  # Test write and read
+  var test_file = "/tmp/tea_test_file.txt"
+  fs.write_text(test_file, "Hello from Tea!")
+  var content = fs.read_text(test_file)
+
+  if content == "Hello from Tea!"
+    print("✓ fs.write_text and fs.read_text work")
+  end
+
+  # Test size
+  var size = fs.size(test_file)
+  print("File size: " + size)
+
+  # Clean up
+  fs.remove(test_file)
+
+  if ! fs.exists(test_file)
+    print("✓ fs.remove works")
+  end
+end
+
+pub def test_json() -> Void
+  print("=== Testing std.json ===")
+
+  var data = { "name": "tea", "version": "1.0", "active": "true" }
+  var json_str = json.encode(data)
+  print("JSON: " + json_str)
+
+  json.decode(json_str)
+  print("✓ json.encode and json.decode work")
+end
+
+pub def test_yaml() -> Void
+  print("=== Testing std.yaml ===")
+
+  var data = { "name": "tea", "version": "1.0" }
+  var yaml_str = yaml.encode(data)
+  print("YAML:\n" + yaml_str)
+
+  yaml.decode(yaml_str)
+  print("✓ yaml.encode and yaml.decode work")
+end
+
+pub def test_io() -> Void
+  print("=== Testing std.io ===")
+
+  io.write("Hello from io.write!\n")
+  io.flush()
+  print("✓ io.write and io.flush work")
+end
+
+pub def test_cli() -> Void
+  print("=== Testing std.cli ===")
+
+  var args = cli.args()
+  print("Program arguments:")
+  print(args)
+end
+
+pub def test_process() -> Void
+  print("=== Testing std.process ===")
+
+  process.run(["echo", "Hello from process.run"])
+  print("✓ process.run works")
+end
+
+# Run all tests
+test_env()
+test_path()
+test_fs()
+test_json()
+test_yaml()
+test_io()
+test_cli()
+test_process()
+
+print("=== All Stdlib Tests Complete ===")

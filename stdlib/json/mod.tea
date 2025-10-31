@@ -1,0 +1,21 @@
+# JSON encoding and decoding utilities.
+#
+# This module provides a Tea-native interface to JSON operations.
+
+use intrinsics = "std.intrinsics"
+
+# Encode a value to JSON string.
+#
+# Examples:
+#   var json_str = json.encode({"name": "tea", "version": "1.0"})
+pub def encode(value: Dict[String, String]) -> String
+  return intrinsics.json_encode(value)
+end
+
+# Decode a JSON string to a value.
+#
+# Examples:
+#   var data = json.decode("{\"name\":\"tea\"}")
+pub def decode(json_str: String) -> Dict[String, String]
+  return intrinsics.json_decode(json_str)
+end

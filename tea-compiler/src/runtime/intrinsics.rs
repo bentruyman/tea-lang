@@ -106,6 +106,7 @@ pub enum Intrinsic {
 
 impl Intrinsic {
     /// Parse an intrinsic from its Tea function name (with __intrinsic_ prefix)
+    #[allow(dead_code)]
     pub fn from_name(name: &str) -> Option<Self> {
         let name = name.strip_prefix("__intrinsic_")?;
 
@@ -212,6 +213,7 @@ impl Intrinsic {
     }
 
     /// Get the canonical Tea function name for this intrinsic
+    #[allow(dead_code)]
     pub fn name(self) -> &'static str {
         match self {
             // Type predicates
@@ -314,6 +316,7 @@ impl Intrinsic {
     }
 
     /// Returns an iterator over all intrinsic variants
+    #[allow(dead_code)]
     pub fn all() -> impl Iterator<Item = Self> {
         use Intrinsic::*;
         [

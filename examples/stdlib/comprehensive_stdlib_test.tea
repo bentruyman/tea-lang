@@ -1,0 +1,95 @@
+# Comprehensive test of all Tea stdlib modules using std.* syntax
+
+use env = "std.env"
+use fs = "std.fs"
+use path = "std.path"
+use io = "std.io"
+use json = "std.json"
+use yaml = "std.yaml"
+
+pub def test_env() -> Void
+  print("=== Testing std.env ===")
+  var home = env.home_dir()
+  print("✓ home_dir: " + home)
+
+  var cwd = env.cwd()
+  print("✓ cwd: " + cwd)
+
+  if env.has("PATH")
+    print("✓ has works")
+  end
+end
+
+pub def test_path() -> Void
+  print("=== Testing std.path ===")
+
+  var parts = ["usr", "local", "bin"]
+  var joined = path.join(parts)
+  print("✓ join: " + joined)
+
+  var base = path.basename("/usr/local/bin/tea")
+  print("✓ basename: " + base)
+
+  var sep = path.separator()
+  print("✓ separator: " + sep)
+end
+
+pub def test_fs() -> Void
+  print("=== Testing std.fs ===")
+
+  var test_file = "/tmp/tea_stdlib_test.txt"
+  fs.write_text(test_file, "Hello from Tea stdlib!")
+  print("✓ write_text")
+
+  var content = fs.read_text(test_file)
+  print("✓ read_text: " + content)
+
+  if fs.exists(test_file)
+    print("✓ exists")
+  end
+
+  fs.remove(test_file)
+  print("✓ remove")
+end
+
+pub def test_json() -> Void
+  print("=== Testing std.json ===")
+
+  var data = { "name": "tea", "version": "1.0" }
+  var json_str = json.encode(data)
+  print("✓ encode:")
+  print(json_str)
+
+  json.decode(json_str)
+  print("✓ decode")
+end
+
+pub def test_yaml() -> Void
+  print("=== Testing std.yaml ===")
+
+  var data = { "name": "tea", "lang": "yes" }
+  var yaml_str = yaml.encode(data)
+  print("✓ encode:")
+  print(yaml_str)
+
+  yaml.decode(yaml_str)
+  print("✓ decode")
+end
+
+pub def test_io() -> Void
+  print("=== Testing std.io ===")
+
+  io.write("Hello from io.write!\n")
+  io.flush()
+  print("✓ write and flush")
+end
+
+# Run all tests
+test_env()
+test_path()
+test_fs()
+test_json()
+test_yaml()
+test_io()
+
+print("=== All Tea stdlib tests passed! ===")

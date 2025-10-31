@@ -1,0 +1,15 @@
+# Test loading two stdlib modules
+
+use env = "std.env"
+use path = "std.path"
+
+pub def run_test() -> Void
+  print("Testing two modules")
+  var home = env.home_dir()
+  print(home)
+
+  var sep = path.separator()
+  print(sep)
+end
+
+run_test()

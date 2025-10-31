@@ -1,0 +1,12 @@
+# Test simple stdlib module with relative path
+
+use simple = "../../stdlib/simple/mod.tea"
+
+pub def run_test() -> Void
+  print(simple.hello())
+
+  var result = simple.add(5, 7)
+  print(result)
+end
+
+run_test()

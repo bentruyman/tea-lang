@@ -1,0 +1,104 @@
+# Path manipulation utilities for working with file paths.
+#
+# This module provides both Tea-native implementations and intrinsic-backed
+# operations for cross-platform path handling.
+
+use intrinsics = "std.intrinsics"
+
+# Join path components into a single path.
+#
+# Examples:
+#   var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
+pub def join(parts: List[String]) -> String
+  intrinsics.path_join(parts)
+end
+
+# Split a path into its components.
+#
+# Examples:
+#   var parts = path.components("/usr/local/bin")  # => ["usr", "local", "bin"]
+pub def components(file_path: String) -> List[String]
+  intrinsics.path_components(file_path)
+end
+
+# Get the directory part of a path.
+#
+# Examples:
+#   var dir = path.dirname("/usr/local/bin/tea")  # => "/usr/local/bin"
+pub def dirname(file_path: String) -> String
+  intrinsics.path_dirname(file_path)
+end
+
+# Get the filename part of a path.
+#
+# Examples:
+#   var name = path.basename("/usr/local/bin/tea")  # => "tea"
+pub def basename(file_path: String) -> String
+  intrinsics.path_basename(file_path)
+end
+
+# Get the extension of a path.
+#
+# Examples:
+#   var ext = path.extension("file.tea")  # => "tea"
+pub def extension(file_path: String) -> String
+  intrinsics.path_extension(file_path)
+end
+
+# Set the extension of a path.
+#
+# Examples:
+#   var new_path = path.set_extension("file.txt", "md")  # => "file.md"
+pub def set_extension(file_path: String, ext: String) -> String
+  intrinsics.path_set_extension(file_path, ext)
+end
+
+# Remove the extension from a path.
+#
+# Examples:
+#   var no_ext = path.strip_extension("file.tea")  # => "file"
+pub def strip_extension(file_path: String) -> String
+  intrinsics.path_strip_extension(file_path)
+end
+
+# Normalize a path (remove . and .. components).
+#
+# Examples:
+#   var norm = path.normalize("./foo/../bar")  # => "bar"
+pub def normalize(file_path: String) -> String
+  intrinsics.path_normalize(file_path)
+end
+
+# Convert a path to absolute form.
+#
+# Examples:
+#   var abs = path.absolute("file.txt")  # => "/current/dir/file.txt"
+pub def absolute(file_path: String) -> String
+  intrinsics.path_absolute(file_path)
+end
+
+# Get the relative path from one path to another.
+#
+# Examples:
+#   var rel = path.relative("/usr/local", "/usr/local/bin")  # => "bin"
+pub def relative(from: String, to: String) -> String
+  intrinsics.path_relative(from, to)
+end
+
+# Check if a path is absolute.
+#
+# Examples:
+#   if path.is_absolute("/usr/local")
+#     print("Absolute path")
+#   end
+pub def is_absolute(file_path: String) -> Bool
+  intrinsics.path_is_absolute(file_path)
+end
+
+# Get the system path separator ("/" or "\").
+#
+# Examples:
+#   var sep = path.separator()  # => "/" on Unix
+pub def separator() -> String
+  intrinsics.path_separator()
+end

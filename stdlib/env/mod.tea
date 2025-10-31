@@ -1,0 +1,112 @@
+# Environment variable access and working directory management.
+#
+# This module provides a Tea-native interface to environment operations,
+# delegating to low-level intrinsics.
+
+use intrinsics = "std.intrinsics"
+
+# Get the value of an environment variable.
+#
+# Examples:
+#   var path = env.get("PATH")
+pub def get(name: String) -> String
+  intrinsics.env_get(name)
+end
+
+# Get the value of an environment variable, or return a default if not set.
+#
+# Examples:
+#   var editor = env.get_or("EDITOR", "vim")
+pub def get_or(name: String, default_value: String) -> String
+  if intrinsics.env_has(name)
+    intrinsics.env_get(name)
+  else
+    default_value
+  end
+end
+
+# Set an environment variable.
+#
+# Examples:
+#   env.set("MY_VAR", "my_value")
+pub def set(name: String, value: String) -> Void
+  intrinsics.env_set(name, value)
+end
+
+# Unset an environment variable.
+#
+# Examples:
+#   env.unset("MY_VAR")
+pub def unset(name: String) -> Void
+  intrinsics.env_unset(name)
+end
+
+# Check if an environment variable exists.
+#
+# Examples:
+#   if env.has("HOME")
+#     print("HOME is set")
+#   end
+pub def has(name: String) -> Bool
+  intrinsics.env_has(name)
+end
+
+# Require an environment variable to be set, fail if not.
+#
+# Examples:
+#   var token = env.require("API_TOKEN")
+pub def require(name: String) -> String
+  if ! intrinsics.env_has(name)
+    intrinsics.fail("Required environment variable not set: " + name)
+  end
+
+  return intrinsics.env_get(name)
+end
+
+# Get all environment variables as a dictionary.
+#
+# Examples:
+#   var all_vars = env.vars()
+pub def vars() -> Dict[String, String]
+  intrinsics.env_vars()
+end
+
+# Get the current working directory.
+#
+# Examples:
+#   var cwd = env.cwd()
+pub def cwd() -> String
+  intrinsics.env_cwd()
+end
+
+# Set the current working directory.
+#
+# Examples:
+#   env.set_cwd("/tmp")
+pub def set_cwd(path: String) -> Void
+  intrinsics.env_set_cwd(path)
+end
+
+# Get the system's temporary directory.
+#
+# Examples:
+#   var tmp = env.temp_dir()
+pub def temp_dir() -> String
+  intrinsics.env_temp_dir()
+end
+
+# Get the user's home directory.
+#
+# Examples:
+#   var home = env.home_dir()
+pub def home_dir() -> String
+  intrinsics.env_home_dir()
+end
+
+# Get the user's config directory.
+#
+# Examples:
+#   var config = env.config_dir()
+pub def config_dir() -> String
+  intrinsics.env_config_dir()
+end

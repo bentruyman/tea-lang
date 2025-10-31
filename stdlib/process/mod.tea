@@ -1,0 +1,14 @@
+# Process execution utilities for running external commands.
+#
+# This module provides a Tea-native interface to process operations.
+
+use intrinsics = "std.intrinsics"
+
+# Run a command and wait for it to complete.
+#
+# Examples:
+#   var result = process.run(["ls", "-la"])
+#   print(result.stdout)
+pub def run(args: List[String])
+  intrinsics.process_run(args)
+end

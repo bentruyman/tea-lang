@@ -1,0 +1,47 @@
+# Input/output operations for reading from stdin and writing to stdout/stderr.
+#
+# This module provides a Tea-native interface to I/O operations.
+
+use intrinsics = "std.intrinsics"
+
+# Read a line from stdin.
+#
+# Examples:
+#   var input = io.read_line()
+pub def read_line() -> String
+  intrinsics.io_read_line()
+end
+
+# Read all remaining input from stdin.
+#
+# Examples:
+#   var all_input = io.read_all()
+pub def read_all() -> String
+  intrinsics.io_read_all()
+end
+
+# Write text to stdout (without newline).
+#
+# Examples:
+#   io.write("Hello, ")
+#   io.write("world!")
+pub def write(text: String) -> Void
+  intrinsics.io_write(text)
+end
+
+# Write text to stderr (without newline).
+#
+# Examples:
+#   io.write_err("Error: something went wrong")
+pub def write_err(text: String) -> Void
+  intrinsics.io_write_err(text)
+end
+
+# Flush stdout buffer.
+#
+# Examples:
+#   io.write("Progress: ")
+#   io.flush()
+pub def flush() -> Void
+  intrinsics.io_flush()
+end

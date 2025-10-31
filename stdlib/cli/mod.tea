@@ -1,0 +1,14 @@
+# Command-line interface utilities for accessing program arguments.
+#
+# This module provides a Tea-native interface to CLI operations.
+
+use intrinsics = "std.intrinsics"
+
+# Get command-line arguments passed to the program.
+#
+# Examples:
+#   var args = cli.args()
+#   print(args)
+pub def args() -> List[String]
+  intrinsics.cli_args()
+end

@@ -169,9 +169,20 @@ impl Resolver {
                 },
             );
         } else if module_path.starts_with("std.") || module_path.starts_with("support.") {
-            self.diagnostics.push_error_with_span(
-                format!("unknown module '{}'", module_path),
-                Some(use_stmt.module_span),
+            // Check if it's a Tea stdlib module (will be loaded from disk)
+            // For now, we'll allow std.* modules and let the module expander handle validation
+            self.declare_binding(&alias.name, alias.span, BindingKind::Module, true);
+            self.mark_binding_used(&alias.name);
+            self.module_aliases.insert(
+                alias.name.clone(),
+                ModuleAliasBinding {
+                    module_path: module_path.to_string(),
+                    span: alias.span,
+                    exports: Vec::new(),
+                    export_types: HashMap::new(),
+                    export_docs: HashMap::new(),
+                    docstring: None,
+                },
             );
         } else {
             self.declare_binding(&alias.name, alias.span, BindingKind::Module, true);

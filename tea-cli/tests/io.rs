@@ -49,10 +49,8 @@ fn io_read_line_round_trip() -> anyhow::Result<()> {
         r#"use io = "std.io"
 
 var line = io.read_line()
-if line != nil
-  io.write(line)
-  io.flush()
-end
+io.write(line)
+io.flush()
 "#,
     )?;
 

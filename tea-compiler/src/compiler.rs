@@ -314,6 +314,43 @@ impl ModuleExpander {
         }
     }
 
+    /// Try to resolve a Tea stdlib module (e.g., "std.env" -> "stdlib/env/mod.tea")
+    fn try_resolve_tea_stdlib_module(&self, module_path: &str) -> Option<PathBuf> {
+        if !module_path.starts_with("std.") {
+            return None;
+        }
+
+        // Extract module name: "std.env" -> "env"
+        let module_name = module_path.strip_prefix("std.")?;
+
+        // Some std modules are Rust-only (intrinsics, assert, util)
+        // Don't try to load them from disk
+        let rust_only_modules = ["intrinsics", "assert", "util"];
+        if rust_only_modules.contains(&module_name) {
+            return None;
+        }
+
+        // Try to find stdlib directory relative to current working directory
+        // or from a well-known location
+        let stdlib_candidates = vec![
+            PathBuf::from("stdlib").join(module_name).join("mod.tea"),
+            PathBuf::from("../../stdlib")
+                .join(module_name)
+                .join("mod.tea"),
+            PathBuf::from("../../../stdlib")
+                .join(module_name)
+                .join("mod.tea"),
+        ];
+
+        for candidate in stdlib_candidates {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+
+        None
+    }
+
     fn expand_module(&mut self, module: &Module, path: &Path) -> Result<Module> {
         if let Some(cached) = self.module_cache.get(path) {
             return Ok(cached.clone());
@@ -365,22 +402,31 @@ impl ModuleExpander {
                 Statement::Use(use_stmt) => {
                     result.push(statement.clone());
                     let path = &use_stmt.module_path;
-                    if path.starts_with("std.") || path.starts_with("support.") {
-                        continue;
-                    }
+
+                    // Try to resolve Tea stdlib module first
+                    let resolved_path =
+                        if let Some(tea_stdlib_path) = self.try_resolve_tea_stdlib_module(path) {
+                            tea_stdlib_path
+                        } else if path.starts_with("std.") || path.starts_with("support.") {
+                            // Use Rust stdlib, skip filesystem loading
+                            continue;
+                        } else {
+                            // Regular module path resolution
+                            let span = use_stmt.module_span;
+                            match self.resolve_path(base_path, path) {
+                                Ok(resolved) => resolved,
+                                Err(err) => {
+                                    self.diagnostics.push_error_with_span(
+                                        format!("could not resolve module '{}': {err}", path),
+                                        Some(span),
+                                    );
+                                    return Err(err);
+                                }
+                            }
+                        };
 
                     let span = use_stmt.module_span;
-                    let resolved = match self.resolve_path(base_path, path) {
-                        Ok(resolved) => resolved,
-                        Err(err) => {
-                            self.diagnostics.push_error_with_span(
-                                format!("could not resolve module '{}': {err}", path),
-                                Some(span),
-                            );
-                            return Err(err);
-                        }
-                    };
-                    let canonical = match resolved.canonicalize() {
+                    let canonical = match resolved_path.canonicalize() {
                         Ok(path) => path,
                         Err(err) => {
                             self.diagnostics.push_error_with_span(
@@ -444,6 +490,16 @@ impl ModuleExpander {
         let mut all_renames: HashMap<String, String> = HashMap::new();
         let mut export_renames: HashMap<String, String> = HashMap::new();
         let mut docstrings: HashMap<String, String> = HashMap::new();
+
+        // First, rename use statement aliases to avoid conflicts
+        for statement in &module.statements {
+            if let Statement::Use(use_stmt) = statement {
+                let original_alias = use_stmt.alias.name.clone();
+                let new_alias = format!("__module_{}__{}", alias, original_alias);
+                all_renames.insert(original_alias, new_alias);
+            }
+        }
+
         for statement in &module.statements {
             match statement {
                 Statement::Function(function) => {
@@ -535,6 +591,13 @@ impl ModuleExpander {
                     }
                 }
                 _ => {}
+            }
+
+            // Apply renaming to use statement aliases
+            if let Statement::Use(use_stmt) = &mut statement {
+                if let Some(new_alias) = all_renames.get(&use_stmt.alias.name).cloned() {
+                    use_stmt.alias.name = new_alias;
+                }
             }
 
             self.rewrite_statement_identifiers(&mut statement, &all_renames);

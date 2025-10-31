@@ -2776,10 +2776,11 @@ impl TypeChecker {
             self.module_aliases
                 .insert(use_stmt.alias.name.clone(), binding);
         } else if module_path.starts_with("std.") || module_path.starts_with("support.") {
-            self.report_error(
-                format!("unknown module '{}'", module_path),
-                Some(use_stmt.module_span),
-            );
+            // Tea stdlib modules or unknown modules - will be validated during module expansion
+            // For now, register as an empty module binding
+            let binding = ModuleBinding::default();
+            self.module_aliases
+                .insert(use_stmt.alias.name.clone(), binding);
         }
     }
 

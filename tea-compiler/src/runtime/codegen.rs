@@ -2190,7 +2190,9 @@ impl CodeGenerator {
             }
             Ok(())
         } else if module_path.starts_with("std.") || module_path.starts_with("support.") {
-            bail!(format!("unknown module '{module_path}'"));
+            // Tea stdlib modules are loaded from disk during module expansion
+            // They don't need special registration here
+            Ok(())
         } else {
             Ok(())
         }

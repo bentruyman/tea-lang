@@ -1,38 +1,40 @@
 # Demonstrates std.path helpers for cross-platform path manipulation.
 
-use path = "std.path"
+use p = "std.path"
+use env = "std.env"
 
-var joined = path.join(["logs", "2025", "october"])
+var joined = p.join(["logs", "2025", "october"])
 print("joined path")
 print(joined)
 
-var parts = path.components(joined)
+var parts = p.components(joined)
 print("components")
 print(parts)
 
 print("dirname")
-print(path.dirname(joined))
+print(p.dirname(joined))
 
 print("basename")
-print(path.basename(joined))
+print(p.basename(joined))
 
 print("extension")
-print(path.extension("report.txt"))
+print(p.extension("report.txt"))
 
 print("set_extension")
-print(path.set_extension("report.txt", "md"))
+print(p.set_extension("report.txt", "md"))
 
 print("strip_extension")
-print(path.strip_extension("report.txt"))
+print(p.strip_extension("report.txt"))
 
 print("normalize")
-print(path.normalize("logs/./2025/../current"))
+print(p.normalize("logs/./2025/../current"))
 
-print("absolute (relative to ./workspace)")
-print(path.absolute("bin/tea", "./workspace"))
+print("absolute")
+var abs_path = p.absolute("bin/tea")
+print(abs_path)
 
-print("relative to ./workspace")
-print(path.relative(path.absolute("bin/tea", "./workspace"), "./workspace"))
+print("relative")
+print(p.relative(abs_path, env.cwd()))
 
 print("separator")
-print(path.separator())
+print(p.separator())

@@ -352,8 +352,13 @@ fn optimize_module_with_opt<'ctx>(
     }
 
     // Parse the optimized IR back into a module
-    let optimized_ir =
+    let mut optimized_ir =
         String::from_utf8(output.stdout).context("opt output was not valid UTF-8")?;
+
+    // Ensure the IR ends with a newline to avoid parsing issues
+    if !optimized_ir.ends_with('\n') {
+        optimized_ir.push('\n');
+    }
 
     let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
         optimized_ir.as_bytes(),

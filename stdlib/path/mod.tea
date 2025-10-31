@@ -1,9 +1,16 @@
 # Path manipulation utilities for working with file paths.
 #
-# This module provides both Tea-native implementations and intrinsic-backed
-# operations for cross-platform path handling.
+# NOTE: This module currently uses intrinsic-backed operations because Tea
+# lacks necessary language features for a pure-Tea implementation:
+#   - String indexing (string[index]) to access individual characters
+#   - List concatenation (list1 + list2) to combine lists
+#   - String slicing (string[start:end]) to extract substrings
+#
+# Once these language features are added, this module can be rewritten
+# in pure Tea without requiring intrinsics.
 
 use intrinsics = "std.intrinsics"
+use util = "std.util"
 
 # Join path components into a single path.
 #
@@ -73,6 +80,8 @@ end
 #
 # Examples:
 #   var abs = path.absolute("file.txt")  # => "/current/dir/file.txt"
+# Note: Two-argument form path.absolute(path, base) is not supported in Tea wrapper.
+# Use path_absolute directly from intrinsics if needed.
 pub def absolute(file_path: String) -> String
   intrinsics.path_absolute(file_path)
 end

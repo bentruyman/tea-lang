@@ -3774,11 +3774,36 @@ impl TypeChecker {
                     return Type::String;
                 }
 
+                // Handle list concatenation
+                if let (Type::List(left_elem), Type::List(right_elem)) = (&left, &right) {
+                    // Lists must have compatible element types
+                    if left_elem.as_ref() != right_elem.as_ref()
+                        && *left_elem.as_ref() != Type::Unknown
+                        && *right_elem.as_ref() != Type::Unknown
+                    {
+                        self.report_error(
+                            format!(
+                                "list concatenation requires compatible element types, found List<{}> and List<{}>",
+                                left_elem.describe(),
+                                right_elem.describe()
+                            ),
+                            Some(span),
+                        );
+                        return Type::Unknown;
+                    }
+                    // Return list with the more specific type (prefer non-Unknown)
+                    if *left_elem.as_ref() != Type::Unknown {
+                        return left;
+                    } else {
+                        return right;
+                    }
+                }
+
                 // Handle numeric addition
                 if left != Type::Unknown && !left.is_numeric() {
                     self.report_error(
                         format!(
-                            "addition requires numeric or string operands, found {}",
+                            "addition requires numeric, string, or list operands, found {}",
                             left.describe()
                         ),
                         Some(binary.left.span),
@@ -3787,7 +3812,7 @@ impl TypeChecker {
                 if right != Type::Unknown && !right.is_numeric() {
                     self.report_error(
                         format!(
-                            "addition requires numeric or string operands, found {}",
+                            "addition requires numeric, string, or list operands, found {}",
                             right.describe()
                         ),
                         Some(binary.right.span),

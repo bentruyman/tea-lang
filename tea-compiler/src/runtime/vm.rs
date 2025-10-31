@@ -371,6 +371,12 @@ impl Vm {
                         result.push_str(a);
                         result.push_str(b);
                         self.stack.push(Value::String(result));
+                    } else if let (Value::List(a), Value::List(b)) = (&left, &right) {
+                        // Handle list concatenation
+                        let mut result = Vec::with_capacity(a.len() + b.len());
+                        result.extend(a.as_ref().iter().cloned());
+                        result.extend(b.as_ref().iter().cloned());
+                        self.stack.push(Value::List(Rc::new(result)));
                     } else {
                         // Handle numeric addition
                         let result = match (left, right) {
@@ -380,7 +386,8 @@ impl Vm {
                             (Value::Float(a), Value::Int(b)) => Value::Float(a + b as f64),
                             _ => {
                                 return Err(VmError::Runtime(
-                                    "addition requires numeric or string operands".to_string(),
+                                    "addition requires numeric, string, or list operands"
+                                        .to_string(),
                                 )
                                 .into());
                             }

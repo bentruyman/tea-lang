@@ -809,6 +809,7 @@ struct LlvmCodeGenerator<'ctx> {
     list_set_fn: Option<FunctionValue<'ctx>>,
     list_get_fn: Option<FunctionValue<'ctx>>,
     string_index_fn: Option<FunctionValue<'ctx>>,
+    list_concat_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
     struct_get_fn: Option<FunctionValue<'ctx>>,
     error_alloc_fn: Option<FunctionValue<'ctx>>,
@@ -1045,6 +1046,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_set_fn: None,
             list_get_fn: None,
             string_index_fn: None,
+            list_concat_fn: None,
             struct_set_fn: None,
             struct_get_fn: None,
             error_alloc_fn: None,
@@ -8448,7 +8450,24 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 let result = self.concat_string_values(lhs, rhs)?;
                 Ok(ExprValue::String(result))
             }
-            _ => bail!("add expects numeric or string operands"),
+            (
+                ExprValue::List {
+                    pointer: lhs_ptr,
+                    element_type: lhs_elem,
+                },
+                ExprValue::List {
+                    pointer: rhs_ptr,
+                    element_type: _rhs_elem,
+                },
+            ) => {
+                // For now, assume element types match (typechecker ensures this)
+                let result = self.concat_list_values(lhs_ptr, rhs_ptr)?;
+                Ok(ExprValue::List {
+                    pointer: result,
+                    element_type: lhs_elem,
+                })
+            }
+            _ => bail!("add expects numeric, string, or list operands"),
         }
     }
 
@@ -9563,6 +9582,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .ok_or_else(|| anyhow!("tea_alloc_string returned no value"))?
             .into_pointer_value();
 
+        Ok(result)
+    }
+
+    fn concat_list_values(
+        &mut self,
+        left: PointerValue<'ctx>,
+        right: PointerValue<'ctx>,
+    ) -> Result<PointerValue<'ctx>> {
+        // Call tea_list_concat runtime function
+        let concat_fn = self.ensure_list_concat_fn();
+        let result = self
+            .call_function(concat_fn, &[left.into(), right.into()], "list_concat")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_list_concat returned no value"))?
+            .into_pointer_value();
         Ok(result)
     }
 
@@ -11216,6 +11251,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_string_index", fn_type, Some(Linkage::External));
         self.string_index_fn = Some(func);
+        func
+    }
+
+    fn ensure_list_concat_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.list_concat_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.list_ptr_type().into(), self.list_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_list_concat", fn_type, Some(Linkage::External));
+        self.list_concat_fn = Some(func);
         func
     }
 

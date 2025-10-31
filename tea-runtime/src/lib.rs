@@ -1982,6 +1982,32 @@ pub extern "C" fn tea_string_index(string: *const TeaString, index: c_longlong) 
 }
 
 #[no_mangle]
+pub extern "C" fn tea_list_concat(left: *const TeaList, right: *const TeaList) -> *mut TeaList {
+    if left.is_null() || right.is_null() {
+        panic!("null list in concatenation");
+    }
+    unsafe {
+        let left_ref = &*left;
+        let right_ref = &*right;
+        let combined_len = left_ref.len + right_ref.len;
+        let result = tea_alloc_list(combined_len);
+        let result_ref = &mut *result;
+
+        // Copy left list items
+        for i in 0..left_ref.len {
+            *result_ref.items.add(i as usize) = *left_ref.items.add(i as usize);
+        }
+
+        // Copy right list items
+        for i in 0..right_ref.len {
+            *result_ref.items.add((left_ref.len + i) as usize) = *right_ref.items.add(i as usize);
+        }
+
+        result
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_dict_new() -> *mut TeaDict {
     Box::into_raw(Box::new(TeaDict {
         entries: HashMap::new(),

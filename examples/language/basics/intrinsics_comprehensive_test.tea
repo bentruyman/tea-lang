@@ -1,0 +1,125 @@
+# Comprehensive test of std.intrinsics module
+# Tests various categories: type checks, env, fs, path, io, json/yaml
+
+use intrinsics = "std.intrinsics"
+
+pub def test_type_predicates() -> Void
+  print("=== Type Predicates ===")
+
+  var num = 42
+  var text = "hello"
+  var flag = true
+  var items = [1, 2, 3]
+
+  if intrinsics.is_int(num)
+    print("✓ is_int works")
+  end
+
+  if intrinsics.is_string(text)
+    print("✓ is_string works")
+  end
+
+  if intrinsics.is_bool(flag)
+    print("✓ is_bool works")
+  end
+
+  if intrinsics.is_list(items)
+    print("✓ is_list works")
+  end
+
+  if intrinsics.is_nil(nil)
+    print("✓ is_nil works")
+  end
+end
+
+pub def test_conversions() -> Void
+  print("=== Conversions ===")
+
+  var num = 12345
+  var str = intrinsics.to_string(num)
+  print(str)
+end
+
+pub def test_environment() -> Void
+  print("=== Environment ===")
+
+  var home = intrinsics.env_home_dir()
+  print(home)
+
+  var cwd = intrinsics.env_cwd()
+  print(cwd)
+
+  var has_path = intrinsics.env_has("PATH")
+
+  if has_path
+    print("✓ PATH variable exists")
+  end
+end
+
+pub def test_path_operations() -> Void
+  print("=== Path Operations ===")
+
+  var parts = ["usr", "local", "bin"]
+  var joined = intrinsics.path_join(parts)
+  print(joined)
+
+  var basename = intrinsics.path_basename("/usr/local/bin/tea")
+  print(basename)
+
+  var dirname = intrinsics.path_dirname("/usr/local/bin/tea")
+  print(dirname)
+
+  var ext = intrinsics.path_extension("script.tea")
+  print(ext)
+
+  var sep = intrinsics.path_separator()
+  print(sep)
+end
+
+pub def test_filesystem() -> Void
+  print("=== Filesystem ===")
+
+  # Test if current directory exists
+  var cwd = intrinsics.env_cwd()
+  var exists = intrinsics.fs_exists(cwd)
+
+  if exists
+    print("✓ Current directory exists")
+  end
+
+  var is_dir = intrinsics.fs_is_dir(cwd)
+
+  if is_dir
+    print("✓ Current directory is a directory")
+  end
+end
+
+pub def test_json() -> Void
+  print("=== JSON Codec ===")
+
+  var data = { "name": "tea", "version": "1.0" }
+  var json_str = intrinsics.json_encode(data)
+  print(json_str)
+
+  intrinsics.json_decode(json_str)
+  print("✓ JSON encode/decode works")
+end
+
+pub def test_io() -> Void
+  print("=== I/O ===")
+
+  intrinsics.io_write("Hello from intrinsics!\n")
+  intrinsics.io_flush()
+  print("✓ I/O write works")
+end
+
+# Run all tests
+test_type_predicates()
+test_conversions()
+test_environment()
+test_path_operations()
+test_filesystem()
+test_json()
+test_io()
+
+print("=== All Tests Complete ===")

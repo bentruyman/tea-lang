@@ -28,6 +28,7 @@ use crate::ast::{
     Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement, VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
+use crate::runtime::Intrinsic;
 use crate::stdlib::{self, StdFunctionKind};
 use crate::typechecker::{
     ErrorDefinition, FunctionInstance, StructDefinition, StructInstance, StructType, Type,
@@ -362,6 +363,29 @@ fn optimize_module_with_opt<'ctx>(
     context
         .create_module_from_ir(memory_buffer)
         .map_err(|e| anyhow!("failed to parse optimized IR: {}", e))
+}
+
+pub fn compile_source_to_object(
+    source_path: &std::path::Path,
+    output_path: &std::path::Path,
+    options: &ObjectCompileOptions<'_>,
+) -> Result<()> {
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use crate::source::{SourceFile, SourceId};
+    use std::fs;
+
+    let source_code = fs::read_to_string(source_path)
+        .with_context(|| format!("failed to read source file: {}", source_path.display()))?;
+
+    let source = SourceFile::new(SourceId(0), source_path.to_path_buf(), source_code);
+    let mut lexer = Lexer::new(&source)?;
+    let tokens = lexer.tokenize()?;
+
+    let mut parser = Parser::new(&source, tokens);
+    let module_ast = parser.parse()?;
+
+    compile_module_to_object(&module_ast, output_path, options)
 }
 
 pub fn compile_module_to_object(
@@ -4697,6 +4721,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 return self.compile_builtin_call(kind, call, function, locals);
             }
 
+            // Check for intrinsic function calls
+            if let Some(intrinsic) = Intrinsic::from_name(&identifier.name) {
+                return self.compile_intrinsic_call(intrinsic, call, function, locals);
+            }
+
             if let Some(expr) = self.try_compile_error_constructor(
                 &identifier.name,
                 None,
@@ -5107,6 +5136,230 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
     }
+
+    fn compile_intrinsic_call(
+        &mut self,
+        intrinsic: Intrinsic,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        match intrinsic {
+            // Type predicates
+            Intrinsic::IsNil => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsNil,
+            ),
+            Intrinsic::IsBool => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsBool,
+            ),
+            Intrinsic::IsInt => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsInt,
+            ),
+            Intrinsic::IsFloat => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsFloat,
+            ),
+            Intrinsic::IsString => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsString,
+            ),
+            Intrinsic::IsList => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsList,
+            ),
+            Intrinsic::IsStruct => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsStruct,
+            ),
+            Intrinsic::IsError => self.compile_util_predicate_call(
+                &call.arguments,
+                function,
+                locals,
+                StdFunctionKind::UtilIsError,
+            ),
+
+            // Conversion
+            Intrinsic::ToString => {
+                self.compile_util_to_string_call(&call.arguments, function, locals)
+            }
+
+            // Assertions
+            Intrinsic::Fail => self.compile_fail_call(&call.arguments, function, locals),
+            Intrinsic::AssertSnapshot => {
+                bail!("__intrinsic_assert_snapshot is not implemented yet")
+            }
+
+            // Environment
+            Intrinsic::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
+            Intrinsic::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
+            Intrinsic::EnvUnset => self.compile_env_unset_call(&call.arguments, function, locals),
+            Intrinsic::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
+            Intrinsic::EnvVars => self.compile_env_vars_call(&call.arguments, function, locals),
+            Intrinsic::EnvCwd => self.compile_env_cwd_call(&call.arguments, function, locals),
+            Intrinsic::EnvSetCwd => {
+                self.compile_env_set_cwd_call(&call.arguments, function, locals)
+            }
+            Intrinsic::EnvTempDir => {
+                self.compile_env_temp_dir_call(&call.arguments, function, locals)
+            }
+            Intrinsic::EnvHomeDir => {
+                self.compile_env_home_dir_call(&call.arguments, function, locals)
+            }
+            Intrinsic::EnvConfigDir => {
+                self.compile_env_config_dir_call(&call.arguments, function, locals)
+            }
+
+            // Filesystem
+            Intrinsic::FsReadText => {
+                self.compile_fs_read_text_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsWriteText => {
+                self.compile_fs_write_text_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsWriteTextAtomic => {
+                self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsReadBytes => bail!("__intrinsic_fs_read_bytes is not implemented yet"),
+            Intrinsic::FsWriteBytes => bail!("__intrinsic_fs_write_bytes is not implemented yet"),
+            Intrinsic::FsWriteBytesAtomic => {
+                bail!("__intrinsic_fs_write_bytes_atomic is not implemented yet")
+            }
+            Intrinsic::FsCreateDir => {
+                self.compile_fs_create_dir_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsRemove => self.compile_fs_remove_call(&call.arguments, function, locals),
+            Intrinsic::FsExists => self.compile_fs_exists_call(&call.arguments, function, locals),
+            Intrinsic::FsIsDir => self.compile_fs_is_dir_call(&call.arguments, function, locals),
+            Intrinsic::FsIsSymlink => {
+                self.compile_fs_is_symlink_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsSize => self.compile_fs_size_call(&call.arguments, function, locals),
+            Intrinsic::FsModified => {
+                self.compile_fs_modified_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsPermissions => {
+                self.compile_fs_permissions_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsIsReadonly => {
+                self.compile_fs_is_readonly_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsListDir => {
+                self.compile_fs_list_dir_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
+            Intrinsic::FsGlob => self.compile_fs_glob_call(&call.arguments, function, locals),
+            Intrinsic::FsMetadata => {
+                self.compile_fs_metadata_call(&call.arguments, function, locals)
+            }
+            Intrinsic::FsOpenRead => bail!("__intrinsic_fs_open_read is not implemented yet"),
+            Intrinsic::FsReadChunk => bail!("__intrinsic_fs_read_chunk is not implemented yet"),
+            Intrinsic::FsClose => bail!("__intrinsic_fs_close is not implemented yet"),
+
+            // Path
+            Intrinsic::PathJoin => self.compile_path_join_call(&call.arguments, function, locals),
+            Intrinsic::PathComponents => {
+                self.compile_path_components_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathDirname => {
+                self.compile_path_dirname_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathBasename => {
+                self.compile_path_basename_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathExtension => {
+                self.compile_path_extension_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathSetExtension => {
+                self.compile_path_set_extension_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathStripExtension => {
+                self.compile_path_strip_extension_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathNormalize => {
+                self.compile_path_normalize_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathAbsolute => {
+                self.compile_path_absolute_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathRelative => {
+                self.compile_path_relative_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathIsAbsolute => {
+                self.compile_path_is_absolute_call(&call.arguments, function, locals)
+            }
+            Intrinsic::PathSeparator => self.compile_path_separator_call(&call.arguments),
+
+            // I/O
+            Intrinsic::IoReadLine => {
+                self.compile_io_read_line_call(&call.arguments, function, locals)
+            }
+            Intrinsic::IoReadAll => self.compile_io_read_all_call(&call.arguments, locals),
+            Intrinsic::IoReadBytes => bail!("__intrinsic_io_read_bytes is not implemented yet"),
+            Intrinsic::IoWrite => self.compile_io_write_call(&call.arguments, function, locals),
+            Intrinsic::IoWriteErr => {
+                self.compile_io_write_err_call(&call.arguments, function, locals)
+            }
+            Intrinsic::IoFlush => self.compile_io_flush_call(&call.arguments),
+
+            // Process
+            Intrinsic::ProcessRun => {
+                self.compile_process_run_call(&call.arguments, function, locals)
+            }
+            Intrinsic::ProcessSpawn => bail!("__intrinsic_process_spawn is not implemented yet"),
+            Intrinsic::ProcessWait => bail!("__intrinsic_process_wait is not implemented yet"),
+            Intrinsic::ProcessKill => bail!("__intrinsic_process_kill is not implemented yet"),
+            Intrinsic::ProcessReadStdout => {
+                bail!("__intrinsic_process_read_stdout is not implemented yet")
+            }
+            Intrinsic::ProcessReadStderr => {
+                bail!("__intrinsic_process_read_stderr is not implemented yet")
+            }
+            Intrinsic::ProcessWriteStdin => {
+                bail!("__intrinsic_process_write_stdin is not implemented yet")
+            }
+            Intrinsic::ProcessCloseStdin => {
+                bail!("__intrinsic_process_close_stdin is not implemented yet")
+            }
+            Intrinsic::ProcessClose => bail!("__intrinsic_process_close is not implemented yet"),
+
+            // Codecs
+            Intrinsic::JsonEncode => {
+                self.compile_json_encode_call(&call.arguments, function, locals)
+            }
+            Intrinsic::JsonDecode => {
+                self.compile_json_decode_call(&call.arguments, function, locals)
+            }
+            Intrinsic::YamlEncode => {
+                self.compile_yaml_encode_call(&call.arguments, function, locals)
+            }
+            Intrinsic::YamlDecode => {
+                self.compile_yaml_decode_call(&call.arguments, function, locals)
+            }
+
+            // CLI
+            Intrinsic::CliArgs => self.compile_cli_args_call(&call.arguments, function, locals),
+            Intrinsic::CliParse => bail!("__intrinsic_cli_parse is not implemented yet"),
+            Intrinsic::CliCapture => bail!("__intrinsic_cli_capture is not implemented yet"),
+        }
+    }
+
     fn compile_assert_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],

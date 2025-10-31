@@ -1,0 +1,96 @@
+# Assertion helpers for tests and runtime checks.
+
+# Asserts that a condition is true. Optional message for failure.
+#
+# Examples:
+#   assert(1 + 1 == 2)
+#   assert(x > 0, "x must be positive")
+pub def assert(condition, message)
+  if ! condition
+    if message == nil
+      fail("assertion failed")
+    else
+      fail(message)
+    end
+  end
+end
+
+# Asserts that two values are equal.
+#
+# Examples:
+#   assert_eq(1 + 1, 2)
+#   assert_eq("hello", "hello")
+pub def assert_eq(left, right)
+  if left != right
+    fail("assertion failed: `{left}` != `{right}`")
+  end
+end
+
+# Asserts that two values are not equal.
+#
+# Examples:
+#   assert_ne(1, 2)
+#   assert_ne("hello", "world")
+pub def assert_ne(left, right)
+  if left == right
+    fail("assertion failed: `{left}` == `{right}`")
+  end
+end
+
+# Fails immediately with a message.
+#
+# Examples:
+#   fail("not implemented")
+pub def fail(message)
+  __intrinsic_fail(message)
+end
+
+# Asserts that a value matches a saved snapshot.
+#
+# Examples:
+#   assert_snapshot("test_name", result)
+#   assert_snapshot("test_name", result, "custom/path")
+pub def assert_snapshot(name, value, path)
+  if path == nil
+    __intrinsic_assert_snapshot(name, value, "__snapshots__")
+  else
+    __intrinsic_assert_snapshot(name, value, path)
+  end
+end
+
+# Asserts that a string is empty.
+#
+# Examples:
+#   assert_empty("")
+pub def assert_empty(value)
+  if length(value) != 0
+    fail("assertion failed: expected empty string, got `{value}`")
+  end
+end
+
+# C symbol exports for AOT linking
+# These wrapper functions are exported with External linkage when compiled to native objects
+
+pub def tea_assert(condition, message)
+  assert(condition, message)
+end
+
+pub def tea_assert_eq(left, right)
+  assert_eq(left, right)
+end
+
+pub def tea_assert_ne(left, right)
+  assert_ne(left, right)
+end
+
+pub def tea_fail(message)
+  fail(message)
+end
+
+pub def tea_assert_snapshot(name, value, path)
+  assert_snapshot(name, value, path)
+end
+
+pub def tea_assert_empty(value)
+  assert_empty(value)
+end

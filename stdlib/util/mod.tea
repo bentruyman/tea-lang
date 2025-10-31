@@ -1,0 +1,116 @@
+# Utility predicates and helpers for runtime type inspection.
+
+# Returns the length of a string, list, or dict.
+#
+# Examples:
+#   len("hello")  # => 5
+#   len([1, 2, 3])  # => 3
+pub def len(value)
+  length(value)
+end
+
+# Converts any value to its string representation.
+#
+# Examples:
+#   to_string(42)  # => "42"
+#   to_string(true)  # => "true"
+pub def to_string(value)
+  __intrinsic_to_string(value)
+end
+
+# Clamps an integer between min and max bounds.
+#
+# Examples:
+#   clamp_int(5, 0, 10)  # => 5
+#   clamp_int(-5, 0, 10)  # => 0
+#   clamp_int(15, 0, 10)  # => 10
+pub def clamp_int(value, min_val, max_val)
+  max(min_val, min(max_val, value))
+end
+
+# Returns true if value is nil.
+pub def is_nil(value)
+  __intrinsic_is_nil(value)
+end
+
+# Returns true if value is a boolean.
+pub def is_bool(value)
+  __intrinsic_is_bool(value)
+end
+
+# Returns true if value is an integer.
+pub def is_int(value)
+  __intrinsic_is_int(value)
+end
+
+# Returns true if value is a float.
+pub def is_float(value)
+  __intrinsic_is_float(value)
+end
+
+# Returns true if value is a string.
+pub def is_string(value)
+  __intrinsic_is_string(value)
+end
+
+# Returns true if value is a list.
+pub def is_list(value)
+  __intrinsic_is_list(value)
+end
+
+# Returns true if value is a struct instance.
+pub def is_struct(value)
+  __intrinsic_is_struct(value)
+end
+
+# Returns true if value is an error.
+pub def is_error(value)
+  __intrinsic_is_error(value)
+end
+
+# C symbol exports for AOT linking
+# These wrapper functions are exported with External linkage when compiled to native objects
+
+pub def tea_util_len(value)
+  len(value)
+end
+
+pub def tea_util_to_string(value)
+  to_string(value)
+end
+
+pub def tea_util_clamp_int(value, min_val, max_val)
+  clamp_int(value, min_val, max_val)
+end
+
+pub def tea_util_is_nil(value)
+  is_nil(value)
+end
+
+pub def tea_util_is_bool(value)
+  is_bool(value)
+end
+
+pub def tea_util_is_int(value)
+  is_int(value)
+end
+
+pub def tea_util_is_float(value)
+  is_float(value)
+end
+
+pub def tea_util_is_string(value)
+  is_string(value)
+end
+
+pub def tea_util_is_list(value)
+  is_list(value)
+end
+
+pub def tea_util_is_struct(value)
+  is_struct(value)
+end
+
+pub def tea_util_is_error(value)
+  is_error(value)
+end

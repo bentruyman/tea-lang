@@ -8,6 +8,7 @@ mod resolver;
 mod runtime;
 mod source;
 mod stdlib;
+mod stdlib_snapshot;
 mod typechecker;
 
 pub use crate::ast::{
@@ -31,6 +32,7 @@ pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 pub use crate::runtime::{Program, TestOutcome, TestRunOptions, TestStatus, Vm};
 pub use crate::source::{SourceFile, SourceId};
 pub use crate::stdlib::{find_module as stdlib_find_module, StdFunction, StdModule};
+pub use crate::stdlib_snapshot::{load_embedded as load_embedded_stdlib, Snapshot, SnapshotModule};
 pub use crate::typechecker::TypeChecker;
 
 #[cfg(feature = "llvm-aot")]

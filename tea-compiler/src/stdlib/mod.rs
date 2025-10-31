@@ -4,6 +4,7 @@ mod cli;
 mod docs;
 mod env;
 mod fs;
+mod intrinsics;
 mod io;
 mod json;
 mod path;
@@ -209,6 +210,7 @@ pub static MODULES: &[StdModule] = &[
     process::MODULE,
     json::MODULE,
     yaml::MODULE,
+    intrinsics::MODULE,
 ];
 
 pub fn find_module(path: &str) -> Option<&'static StdModule> {

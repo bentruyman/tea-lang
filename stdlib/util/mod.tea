@@ -1,4 +1,21 @@
 # Utility predicates and helpers for runtime type inspection.
+#
+# NOTE ON INTRINSICS: The type predicates (is_nil, is_int, etc.) and to_string
+# must remain intrinsic-backed because Tea lacks a universal "Any" or "Value" type.
+#
+# While Tea has the 'is' operator for type checking (e.g., `value is Int`), it requires:
+#   1. Compile-time knowledge of possible types (via unions or specific types)
+#   2. Type annotations on all function parameters
+#   3. A concrete type for the value being checked
+#
+# These utility functions need to work on ANY value at runtime without type constraints,
+# which requires intrinsic support. Future language features that would enable pure Tea:
+#   - Universal "Any" or "Value" supertype
+#   - Ability to define functions without type annotations
+#   - Runtime type reflection API
+#
+# The 'is' operator works great for user code with known types, but stdlib utilities
+# need deeper runtime type inspection capabilities.
 
 # Returns the length of a string, list, or dict.
 #

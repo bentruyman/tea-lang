@@ -1,79 +1,345 @@
 # Path manipulation utilities for working with file paths.
 #
-# NOTE: This module currently uses intrinsic-backed operations because Tea
-# lacks necessary language features for a pure-Tea implementation:
-#   - String indexing (string[index]) to access individual characters
-#   - List concatenation (list1 + list2) to combine lists
-#   - String slicing (string[start:end]) to extract substrings
+# PROGRESS: As of 2025-10-31, most path functions are now implemented in pure Tea!
 #
-# Once these language features are added, this module can be rewritten
-# in pure Tea without requiring intrinsics.
+# Pure Tea implementations:
+#   ✓ join() - concatenates path components
+#   ✓ components() - splits path by separator
+#   ✓ basename() - extracts filename
+#   ✓ dirname() - extracts directory
+#   ✓ extension() - extracts file extension
+#   ✓ strip_extension() - removes extension
+#   ✓ set_extension() - replaces extension
+#   ✓ normalize() - resolves . and .. components
+#
+# Remaining intrinsics (require OS interaction or platform-specific logic):
+#   - separator() - platform-specific ("/" vs "\")
+#   - is_absolute() - platform-specific (Unix vs Windows drive letters)
+#   - absolute() - requires OS interaction to resolve current directory
+#   - relative() - complex path resolution logic
 
 use intrinsics = "std.intrinsics"
-use util = "std.util"
+
+# Internal helper to remove trailing separators from a path.
+# Returns empty string if path is all separators.
+def trim_trailing_separators(file_path: String) -> String
+  var sep = intrinsics.path_separator()
+  var len = length(file_path)
+  var end_pos = len
+
+  while end_pos > 0
+    var char = file_path[end_pos - 1]
+
+    if char == sep
+      end_pos = end_pos - 1
+    else
+      # Found a non-separator, stop here
+      return file_path[0..end_pos]
+    end
+  end
+
+  # All separators
+  ""
+end
 
 # Join path components into a single path.
 #
 # Examples:
 #   var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
+#
+# Pure Tea implementation - builds path by concatenating components with separator.
 pub def join(parts: List[String]) -> String
-  intrinsics.path_join(parts)
+  if length(parts) == 0
+    return ""
+  end
+
+  var result = parts[0]
+  var sep = intrinsics.path_separator()
+  var i = 1
+
+  while i < length(parts)
+    result = result + sep + parts[i]
+    i = i + 1
+  end
+
+  result
 end
 
 # Split a path into its components.
 #
 # Examples:
 #   var parts = path.components("/usr/local/bin")  # => ["usr", "local", "bin"]
+#   var parts = path.components("usr/local/")  # => ["usr", "local"]
+#
+# Pure Tea implementation - splits by separator and filters empty strings.
 pub def components(file_path: String) -> List[String]
-  intrinsics.path_components(file_path)
+  if length(file_path) == 0
+    return[]
+  end
+
+  var sep = intrinsics.path_separator()
+  var all_parts = intrinsics.string_split(file_path, sep)
+  var result = []
+  var i = 0
+
+  while i < length(all_parts)
+    var part = all_parts[i]
+
+    if length(part) > 0
+      result = result +[part]
+    end
+
+    i = i + 1
+  end
+
+  result
 end
 
 # Get the directory part of a path.
 #
 # Examples:
 #   var dir = path.dirname("/usr/local/bin/tea")  # => "/usr/local/bin"
+#   var dir = path.dirname("/usr/local/")  # => "/usr/local"
+#   var dir = path.dirname("file.txt")  # => ""
+#   var dir = path.dirname("/")  # => "/"
+#
+# Pure Tea implementation - finds last separator and returns everything before it.
 pub def dirname(file_path: String) -> String
-  intrinsics.path_dirname(file_path)
+  if length(file_path) == 0
+    return ""
+  end
+
+  var sep = intrinsics.path_separator()
+  var trimmed = trim_trailing_separators(file_path)
+
+  # Handle root path
+  if length(trimmed) == 0
+    return sep
+  end
+
+  var last_sep = intrinsics.string_index_of(trimmed, sep)
+  var pos = last_sep
+  var i = last_sep + 1
+
+  # Find the last occurrence of separator
+  while i < length(trimmed)
+    var next_pos = intrinsics.string_index_of(trimmed[i...length(trimmed)], sep)
+
+    if next_pos >= 0
+      pos = i + next_pos
+      i = pos + 1
+    else
+      i = length(trimmed)
+    end
+  end
+
+  # No separator found
+  if pos < 0
+    return ""
+  end
+
+  # Root path
+  if pos == 0
+    return sep
+  end
+
+  trimmed[0..pos]
 end
 
 # Get the filename part of a path.
 #
 # Examples:
 #   var name = path.basename("/usr/local/bin/tea")  # => "tea"
+#   var name = path.basename("/usr/local/")  # => "local"
+#   var name = path.basename("file.txt")  # => "file.txt"
+#   var name = path.basename("/")  # => ""
+#
+# Pure Tea implementation - returns everything after the last separator.
 pub def basename(file_path: String) -> String
-  intrinsics.path_basename(file_path)
+  if length(file_path) == 0
+    return ""
+  end
+
+  var sep = intrinsics.path_separator()
+  var trimmed = trim_trailing_separators(file_path)
+
+  # Handle root path
+  if length(trimmed) == 0
+    return ""
+  end
+
+  var last_sep = intrinsics.string_index_of(trimmed, sep)
+  var pos = last_sep
+  var i = last_sep + 1
+
+  # Find the last occurrence of separator
+  while i < length(trimmed)
+    var next_pos = intrinsics.string_index_of(trimmed[i...length(trimmed)], sep)
+
+    if next_pos >= 0
+      pos = i + next_pos
+      i = pos + 1
+    else
+      i = length(trimmed)
+    end
+  end
+
+  # No separator found - the whole path is the basename
+  if pos < 0
+    return trimmed
+  end
+
+  # Everything after the last separator
+  trimmed[pos + 1...length(trimmed)]
 end
 
 # Get the extension of a path.
 #
 # Examples:
 #   var ext = path.extension("file.tea")  # => "tea"
-pub def extension(file_path: String) -> String
-  intrinsics.path_extension(file_path)
-end
-
-# Set the extension of a path.
+#   var ext = path.extension("file.tar.gz")  # => "gz"
+#   var ext = path.extension(".env")  # => ""
+#   var ext = path.extension("file")  # => ""
 #
-# Examples:
-#   var new_path = path.set_extension("file.txt", "md")  # => "file.md"
-pub def set_extension(file_path: String, ext: String) -> String
-  intrinsics.path_set_extension(file_path, ext)
+# Pure Tea implementation - returns everything after the last dot in the basename.
+# Hidden files (starting with .) have no extension.
+pub def extension(file_path: String) -> String
+  var base = basename(file_path)
+
+  if length(base) == 0
+    return ""
+  end
+
+  # Hidden files starting with . have no extension
+  if base[0] == "."
+    return ""
+  end
+
+  var last_dot = intrinsics.string_index_of(base, ".")
+  var pos = last_dot
+  var i = last_dot + 1
+
+  # Find the last occurrence of dot
+  while i < length(base)
+    var next_pos = intrinsics.string_index_of(base[i...length(base)], ".")
+
+    if next_pos >= 0
+      pos = i + next_pos
+      i = pos + 1
+    else
+      i = length(base)
+    end
+  end
+
+  # No dot found
+  if pos < 0
+    return ""
+  end
+
+  # Return everything after the last dot
+  base[pos + 1...length(base)]
 end
 
 # Remove the extension from a path.
 #
 # Examples:
 #   var no_ext = path.strip_extension("file.tea")  # => "file"
+#   var no_ext = path.strip_extension("/path/to/file.tar.gz")  # => "/path/to/file.tar"
+#   var no_ext = path.strip_extension(".env")  # => ".env"
+#
+# Pure Tea implementation - removes everything after the last dot in basename.
 pub def strip_extension(file_path: String) -> String
-  intrinsics.path_strip_extension(file_path)
+  var ext = extension(file_path)
+
+  # No extension to strip
+  if length(ext) == 0
+    return file_path
+  end
+
+  # Remove the extension and the dot
+  var ext_len = length(ext) + 1
+  file_path[0..length(file_path) - ext_len]
+end
+
+# Set the extension of a path.
+#
+# Examples:
+#   var new_path = path.set_extension("file.txt", "md")  # => "file.md"
+#   var new_path = path.set_extension("file", "txt")  # => "file.txt"
+#   var new_path = path.set_extension("/path/to/file.old", "new")  # => "/path/to/file.new"
+#
+# Pure Tea implementation - strips existing extension and appends new one.
+pub def set_extension(file_path: String, ext: String) -> String
+  var without_ext = strip_extension(file_path)
+
+  if length(ext) == 0
+    return without_ext
+  end
+
+  without_ext + "." + ext
 end
 
 # Normalize a path (remove . and .. components).
 #
 # Examples:
 #   var norm = path.normalize("./foo/../bar")  # => "bar"
+#   var norm = path.normalize("/usr/./local/../bin")  # => "/usr/bin"
+#   var norm = path.normalize("a/b/c/../../d")  # => "a/d"
+#
+# Pure Tea implementation - splits path, processes . and .., then rejoins.
 pub def normalize(file_path: String) -> String
-  intrinsics.path_normalize(file_path)
+  if length(file_path) == 0
+    return "."
+  end
+
+  var sep = intrinsics.path_separator()
+  var is_abs = intrinsics.path_is_absolute(file_path)
+  var parts = components(file_path)
+  var stack = []
+  var i = 0
+
+  while i < length(parts)
+    var part = parts[i]
+
+    if part == ".."
+      # Go up one directory if possible
+      if length(stack) > 0
+        var last = stack[length(stack) - 1]
+        # Don't pop if the last element is also ..
+        if last != ".."
+          stack = stack[0..length(stack) - 1]
+        else
+          stack = stack +[".."]
+        end
+      else
+
+        # No parent to go up to
+        if ! is_abs
+          stack = stack +[".."]
+        end
+      end
+    else
+
+      if part != "."
+        stack = stack +[part]
+      end
+    end
+
+    i = i + 1
+  end
+
+  # Build result
+  var result = join(stack)
+
+  if is_abs
+    result = sep + result
+  end
+
+  if length(result) == 0
+    return "."
+  end
+
+  result
 end
 
 # Convert a path to absolute form.
@@ -100,6 +366,10 @@ end
 #   if path.is_absolute("/usr/local")
 #     print("Absolute path")
 #   end
+#
+# NOTE: Uses intrinsic because Tea lacks string comparison operators (>, <, >=, <=)
+# needed to check if a character is in a range (e.g., 'A' to 'Z').
+# A pure Tea implementation would need character comparison or a contains() function.
 pub def is_absolute(file_path: String) -> Bool
   intrinsics.path_is_absolute(file_path)
 end
@@ -111,3 +381,4 @@ end
 pub def separator() -> String
   intrinsics.path_separator()
 end
+

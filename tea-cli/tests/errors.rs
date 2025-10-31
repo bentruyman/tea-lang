@@ -21,9 +21,7 @@ fn run_script_handles_errors_as_values() -> anyhow::Result<()> {
     let script_path = tmp.path().join("errors.tea");
     fs::write(
         &script_path,
-        r#"use io = "std.io"
-
-error DataError {
+        r#"error DataError {
   Missing(path: String)
   Permission
 }
@@ -50,16 +48,13 @@ def describe(path: String) -> String
 end
 
 var from_cases = describe("missing")
-io.write(from_cases)
-io.write("\n")
+print(from_cases)
 
 var passthrough = read("notes.txt") catch "fallback"
-io.write(passthrough)
-io.write("\n")
+print(passthrough)
 
 var fallback = try read("secret") catch "handled"
-io.write(fallback)
-io.flush()
+print(fallback)
 "#,
     )?;
 
@@ -72,7 +67,7 @@ io.flush()
     assert!(output.status.success(), "script should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(
-        stdout, "missing:missing\ncontent\nhandled",
+        stdout, "missing:missing\ncontent\nhandled\n",
         "expected script output: {stdout}"
     );
     Ok(())

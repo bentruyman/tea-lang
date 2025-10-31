@@ -1,0 +1,555 @@
+# String manipulation utilities for common text operations.
+#
+# This module provides pure Tea implementations of string utilities built on top of
+# intrinsic string operations (split, indexOf, contains, replace) and language features
+# (string indexing, slicing, concatenation).
+
+use intrinsics = "std.intrinsics"
+
+# Check if a string starts with a given prefix.
+#
+# Examples:
+#   string.starts_with("hello world", "hello")  # => true
+#   string.starts_with("hello world", "world")  # => false
+pub def starts_with(text: String, prefix: String) -> Bool
+  var prefix_len = length(prefix)
+
+  if prefix_len == 0
+    return true
+  end
+
+  if prefix_len > length(text)
+    return false
+  end
+
+  var extracted = text[0..prefix_len]
+  extracted == prefix
+end
+
+# Check if a string ends with a given suffix.
+#
+# Examples:
+#   string.ends_with("hello world", "world")  # => true
+#   string.ends_with("hello world", "hello")  # => false
+pub def ends_with(text: String, suffix: String) -> Bool
+  var suffix_len = length(suffix)
+
+  if suffix_len == 0
+    return true
+  end
+
+  var text_len = length(text)
+
+  if suffix_len > text_len
+    return false
+  end
+
+  var start = text_len - suffix_len
+  var extracted = text[start...text_len]
+  extracted == suffix
+end
+
+# Trim whitespace from the start of a string.
+#
+# Examples:
+#   string.trim_start("  hello  ")  # => "hello  "
+#   string.trim_start("\t\nhello")  # => "hello"
+pub def trim_start(text: String) -> String
+  var len = length(text)
+  var start = 0
+
+  while start < len
+    var char = text[start]
+
+    if char == " " || char == "\t" || char == "\n" || char == "\r"
+      start = start + 1
+    else
+      return text[start...len]
+    end
+  end
+
+  # All whitespace
+  ""
+end
+
+# Trim whitespace from the end of a string.
+#
+# Examples:
+#   string.trim_end("  hello  ")  # => "  hello"
+#   string.trim_end("hello\n\t")  # => "hello"
+pub def trim_end(text: String) -> String
+  var len = length(text)
+  var end_pos = len
+
+  while end_pos > 0
+    var char = text[end_pos - 1]
+
+    if char == " " || char == "\t" || char == "\n" || char == "\r"
+      end_pos = end_pos - 1
+    else
+      return text[0..end_pos]
+    end
+  end
+
+  # All whitespace
+  ""
+end
+
+# Trim whitespace from both ends of a string.
+#
+# Examples:
+#   string.trim("  hello  ")  # => "hello"
+#   string.trim("\t\nhello\n\t")  # => "hello"
+pub def trim(text: String) -> String
+  trim_end(trim_start(text))
+end
+
+# Reverse a string.
+#
+# Examples:
+#   string.reverse("hello")  # => "olleh"
+#   string.reverse("ab")  # => "ba"
+pub def reverse(text: String) -> String
+  var len = length(text)
+  var result = ""
+  var i = len - 1
+
+  while i >= 0
+    result = result + text[i]
+    i = i - 1
+  end
+
+  result
+end
+
+# Get a substring from start index (inclusive) to end index (exclusive).
+#
+# Examples:
+#   string.substring("hello", 1, 4)  # => "ell"
+#   string.substring("hello", 0, 5)  # => "hello"
+pub def substring(text: String, start: Int, end_pos: Int) -> String
+  text[start..end_pos]
+end
+
+# Get the character at a specific index.
+#
+# Examples:
+#   string.char_at("hello", 0)  # => "h"
+#   string.char_at("hello", 4)  # => "o"
+pub def char_at(text: String, index: Int) -> String
+  text[index]
+end
+
+# Parse an ASCII integer from a string.
+#
+# Returns the parsed integer, or 0 if the string is not a valid integer.
+# Handles optional leading + or - sign.
+# Only works with ASCII digits (0-9).
+#
+# Examples:
+#   string.parse_int("123")  # => 123
+#   string.parse_int("-456")  # => -456
+#   string.parse_int("+789")  # => 789
+#   string.parse_int("abc")  # => 0
+pub def parse_int(text: String) -> Int
+  var len = length(text)
+
+  if len == 0
+    return 0
+  end
+
+  var start = 0
+  var is_negative = false
+  var first_char = text[0]
+
+  # Check for sign
+  if first_char == "-"
+    is_negative = true
+    start = 1
+  else
+    if first_char == "+"
+      start = 1
+    end
+  end
+
+  # Parse digits
+  var result = 0
+  var i = start
+
+  while i < len
+    var char = text[i]
+
+    # Check if character is a digit (0-9)
+    if char == "0" || char == "1" || char == "2" || char == "3" || char == "4" || char == "5" || char == "6" || char == "7" || char == "8" || char == "9"
+      # Convert char to digit value
+      var digit = 0
+
+      if char == "1"
+        digit = 1
+      else
+        if char == "2"
+          digit = 2
+        else
+          if char == "3"
+            digit = 3
+          else
+            if char == "4"
+              digit = 4
+            else
+              if char == "5"
+                digit = 5
+              else
+                if char == "6"
+                  digit = 6
+                else
+                  if char == "7"
+                    digit = 7
+                  else
+                    if char == "8"
+                      digit = 8
+                    else
+                      if char == "9"
+                        digit = 9
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+
+      result = result * 10 + digit
+    else
+      # Invalid character, return 0
+      return 0
+    end
+
+    i = i + 1
+  end
+
+  if is_negative
+    return - result
+  end
+
+  result
+end
+
+# Truncate a string to a maximum length, optionally adding a suffix.
+#
+# Examples:
+#   string.truncate("hello world", 5, "...")  # => "hello..."
+#   string.truncate("hello", 10, "...")  # => "hello"
+#   string.truncate("hello world", 8, "")  # => "hello wo"
+pub def truncate(text: String, max_len: Int, suffix: String) -> String
+  var text_len = length(text)
+
+  if text_len <= max_len
+    return text
+  end
+
+  var suffix_len = length(suffix)
+  var truncate_at = max_len - suffix_len
+
+  if truncate_at <= 0
+    return suffix
+  end
+
+  text[0..truncate_at] + suffix
+end
+
+# Add indentation to each line of a string.
+#
+# Examples:
+#   string.indent("hello\nworld", 2)  # => "  hello\n  world"
+#   string.indent("test", 4)  # => "    test"
+pub def indent(text: String, spaces: Int) -> String
+  var lines_list = intrinsics.string_split(text, "\n")
+  var indent_str = ""
+  var j = 0
+
+  while j < spaces
+    indent_str = indent_str + " "
+    j = j + 1
+  end
+
+  var result = ""
+  var i = 0
+  var len = length(lines_list)
+
+  while i < len
+    if i > 0
+      result = result + "\n"
+    end
+
+    result = result + indent_str + lines_list[i]
+    i = i + 1
+  end
+
+  result
+end
+
+# Convert ASCII letters to lowercase (A-Z -> a-z).
+#
+# Only converts ASCII letters. Non-ASCII characters are unchanged.
+#
+# Examples:
+#   string.to_lower_ascii("HELLO")  # => "hello"
+#   string.to_lower_ascii("Hello World")  # => "hello world"
+#   string.to_lower_ascii("ABC123")  # => "abc123"
+pub def to_lower_ascii(text: String) -> String
+  var len = length(text)
+  var result = ""
+  var i = 0
+
+  while i < len
+    var char = text[i]
+
+    # Check if uppercase letter (A-Z are ASCII 65-90)
+    # We'll check character by character
+    if char == "A" || char == "B" || char == "C" || char == "D" || char == "E" || char == "F" || char == "G" || char == "H" || char == "I" || char == "J" || char == "K" || char == "L" || char == "M" || char == "N" || char == "O" || char == "P" || char == "Q" || char == "R" || char == "S" || char == "T" || char == "U" || char == "V" || char == "W" || char == "X" || char == "Y" || char == "Z"
+      # Convert to lowercase
+      if char == "A"
+        result = result + "a"
+      else
+        if char == "B"
+          result = result + "b"
+        else
+          if char == "C"
+            result = result + "c"
+          else
+            if char == "D"
+              result = result + "d"
+            else
+              if char == "E"
+                result = result + "e"
+              else
+                if char == "F"
+                  result = result + "f"
+                else
+                  if char == "G"
+                    result = result + "g"
+                  else
+                    if char == "H"
+                      result = result + "h"
+                    else
+                      if char == "I"
+                        result = result + "i"
+                      else
+                        if char == "J"
+                          result = result + "j"
+                        else
+                          if char == "K"
+                            result = result + "k"
+                          else
+                            if char == "L"
+                              result = result + "l"
+                            else
+                              if char == "M"
+                                result = result + "m"
+                              else
+                                if char == "N"
+                                  result = result + "n"
+                                else
+                                  if char == "O"
+                                    result = result + "o"
+                                  else
+                                    if char == "P"
+                                      result = result + "p"
+                                    else
+                                      if char == "Q"
+                                        result = result + "q"
+                                      else
+                                        if char == "R"
+                                          result = result + "r"
+                                        else
+                                          if char == "S"
+                                            result = result + "s"
+                                          else
+                                            if char == "T"
+                                              result = result + "t"
+                                            else
+                                              if char == "U"
+                                                result = result + "u"
+                                              else
+                                                if char == "V"
+                                                  result = result + "v"
+                                                else
+                                                  if char == "W"
+                                                    result = result + "w"
+                                                  else
+                                                    if char == "X"
+                                                      result = result + "x"
+                                                    else
+                                                      if char == "Y"
+                                                        result = result + "y"
+                                                      else
+                                                        result = result + "z"
+                                                      end
+                                                    end
+                                                  end
+                                                end
+                                              end
+                                            end
+                                          end
+                                        end
+                                      end
+                                    end
+                                  end
+                                end
+                              end
+                            end
+                          end
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    else
+
+      result = result + char
+    end
+
+    i = i + 1
+  end
+
+  result
+end
+
+# Convert ASCII letters to uppercase (a-z -> A-Z).
+#
+# Only converts ASCII letters. Non-ASCII characters are unchanged.
+#
+# Examples:
+#   string.to_upper_ascii("hello")  # => "HELLO"
+#   string.to_upper_ascii("Hello World")  # => "HELLO WORLD"
+#   string.to_upper_ascii("abc123")  # => "ABC123"
+pub def to_upper_ascii(text: String) -> String
+  var len = length(text)
+  var result = ""
+  var i = 0
+
+  while i < len
+    var char = text[i]
+
+    # Check if lowercase letter (a-z)
+    if char == "a" || char == "b" || char == "c" || char == "d" || char == "e" || char == "f" || char == "g" || char == "h" || char == "i" || char == "j" || char == "k" || char == "l" || char == "m" || char == "n" || char == "o" || char == "p" || char == "q" || char == "r" || char == "s" || char == "t" || char == "u" || char == "v" || char == "w" || char == "x" || char == "y" || char == "z"
+      # Convert to uppercase
+      if char == "a"
+        result = result + "A"
+      else
+        if char == "b"
+          result = result + "B"
+        else
+          if char == "c"
+            result = result + "C"
+          else
+            if char == "d"
+              result = result + "D"
+            else
+              if char == "e"
+                result = result + "E"
+              else
+                if char == "f"
+                  result = result + "F"
+                else
+                  if char == "g"
+                    result = result + "G"
+                  else
+                    if char == "h"
+                      result = result + "H"
+                    else
+                      if char == "i"
+                        result = result + "I"
+                      else
+                        if char == "j"
+                          result = result + "J"
+                        else
+                          if char == "k"
+                            result = result + "K"
+                          else
+                            if char == "l"
+                              result = result + "L"
+                            else
+                              if char == "m"
+                                result = result + "M"
+                              else
+                                if char == "n"
+                                  result = result + "N"
+                                else
+                                  if char == "o"
+                                    result = result + "O"
+                                  else
+                                    if char == "p"
+                                      result = result + "P"
+                                    else
+                                      if char == "q"
+                                        result = result + "Q"
+                                      else
+                                        if char == "r"
+                                          result = result + "R"
+                                        else
+                                          if char == "s"
+                                            result = result + "S"
+                                          else
+                                            if char == "t"
+                                              result = result + "T"
+                                            else
+                                              if char == "u"
+                                                result = result + "U"
+                                              else
+                                                if char == "v"
+                                                  result = result + "V"
+                                                else
+                                                  if char == "w"
+                                                    result = result + "W"
+                                                  else
+                                                    if char == "x"
+                                                      result = result + "X"
+                                                    else
+                                                      if char == "y"
+                                                        result = result + "Y"
+                                                      else
+                                                        result = result + "Z"
+                                                      end
+                                                    end
+                                                  end
+                                                end
+                                              end
+                                            end
+                                          end
+                                        end
+                                      end
+                                    end
+                                  end
+                                end
+                              end
+                            end
+                          end
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    else
+
+      result = result + char
+    end
+
+    i = i + 1
+  end
+
+  result
+end
+

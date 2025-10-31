@@ -2008,6 +2008,89 @@ pub extern "C" fn tea_list_concat(left: *const TeaList, right: *const TeaList) -
 }
 
 #[no_mangle]
+pub extern "C" fn tea_string_slice(
+    string: *const TeaString,
+    start: c_longlong,
+    end: c_longlong,
+    inclusive: c_int,
+) -> *mut TeaString {
+    if string.is_null() {
+        panic!("null string in slice");
+    }
+    if start < 0 || end < 0 {
+        panic!("slice indices cannot be negative");
+    }
+    unsafe {
+        let string_ref = &*string;
+        let bytes =
+            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let text = std::str::from_utf8(bytes).unwrap_or_else(|_| panic!("invalid UTF-8 in string"));
+        let chars: Vec<char> = text.chars().collect();
+
+        let start_idx = start as usize;
+        let mut end_idx = end as usize;
+
+        if inclusive != 0 {
+            end_idx = end_idx.saturating_add(1);
+        }
+
+        if start_idx > chars.len() {
+            panic!("slice start index out of bounds");
+        }
+        let end_idx = end_idx.min(chars.len());
+        if start_idx > end_idx {
+            panic!("slice start must be <= end");
+        }
+
+        let slice: String = chars[start_idx..end_idx].iter().collect();
+        alloc_tea_string(&slice)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_list_slice(
+    list: *const TeaList,
+    start: c_longlong,
+    end: c_longlong,
+    inclusive: c_int,
+) -> *mut TeaList {
+    if list.is_null() {
+        panic!("null list in slice");
+    }
+    if start < 0 || end < 0 {
+        panic!("slice indices cannot be negative");
+    }
+    unsafe {
+        let list_ref = &*list;
+        let start_idx = start as usize;
+        let mut end_idx = end as usize;
+
+        if inclusive != 0 {
+            end_idx = end_idx.saturating_add(1);
+        }
+
+        if start_idx > list_ref.len as usize {
+            panic!("slice start index out of bounds");
+        }
+        let end_idx = end_idx.min(list_ref.len as usize);
+        if start_idx > end_idx {
+            panic!("slice start must be <= end");
+        }
+
+        let slice_len = (end_idx - start_idx) as c_longlong;
+        let result = tea_alloc_list(slice_len);
+        let result_ref = &mut *result;
+
+        for i in 0..slice_len {
+            *result_ref.items.add(i as usize) =
+                *list_ref.items.add((start_idx + i as usize) as usize);
+        }
+
+        result
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_dict_new() -> *mut TeaDict {
     Box::into_raw(Box::new(TeaDict {
         entries: HashMap::new(),

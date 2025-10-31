@@ -810,6 +810,8 @@ struct LlvmCodeGenerator<'ctx> {
     list_get_fn: Option<FunctionValue<'ctx>>,
     string_index_fn: Option<FunctionValue<'ctx>>,
     list_concat_fn: Option<FunctionValue<'ctx>>,
+    string_slice_fn: Option<FunctionValue<'ctx>>,
+    list_slice_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
     struct_get_fn: Option<FunctionValue<'ctx>>,
     error_alloc_fn: Option<FunctionValue<'ctx>>,
@@ -1047,6 +1049,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_get_fn: None,
             string_index_fn: None,
             list_concat_fn: None,
+            string_slice_fn: None,
+            list_slice_fn: None,
             struct_set_fn: None,
             struct_get_fn: None,
             error_alloc_fn: None,
@@ -3418,55 +3422,117 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
         let object = self.compile_expression(&index.object, function, locals)?;
-        let key_expr = self.compile_expression(&index.index, function, locals)?;
-        match object {
-            ExprValue::List {
-                pointer,
-                element_type,
-            } => {
-                let index_value = key_expr.into_int()?;
-                let list_get = self.ensure_list_get();
-                let tea_value = self
-                    .call_function(list_get, &[pointer.into(), index_value.into()], "list_get")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?
-                    .into_struct_value();
-                self.tea_value_to_expr(tea_value, *element_type)
+
+        // Check if this is a slice operation (range index)
+        if let ExpressionKind::Range(range) = &index.index.kind {
+            let start_expr = self.compile_expression(&range.start, function, locals)?;
+            let end_expr = self.compile_expression(&range.end, function, locals)?;
+            let start_value = start_expr.into_int()?;
+            let end_value = end_expr.into_int()?;
+            let inclusive_value = self
+                .context
+                .bool_type()
+                .const_int(if range.inclusive { 1 } else { 0 }, false);
+
+            match object {
+                ExprValue::String(string_ptr) => {
+                    let slice_fn = self.ensure_string_slice();
+                    let result_ptr = self
+                        .call_function(
+                            slice_fn,
+                            &[
+                                string_ptr.into(),
+                                start_value.into(),
+                                end_value.into(),
+                                inclusive_value.into(),
+                            ],
+                            "string_slice",
+                        )?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("expected String from string_slice"))?
+                        .into_pointer_value();
+                    Ok(ExprValue::String(result_ptr))
+                }
+                ExprValue::List {
+                    pointer,
+                    element_type,
+                } => {
+                    let slice_fn = self.ensure_list_slice();
+                    let result_ptr = self
+                        .call_function(
+                            slice_fn,
+                            &[
+                                pointer.into(),
+                                start_value.into(),
+                                end_value.into(),
+                                inclusive_value.into(),
+                            ],
+                            "list_slice",
+                        )?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("expected List from list_slice"))?
+                        .into_pointer_value();
+                    Ok(ExprValue::List {
+                        pointer: result_ptr,
+                        element_type,
+                    })
+                }
+                _ => bail!("slicing expects a list or string value"),
             }
-            ExprValue::Dict {
-                pointer,
-                value_type,
-            } => {
-                let key_ptr = match key_expr {
-                    ExprValue::String(ptr) => ptr,
-                    _ => bail!("dictionary index expects a String key"),
-                };
-                let dict_get = self.ensure_dict_get();
-                let tea_value = self
-                    .call_function(dict_get, &[pointer.into(), key_ptr.into()], "dict_get")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
-                    .into_struct_value();
-                self.tea_value_to_expr(tea_value, *value_type)
+        } else {
+            // Regular indexing
+            let key_expr = self.compile_expression(&index.index, function, locals)?;
+            match object {
+                ExprValue::List {
+                    pointer,
+                    element_type,
+                } => {
+                    let index_value = key_expr.into_int()?;
+                    let list_get = self.ensure_list_get();
+                    let tea_value = self
+                        .call_function(list_get, &[pointer.into(), index_value.into()], "list_get")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("expected TeaValue"))?
+                        .into_struct_value();
+                    self.tea_value_to_expr(tea_value, *element_type)
+                }
+                ExprValue::Dict {
+                    pointer,
+                    value_type,
+                } => {
+                    let key_ptr = match key_expr {
+                        ExprValue::String(ptr) => ptr,
+                        _ => bail!("dictionary index expects a String key"),
+                    };
+                    let dict_get = self.ensure_dict_get();
+                    let tea_value = self
+                        .call_function(dict_get, &[pointer.into(), key_ptr.into()], "dict_get")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
+                        .into_struct_value();
+                    self.tea_value_to_expr(tea_value, *value_type)
+                }
+                ExprValue::String(string_ptr) => {
+                    let index_value = key_expr.into_int()?;
+                    let string_index_fn = self.ensure_string_index();
+                    let result_ptr = self
+                        .call_function(
+                            string_index_fn,
+                            &[string_ptr.into(), index_value.into()],
+                            "string_index",
+                        )?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("expected String from string_index"))?
+                        .into_pointer_value();
+                    Ok(ExprValue::String(result_ptr))
+                }
+                _ => bail!("indexing expects a list, dict, or string value"),
             }
-            ExprValue::String(string_ptr) => {
-                let index_value = key_expr.into_int()?;
-                let string_index_fn = self.ensure_string_index();
-                let result_ptr = self
-                    .call_function(
-                        string_index_fn,
-                        &[string_ptr.into(), index_value.into()],
-                        "string_index",
-                    )?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected String from string_index"))?
-                    .into_pointer_value();
-                Ok(ExprValue::String(result_ptr))
-            }
-            _ => bail!("indexing expects a list, dict, or string value"),
         }
     }
 
@@ -4949,24 +5015,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::AssertEmpty => {
                 bail!("assert_empty is not supported by the LLVM backend yet")
             }
-            StdFunctionKind::UtilLen => {
-                self.compile_util_len_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::UtilToString => {
                 self.compile_util_to_string_call(&call.arguments, function, locals)
             }
             StdFunctionKind::UtilClampInt => {
                 self.compile_util_clamp_int_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::UtilIsNil
-            | StdFunctionKind::UtilIsBool
-            | StdFunctionKind::UtilIsInt
-            | StdFunctionKind::UtilIsFloat
-            | StdFunctionKind::UtilIsString
-            | StdFunctionKind::UtilIsList
-            | StdFunctionKind::UtilIsStruct
-            | StdFunctionKind::UtilIsError => {
-                self.compile_util_predicate_call(&call.arguments, function, locals, kind)
+            StdFunctionKind::StringIndexOf => {
+                self.compile_string_index_of_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::StringSplit => {
+                self.compile_string_split_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::StringContains => {
+                self.compile_string_contains_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::StringReplace => {
+                self.compile_string_replace_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
             StdFunctionKind::EnvGetOr => {
@@ -5030,32 +5095,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_path_is_absolute_call(&call.arguments, function, locals)
             }
             StdFunctionKind::PathSeparator => self.compile_path_separator_call(&call.arguments),
-            StdFunctionKind::IoReadLine => {
-                self.compile_io_read_line_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::IoReadAll => self.compile_io_read_all_call(&call.arguments, locals),
-            StdFunctionKind::IoReadBytes => {
-                self.compile_io_read_bytes_call(&call.arguments, locals)
-            }
-            StdFunctionKind::IoWrite => {
-                self.compile_io_write_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::IoWriteErr => {
-                self.compile_io_write_err_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::IoFlush => self.compile_io_flush_call(&call.arguments),
-            StdFunctionKind::JsonEncode => {
-                self.compile_json_encode_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::JsonDecode => {
-                self.compile_json_decode_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::YamlEncode => {
-                self.compile_yaml_encode_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::YamlDecode => {
-                self.compile_yaml_decode_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
             }
@@ -5064,15 +5103,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             StdFunctionKind::FsWriteTextAtomic => {
                 self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsReadBytes => {
-                self.compile_fs_read_bytes_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsWriteBytes => {
-                self.compile_fs_write_bytes_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsWriteBytesAtomic => {
-                self.compile_fs_write_bytes_atomic_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
@@ -5113,23 +5143,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsMetadata => {
                 self.compile_fs_metadata_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::FsOpenRead => {
-                self.compile_fs_open_read_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsReadChunk => {
-                self.compile_fs_read_chunk_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsClose => {
-                self.compile_fs_close_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::ProcessRun => {
                 self.compile_process_run_call(&call.arguments, function, locals)
             }
             StdFunctionKind::ProcessSpawn => {
                 self.compile_process_spawn_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessWait => {
-                self.compile_process_wait_call(&call.arguments, function, locals)
             }
             StdFunctionKind::ProcessKill => {
                 self.compile_process_kill_call(&call.arguments, function, locals)
@@ -5169,59 +5187,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
         match intrinsic {
-            // Type predicates
-            Intrinsic::IsNil => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsNil,
-            ),
-            Intrinsic::IsBool => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsBool,
-            ),
-            Intrinsic::IsInt => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsInt,
-            ),
-            Intrinsic::IsFloat => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsFloat,
-            ),
-            Intrinsic::IsString => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsString,
-            ),
-            Intrinsic::IsList => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsList,
-            ),
-            Intrinsic::IsStruct => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsStruct,
-            ),
-            Intrinsic::IsError => self.compile_util_predicate_call(
-                &call.arguments,
-                function,
-                locals,
-                StdFunctionKind::UtilIsError,
-            ),
+            // Type predicates (removed - now handled by type system)
 
             // Conversion
             Intrinsic::ToString => {
                 self.compile_util_to_string_call(&call.arguments, function, locals)
+            }
+
+            // String utilities
+            Intrinsic::StringIndexOf => {
+                self.compile_string_index_of_call(&call.arguments, function, locals)
+            }
+            Intrinsic::StringSplit => {
+                self.compile_string_split_call(&call.arguments, function, locals)
+            }
+            Intrinsic::StringContains => {
+                self.compile_string_contains_call(&call.arguments, function, locals)
+            }
+            Intrinsic::StringReplace => {
+                self.compile_string_replace_call(&call.arguments, function, locals)
             }
 
             // Assertions
@@ -5260,11 +5244,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::FsWriteTextAtomic => {
                 self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
             }
-            Intrinsic::FsReadBytes => bail!("__intrinsic_fs_read_bytes is not implemented yet"),
-            Intrinsic::FsWriteBytes => bail!("__intrinsic_fs_write_bytes is not implemented yet"),
-            Intrinsic::FsWriteBytesAtomic => {
-                bail!("__intrinsic_fs_write_bytes_atomic is not implemented yet")
-            }
             Intrinsic::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
@@ -5292,9 +5271,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::FsMetadata => {
                 self.compile_fs_metadata_call(&call.arguments, function, locals)
             }
-            Intrinsic::FsOpenRead => bail!("__intrinsic_fs_open_read is not implemented yet"),
-            Intrinsic::FsReadChunk => bail!("__intrinsic_fs_read_chunk is not implemented yet"),
-            Intrinsic::FsClose => bail!("__intrinsic_fs_close is not implemented yet"),
 
             // Path
             Intrinsic::PathJoin => self.compile_path_join_call(&call.arguments, function, locals),
@@ -5330,24 +5306,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             Intrinsic::PathSeparator => self.compile_path_separator_call(&call.arguments),
 
-            // I/O
-            Intrinsic::IoReadLine => {
-                self.compile_io_read_line_call(&call.arguments, function, locals)
-            }
-            Intrinsic::IoReadAll => self.compile_io_read_all_call(&call.arguments, locals),
-            Intrinsic::IoReadBytes => bail!("__intrinsic_io_read_bytes is not implemented yet"),
-            Intrinsic::IoWrite => self.compile_io_write_call(&call.arguments, function, locals),
-            Intrinsic::IoWriteErr => {
-                self.compile_io_write_err_call(&call.arguments, function, locals)
-            }
-            Intrinsic::IoFlush => self.compile_io_flush_call(&call.arguments),
-
             // Process
             Intrinsic::ProcessRun => {
                 self.compile_process_run_call(&call.arguments, function, locals)
             }
             Intrinsic::ProcessSpawn => bail!("__intrinsic_process_spawn is not implemented yet"),
-            Intrinsic::ProcessWait => bail!("__intrinsic_process_wait is not implemented yet"),
             Intrinsic::ProcessKill => bail!("__intrinsic_process_kill is not implemented yet"),
             Intrinsic::ProcessReadStdout => {
                 bail!("__intrinsic_process_read_stdout is not implemented yet")
@@ -5363,19 +5326,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             Intrinsic::ProcessClose => bail!("__intrinsic_process_close is not implemented yet"),
 
-            // Codecs
-            Intrinsic::JsonEncode => {
-                self.compile_json_encode_call(&call.arguments, function, locals)
-            }
-            Intrinsic::JsonDecode => {
-                self.compile_json_decode_call(&call.arguments, function, locals)
-            }
-            Intrinsic::YamlEncode => {
-                self.compile_yaml_encode_call(&call.arguments, function, locals)
-            }
-            Intrinsic::YamlDecode => {
-                self.compile_yaml_decode_call(&call.arguments, function, locals)
-            }
+            // Codecs (removed - now handled by runtime)
 
             // CLI
             Intrinsic::CliArgs => self.compile_cli_args_call(&call.arguments, function, locals),
@@ -5629,19 +5580,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
         let tea_value = self.expr_to_tea_value(value_expr)?;
         let (func, label) = match kind {
-            StdFunctionKind::UtilIsNil => (self.ensure_util_is_nil_fn(), "tea_util_is_nil"),
-            StdFunctionKind::UtilIsBool => (self.ensure_util_is_bool_fn(), "tea_util_is_bool"),
-            StdFunctionKind::UtilIsInt => (self.ensure_util_is_int_fn(), "tea_util_is_int"),
-            StdFunctionKind::UtilIsFloat => (self.ensure_util_is_float_fn(), "tea_util_is_float"),
-            StdFunctionKind::UtilIsString => {
-                (self.ensure_util_is_string_fn(), "tea_util_is_string")
-            }
-            StdFunctionKind::UtilIsList => (self.ensure_util_is_list_fn(), "tea_util_is_list"),
-            StdFunctionKind::UtilIsStruct => {
-                (self.ensure_util_is_struct_fn(), "tea_util_is_struct")
-            }
-            StdFunctionKind::UtilIsError => (self.ensure_util_is_error_fn(), "tea_util_is_error"),
-            _ => bail!("unsupported util predicate"),
+            _ => bail!("unsupported util predicate - type predicates have been removed"),
         };
         let raw = self
             .call_function(func, &[tea_value.into()], label)?
@@ -5651,6 +5590,42 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .into_int_value();
         let bool_val = self.i32_to_bool(raw, &(label.to_string() + "_bool"))?;
         Ok(ExprValue::Bool(bool_val))
+    }
+
+    fn compile_string_index_of_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_index_of is not supported by the LLVM backend yet")
+    }
+
+    fn compile_string_split_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_split is not supported by the LLVM backend yet")
+    }
+
+    fn compile_string_contains_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_contains is not supported by the LLVM backend yet")
+    }
+
+    fn compile_string_replace_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_replace is not supported by the LLVM backend yet")
     }
 
     fn compile_env_get_call(
@@ -6300,108 +6275,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
-    fn compile_io_read_line_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("read_line expects no arguments");
-        }
-
-        let value_func = self.ensure_io_read_line();
-        let tea_value = self
-            .call_function(value_func, &[], "tea_io_read_line")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_io_read_line returned no value"))?
-            .into_struct_value();
-
-        let is_nil_fn = self.ensure_util_is_nil_fn();
-        let raw_nil = self
-            .call_function(
-                is_nil_fn,
-                &[tea_value.as_basic_value_enum().into()],
-                "tea_io_read_line_is_nil",
-            )?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_io_read_line_is_nil returned no value"))?
-            .into_int_value();
-        let is_nil = self.i32_to_bool(raw_nil, "io_read_line_is_nil")?;
-
-        let nil_block = self
-            .context
-            .append_basic_block(function, "io_read_line_nil");
-        let string_block = self
-            .context
-            .append_basic_block(function, "io_read_line_string");
-        let merge_block = self
-            .context
-            .append_basic_block(function, "io_read_line_merge");
-
-        map_builder_error(
-            self.builder
-                .build_conditional_branch(is_nil, nil_block, string_block),
-        )?;
-
-        self.builder.position_at_end(nil_block);
-        let null_ptr = self.string_ptr_type().const_null();
-        map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
-        let nil_end = self
-            .builder
-            .get_insert_block()
-            .ok_or_else(|| anyhow!("missing nil block for io_read_line"))?;
-
-        self.builder.position_at_end(string_block);
-        let as_string_fn = self.ensure_value_as_string();
-        let string_ptr = self
-            .call_function(
-                as_string_fn,
-                &[tea_value.as_basic_value_enum().into()],
-                "io_read_line_as_string",
-            )?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_value_as_string returned no value"))?
-            .into_pointer_value();
-        map_builder_error(self.builder.build_unconditional_branch(merge_block))?;
-        let string_end = self
-            .builder
-            .get_insert_block()
-            .ok_or_else(|| anyhow!("missing string block for io_read_line"))?;
-
-        self.builder.position_at_end(merge_block);
-        let phi = map_builder_error(
-            self.builder
-                .build_phi(self.string_ptr_type(), "io_read_line_phi"),
-        )?;
-        let null_basic = null_ptr.as_basic_value_enum();
-        let string_basic = string_ptr.as_basic_value_enum();
-        phi.add_incoming(&[(&null_basic, nil_end), (&string_basic, string_end)]);
-
-        Ok(ExprValue::String(phi.as_basic_value().into_pointer_value()))
-    }
-
-    fn compile_io_read_all_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("read_all expects no arguments");
-        }
-        let func = self.ensure_io_read_all();
-        let ptr = self
-            .call_function(func, &[], "tea_io_read_all")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_io_read_all returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(ptr))
-    }
-
     fn compile_io_read_bytes_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -6421,56 +6294,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             pointer: ptr,
             element_type: Box::new(ValueType::Int),
         })
-    }
-
-    fn compile_io_write_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("write expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for write");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let ptr = self.expect_string_pointer(expr, "write expects a String argument")?;
-        let func = self.ensure_io_write();
-        self.call_function(func, &[ptr.into()], "tea_io_write")?;
-        Ok(ExprValue::Void)
-    }
-
-    fn compile_io_write_err_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("write_err expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for write_err");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let ptr = self.expect_string_pointer(expr, "write_err expects a String argument")?;
-        let func = self.ensure_io_write_err();
-        self.call_function(func, &[ptr.into()], "tea_io_write_err")?;
-        Ok(ExprValue::Void)
-    }
-
-    fn compile_io_flush_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("flush expects no arguments");
-        }
-        let func = self.ensure_io_flush();
-        self.call_function(func, &[], "tea_io_flush")?;
-        Ok(ExprValue::Void)
     }
 
     fn compile_cli_args_call(
@@ -6700,42 +6523,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::Int(value))
     }
 
-    fn compile_process_wait_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("process.wait expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for process.wait");
-        }
-
-        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let handle_value =
-            self.expect_int_value(handle_expr, "process.wait expects the handle to be an Int")?;
-
-        let template_ptr = self.ensure_struct_template("ProcessResult")?;
-        let func = self.ensure_process_wait_fn();
-        let pointer = self
-            .call_function(
-                func,
-                &[template_ptr.into(), handle_value.into()],
-                "tea_process_wait",
-            )?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_process_wait returned no value"))?
-            .into_pointer_value();
-
-        Ok(ExprValue::Struct {
-            pointer,
-            struct_name: "ProcessResult".to_string(),
-        })
-    }
-
     fn compile_process_kill_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -6880,102 +6667,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::Void)
     }
 
-    fn compile_json_encode_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("json.encode expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for json.encode");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let tea_value = self.expr_to_tea_value(expr)?;
-        let func = self.ensure_json_encode();
-        let ptr = self
-            .call_function(func, &[tea_value.into()], "tea_json_encode")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_json_encode returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(ptr))
-    }
-
-    fn compile_json_decode_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("json.decode expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for json.decode");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let ptr = self.expect_string_pointer(expr, "json.decode expects a String argument")?;
-        let func = self.ensure_json_decode();
-        let value = self
-            .call_function(func, &[ptr.into()], "tea_json_decode")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_json_decode returned no value"))?
-            .into_struct_value();
-        self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::Void)))
-    }
-
-    fn compile_yaml_encode_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("yaml.encode expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for yaml.encode");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let tea_value = self.expr_to_tea_value(expr)?;
-        let func = self.ensure_yaml_encode();
-        let ptr = self
-            .call_function(func, &[tea_value.into()], "tea_yaml_encode")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_yaml_encode returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(ptr))
-    }
-
-    fn compile_yaml_decode_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("yaml.decode expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for yaml.decode");
-        }
-        let expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let ptr = self.expect_string_pointer(expr, "yaml.decode expects a String argument")?;
-        let func = self.ensure_yaml_decode();
-        let value = self
-            .call_function(func, &[ptr.into()], "tea_yaml_decode")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_yaml_decode returned no value"))?
-            .into_struct_value();
-        self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::Void)))
-    }
-
     fn compile_fs_read_text_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -7065,102 +6756,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             func,
             &[path_ptr.into(), contents_ptr.into()],
             "tea_fs_write_text_atomic",
-        )?;
-        Ok(ExprValue::Void)
-    }
-
-    fn compile_fs_read_bytes_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("read_bytes expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for read_bytes");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("read_bytes expects the path argument to be a String"),
-        };
-        let func = self.ensure_fs_read_bytes_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_fs_read_bytes")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_fs_read_bytes returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::List {
-            pointer,
-            element_type: Box::new(ValueType::Int),
-        })
-    }
-
-    fn compile_fs_write_bytes_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 2 {
-            bail!("write_bytes expects exactly 2 arguments");
-        }
-        for argument in arguments {
-            if argument.name.is_some() {
-                bail!("named arguments are not supported for write_bytes");
-            }
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("write_bytes expects the path argument to be a String"),
-        };
-        let data_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-        let list_ptr = match data_expr {
-            ExprValue::List { pointer, .. } => pointer,
-            _ => bail!("write_bytes expects the data argument to be a List"),
-        };
-        let func = self.ensure_fs_write_bytes_fn();
-        self.call_function(
-            func,
-            &[path_ptr.into(), list_ptr.into()],
-            "tea_fs_write_bytes",
-        )?;
-        Ok(ExprValue::Void)
-    }
-
-    fn compile_fs_write_bytes_atomic_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 2 {
-            bail!("write_bytes_atomic expects exactly 2 arguments");
-        }
-        for argument in arguments {
-            if argument.name.is_some() {
-                bail!("named arguments are not supported for write_bytes_atomic");
-            }
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("write_bytes_atomic expects the path argument to be a String"),
-        };
-        let list_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-        let list_ptr = match list_expr {
-            ExprValue::List { pointer, .. } => pointer,
-            _ => bail!("write_bytes_atomic expects the data argument to be a List"),
-        };
-        let func = self.ensure_fs_write_bytes_atomic_fn();
-        self.call_function(
-            func,
-            &[path_ptr.into(), list_ptr.into()],
-            "tea_fs_write_bytes_atomic",
         )?;
         Ok(ExprValue::Void)
     }
@@ -7577,87 +7172,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .ok_or_else(|| anyhow!("tea_fs_metadata returned no value"))?
             .into_struct_value();
         self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::Void)))
-    }
-
-    fn compile_fs_open_read_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("open_read expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for open_read");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("open_read expects the path argument to be a String"),
-        };
-        let func = self.ensure_fs_open_read_fn();
-        let raw = self
-            .call_function(func, &[path_ptr.into()], "tea_fs_open_read")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_fs_open_read returned no value"))?
-            .into_int_value();
-        Ok(ExprValue::Int(raw))
-    }
-
-    fn compile_fs_read_chunk_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 2 {
-            bail!("read_chunk expects exactly 2 arguments");
-        }
-        for argument in arguments {
-            if argument.name.is_some() {
-                bail!("named arguments are not supported for read_chunk");
-            }
-        }
-        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let handle_value = handle_expr.into_int()?;
-        let size_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-        let size_value = size_expr.into_int()?;
-        let func = self.ensure_fs_read_chunk_fn();
-        let pointer = self
-            .call_function(
-                func,
-                &[handle_value.into(), size_value.into()],
-                "tea_fs_read_chunk",
-            )?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_fs_read_chunk returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::List {
-            pointer,
-            element_type: Box::new(ValueType::Int),
-        })
-    }
-
-    fn compile_fs_close_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("close expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for close");
-        }
-        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let handle_value = handle_expr.into_int()?;
-        let func = self.ensure_fs_close_fn();
-        self.call_function(func, &[handle_value.into()], "tea_fs_close")?;
-        Ok(ExprValue::Void)
     }
 
     fn call_closure(
@@ -11266,6 +10780,46 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_list_concat", fn_type, Some(Linkage::External));
         self.list_concat_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_slice(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_slice_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.string_ptr_type().into(),
+                self.int_type().into(),
+                self.int_type().into(),
+                self.context.bool_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_string_slice", fn_type, Some(Linkage::External));
+        self.string_slice_fn = Some(func);
+        func
+    }
+
+    fn ensure_list_slice(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.list_slice_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[
+                self.list_ptr_type().into(),
+                self.int_type().into(),
+                self.int_type().into(),
+                self.context.bool_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_list_slice", fn_type, Some(Linkage::External));
+        self.list_slice_fn = Some(func);
         func
     }
 

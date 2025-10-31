@@ -1,0 +1,30 @@
+# Simple path module test
+use path = "std.path"
+
+# Test that path functions work
+var joined = path.join(["usr", "local", "bin"])
+print("Joined path: " + joined)
+
+var components = path.components("/usr/local/bin")
+print("Components:")
+print(components)
+
+var basename = path.basename("/usr/local/bin/tea")
+print("Basename: " + basename)
+
+var dirname = path.dirname("/usr/local/bin/tea")
+print("Dirname: " + dirname)
+
+var ext = path.extension("file.tea")
+print("Extension: " + ext)
+
+var stripped = path.strip_extension("file.tea")
+print("Stripped: " + stripped)
+
+var with_ext = path.set_extension("file.txt", "md")
+print("Set extension: " + with_ext)
+
+var normalized = path.normalize("./foo/../bar")
+print("Normalized: " + normalized)
+
+print("All path functions working!")

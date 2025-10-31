@@ -1,4 +1,3 @@
-use env = "std.env"
 use process = "std.process"
 use util = "std.util"
 
@@ -6,12 +5,5 @@ use util = "std.util"
 var result = process.run("sh", ["-c", "printf hello"])
 print("run stdout:")
 print(result.stdout)
-
-# Spawn a process and read from it incrementally.
-var handle = process.spawn("sh", ["-c", "printf world"], env.vars())
-var chunk = process.read_stdout(handle)
-var status = process.wait(handle)
-print("spawn chunk:")
-print(chunk)
-print("spawn exit:")
-print(util.to_string(status.exit))
+print("run exit code:")
+print(util.to_string(result.exit))

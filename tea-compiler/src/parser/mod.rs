@@ -2391,7 +2391,8 @@ impl<'a> Parser<'a> {
                 ))
             }
             TokenKind::DotDot | TokenKind::DotDotDot => {
-                let inclusive = matches!(operator_token.kind, TokenKind::DotDot);
+                // .. is exclusive (doesn't include end), ... is inclusive (includes end)
+                let inclusive = matches!(operator_token.kind, TokenKind::DotDotDot);
                 let right = self.parse_expression_prec(precedence, terminator)?;
                 let span =
                     Self::union_spans(&Self::union_spans(&left.span, &operator_span), &right.span);

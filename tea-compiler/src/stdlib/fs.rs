@@ -23,27 +23,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "read_bytes",
-        StdFunctionKind::FsReadBytes,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::List,
-    ),
-    std_function(
-        "write_bytes",
-        StdFunctionKind::FsWriteBytes,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::List],
-        StdType::Void,
-    ),
-    std_function(
-        "write_bytes_atomic",
-        StdFunctionKind::FsWriteBytesAtomic,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::List],
-        StdType::Void,
-    ),
-    std_function(
         "create_dir",
         StdFunctionKind::FsCreateDir,
         StdArity::Range {
@@ -150,27 +129,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::Dict,
-    ),
-    std_function(
-        "open_read",
-        StdFunctionKind::FsOpenRead,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "read_chunk",
-        StdFunctionKind::FsReadChunk,
-        StdArity::Exact(2),
-        &[StdType::Int, StdType::Int],
-        StdType::List,
-    ),
-    std_function(
-        "close",
-        StdFunctionKind::FsClose,
-        StdArity::Exact(1),
-        &[StdType::Int],
-        StdType::Void,
     ),
 ];
 

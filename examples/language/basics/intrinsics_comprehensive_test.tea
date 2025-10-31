@@ -1,36 +1,7 @@
 # Comprehensive test of std.intrinsics module
-# Tests various categories: type checks, env, fs, path, io, json/yaml
+# Tests various categories: env, fs, path
 
 use intrinsics = "std.intrinsics"
-
-pub def test_type_predicates() -> Void
-  print("=== Type Predicates ===")
-
-  var num = 42
-  var text = "hello"
-  var flag = true
-  var items = [1, 2, 3]
-
-  if intrinsics.is_int(num)
-    print("✓ is_int works")
-  end
-
-  if intrinsics.is_string(text)
-    print("✓ is_string works")
-  end
-
-  if intrinsics.is_bool(flag)
-    print("✓ is_bool works")
-  end
-
-  if intrinsics.is_list(items)
-    print("✓ is_list works")
-  end
-
-  if intrinsics.is_nil(nil)
-    print("✓ is_nil works")
-  end
-end
 
 pub def test_conversions() -> Void
   print("=== Conversions ===")
@@ -94,32 +65,10 @@ pub def test_filesystem() -> Void
   end
 end
 
-pub def test_json() -> Void
-  print("=== JSON Codec ===")
-
-  var data = { "name": "tea", "version": "1.0" }
-  var json_str = intrinsics.json_encode(data)
-  print(json_str)
-
-  intrinsics.json_decode(json_str)
-  print("✓ JSON encode/decode works")
-end
-
-pub def test_io() -> Void
-  print("=== I/O ===")
-
-  intrinsics.io_write("Hello from intrinsics!\n")
-  intrinsics.io_flush()
-  print("✓ I/O write works")
-end
-
 # Run all tests
-test_type_predicates()
 test_conversions()
 test_environment()
 test_path_operations()
 test_filesystem()
-test_json()
-test_io()
 
 print("=== All Tests Complete ===")

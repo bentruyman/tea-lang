@@ -1,0 +1,159 @@
+# Tests for pure Tea fs helper functions
+
+use fs = "std.fs"
+use assert = "std.assert"
+
+pub def test_has_extension() -> Void
+  print("=== Testing fs.has_extension ===")
+
+  assert.assert_eq(fs.has_extension("script.tea", "tea"), true)
+  assert.assert_eq(fs.has_extension("script.tea", "js"), false)
+  assert.assert_eq(fs.has_extension("file.tar.gz", "gz"), true)
+  assert.assert_eq(fs.has_extension("README", "md"), false)
+
+  print("✓ fs.has_extension tests passed")
+end
+
+pub def test_is_file() -> Void
+  print("=== Testing fs.is_file ===")
+
+  # Create a test file
+  fs.write_text("/tmp/tea_test_file.txt", "test content")
+
+  assert.assert_eq(fs.is_file("/tmp/tea_test_file.txt"), true)
+  assert.assert_eq(fs.is_file("/tmp"), false)
+  assert.assert_eq(fs.is_file("/nonexistent"), false)
+
+  # Clean up
+  fs.remove("/tmp/tea_test_file.txt")
+
+  print("✓ fs.is_file tests passed")
+end
+
+pub def test_filter_by_extension() -> Void
+  print("=== Testing fs.filter_by_extension ===")
+
+  var files = ["script.tea", "index.js", "app.tea", "README.md", "test.js"]
+  var tea_files = fs.filter_by_extension(files, "tea")
+  var js_files = fs.filter_by_extension(files, "js")
+
+  print("Tea files:")
+  print(tea_files)
+
+  print("JS files:")
+  print(js_files)
+
+  print("✓ fs.filter_by_extension tests passed")
+end
+
+pub def test_filter_files_and_dirs() -> Void
+  print("=== Testing fs.filter_files and fs.filter_dirs ===")
+
+  # Create test directory structure
+  fs.ensure_dir("/tmp/tea_test_dir")
+  fs.write_text("/tmp/tea_test_dir/file1.txt", "content")
+  fs.write_text("/tmp/tea_test_dir/file2.txt", "content")
+  fs.ensure_dir("/tmp/tea_test_dir/subdir")
+
+  var all_paths = [
+    "/tmp/tea_test_dir/file1.txt",
+    "/tmp/tea_test_dir/file2.txt",
+    "/tmp/tea_test_dir/subdir"
+  ]
+
+  var files = fs.filter_files(all_paths)
+  var dirs = fs.filter_dirs(all_paths)
+
+  print("Files:")
+  print(files)
+
+  print("Dirs:")
+  print(dirs)
+
+  # Clean up
+  fs.remove("/tmp/tea_test_dir/file1.txt")
+  fs.remove("/tmp/tea_test_dir/file2.txt")
+  fs.remove("/tmp/tea_test_dir/subdir")
+  fs.remove("/tmp/tea_test_dir")
+
+  print("✓ fs.filter_files and fs.filter_dirs tests passed")
+end
+
+pub def test_read_text_or() -> Void
+  print("=== Testing fs.read_text_or ===")
+
+  # File exists
+  fs.write_text("/tmp/tea_test_exists.txt", "actual content")
+  var content1 = fs.read_text_or("/tmp/tea_test_exists.txt", "default")
+  assert.assert_eq(content1, "actual content")
+
+  # File doesn't exist
+  var content2 = fs.read_text_or("/tmp/tea_test_nonexistent.txt", "default")
+  assert.assert_eq(content2, "default")
+
+  # Clean up
+  fs.remove("/tmp/tea_test_exists.txt")
+
+  print("✓ fs.read_text_or tests passed")
+end
+
+pub def test_write_text_safe() -> Void
+  print("=== Testing fs.write_text_safe ===")
+
+  # Write to deep path (creates parent directories)
+  fs.write_text_safe("/tmp/tea_deep/nested/path/file.txt", "content")
+
+  assert.assert_eq(fs.exists("/tmp/tea_deep/nested/path/file.txt"), true)
+  var content = fs.read_text("/tmp/tea_deep/nested/path/file.txt")
+  assert.assert_eq(content, "content")
+
+  # Clean up
+  fs.remove("/tmp/tea_deep/nested/path/file.txt")
+  fs.remove("/tmp/tea_deep/nested/path")
+  fs.remove("/tmp/tea_deep/nested")
+  fs.remove("/tmp/tea_deep")
+
+  print("✓ fs.write_text_safe tests passed")
+end
+
+pub def test_is_empty_dir() -> Void
+  print("=== Testing fs.is_empty_dir ===")
+
+  fs.ensure_dir("/tmp/tea_empty_dir")
+  assert.assert_eq(fs.is_empty_dir("/tmp/tea_empty_dir"), true)
+
+  fs.write_text("/tmp/tea_empty_dir/file.txt", "content")
+  assert.assert_eq(fs.is_empty_dir("/tmp/tea_empty_dir"), false)
+
+  fs.remove("/tmp/tea_empty_dir/file.txt")
+  assert.assert_eq(fs.is_empty_dir("/tmp/tea_empty_dir"), true)
+
+  fs.remove("/tmp/tea_empty_dir")
+
+  print("✓ fs.is_empty_dir tests passed")
+end
+
+pub def test_remove_if_exists() -> Void
+  print("=== Testing fs.remove_if_exists ===")
+
+  fs.write_text("/tmp/tea_remove_test.txt", "content")
+  fs.remove_if_exists("/tmp/tea_remove_test.txt")
+  assert.assert_eq(fs.exists("/tmp/tea_remove_test.txt"), false)
+
+  # Should not error on non-existent file
+  fs.remove_if_exists("/tmp/tea_nonexistent.txt")
+
+  print("✓ fs.remove_if_exists tests passed")
+end
+
+# Run all tests
+test_has_extension()
+test_is_file()
+test_filter_by_extension()
+test_filter_files_and_dirs()
+test_read_text_or()
+test_write_text_safe()
+test_is_empty_dir()
+test_remove_if_exists()
+
+print("\n=== All FS Helper Tests Complete ===")

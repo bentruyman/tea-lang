@@ -12,7 +12,7 @@ use dirs_next::{config_dir, home_dir};
 use glob::glob;
 use path_clean::PathClean;
 use pathdiff::diff_paths;
-use tea_support::{cli_error, cli_target_error, env_error, fs_error, io_error, process_error};
+use tea_support::{cli_error, cli_target_error, env_error, fs_error, process_error};
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
@@ -561,6 +561,65 @@ impl Vm {
                         _ => {
                             bail!(VmError::Runtime(
                                 "indexing requires a list, dictionary, or string value".to_string()
+                            ));
+                        }
+                    }
+                }
+                Instruction::Slice { inclusive } => {
+                    let end_value = self.pop()?;
+                    let start_value = self.pop()?;
+                    let collection_value = self.pop()?;
+
+                    let (Value::Int(start), Value::Int(end)) = (start_value, end_value) else {
+                        bail!(VmError::Runtime(
+                            "slice indices must be integers".to_string()
+                        ));
+                    };
+
+                    if start < 0 || end < 0 {
+                        bail!(VmError::Runtime(
+                            "slice indices cannot be negative".to_string()
+                        ));
+                    }
+
+                    let start_idx = start as usize;
+                    let mut end_idx = end as usize;
+
+                    if inclusive {
+                        end_idx = end_idx.saturating_add(1);
+                    }
+
+                    match collection_value {
+                        Value::String(s) => {
+                            let chars: Vec<char> = s.chars().collect();
+                            if start_idx > chars.len() {
+                                bail!(VmError::Runtime(
+                                    "slice start index out of bounds".to_string()
+                                ));
+                            }
+                            let end_idx = end_idx.min(chars.len());
+                            if start_idx > end_idx {
+                                bail!(VmError::Runtime("slice start must be <= end".to_string()));
+                            }
+                            let slice: String = chars[start_idx..end_idx].iter().collect();
+                            self.stack.push(Value::String(slice));
+                        }
+                        Value::List(list) => {
+                            if start_idx > list.len() {
+                                bail!(VmError::Runtime(
+                                    "slice start index out of bounds".to_string()
+                                ));
+                            }
+                            let end_idx = end_idx.min(list.len());
+                            if start_idx > end_idx {
+                                bail!(VmError::Runtime("slice start must be <= end".to_string()));
+                            }
+                            let slice: Vec<Value> = list[start_idx..end_idx].to_vec();
+                            self.stack.push(Value::List(Rc::new(slice)));
+                        }
+                        _ => {
+                            bail!(VmError::Runtime(
+                                "slicing requires a list or string".to_string()
                             ));
                         }
                     }
@@ -1334,22 +1393,7 @@ impl Vm {
                 }
                 self.stack.push(Value::Void);
             }
-            StdFunctionKind::UtilLen => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "len expected 1 argument but got {}",
-                        args.len()
-                    ),));
-                }
-                let length = match &args[0] {
-                    Value::String(text) => text.chars().count() as i64,
-                    Value::List(items) => items.len() as i64,
-                    _ => {
-                        bail!(VmError::Runtime("len expects a String or List".to_string(),))
-                    }
-                };
-                self.stack.push(Value::Int(length));
-            }
+
             StdFunctionKind::UtilToString => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -1399,84 +1443,76 @@ impl Vm {
                 };
                 self.stack.push(Value::Int(clamped));
             }
-            StdFunctionKind::UtilIsNil => {
-                if args.len() != 1 {
+
+            StdFunctionKind::StringIndexOf => {
+                if args.len() != 2 {
                     bail!(VmError::Runtime(format!(
-                        "is_nil expected 1 argument but got {}",
+                        "string_index_of expected 2 arguments but got {}",
                         args.len()
-                    ),));
+                    )));
                 }
-                self.stack.push(Value::Bool(matches!(args[0], Value::Nil)));
+                let (haystack, needle) = match (&args[0], &args[1]) {
+                    (Value::String(h), Value::String(n)) => (h, n),
+                    _ => bail!(VmError::Runtime(
+                        "string_index_of expects two String arguments".to_string()
+                    )),
+                };
+                let index = haystack
+                    .find(needle.as_str())
+                    .map(|i| i as i64)
+                    .unwrap_or(-1);
+                self.stack.push(Value::Int(index));
             }
-            StdFunctionKind::UtilIsBool => {
-                if args.len() != 1 {
+            StdFunctionKind::StringSplit => {
+                if args.len() != 2 {
                     bail!(VmError::Runtime(format!(
-                        "is_bool expected 1 argument but got {}",
+                        "string_split expected 2 arguments but got {}",
                         args.len()
-                    ),));
+                    )));
                 }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::Bool(_))));
+                let (text, delimiter) = match (&args[0], &args[1]) {
+                    (Value::String(t), Value::String(d)) => (t, d),
+                    _ => bail!(VmError::Runtime(
+                        "string_split expects two String arguments".to_string()
+                    )),
+                };
+                let parts: Vec<Value> = text
+                    .split(delimiter.as_str())
+                    .map(|s| Value::String(s.to_string()))
+                    .collect();
+                self.stack.push(Value::List(Rc::new(parts)));
             }
-            StdFunctionKind::UtilIsInt => {
-                if args.len() != 1 {
+            StdFunctionKind::StringContains => {
+                if args.len() != 2 {
                     bail!(VmError::Runtime(format!(
-                        "is_int expected 1 argument but got {}",
+                        "string_contains expected 2 arguments but got {}",
                         args.len()
-                    ),));
+                    )));
                 }
+                let (haystack, needle) = match (&args[0], &args[1]) {
+                    (Value::String(h), Value::String(n)) => (h, n),
+                    _ => bail!(VmError::Runtime(
+                        "string_contains expects two String arguments".to_string()
+                    )),
+                };
                 self.stack
-                    .push(Value::Bool(matches!(args[0], Value::Int(_))));
+                    .push(Value::Bool(haystack.contains(needle.as_str())));
             }
-            StdFunctionKind::UtilIsFloat => {
-                if args.len() != 1 {
+            StdFunctionKind::StringReplace => {
+                if args.len() != 3 {
                     bail!(VmError::Runtime(format!(
-                        "is_float expected 1 argument but got {}",
+                        "string_replace expected 3 arguments but got {}",
                         args.len()
-                    ),));
+                    )));
                 }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::Float(_))));
-            }
-            StdFunctionKind::UtilIsString => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_string expected 1 argument but got {}",
-                        args.len()
-                    ),));
-                }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::String(_))));
-            }
-            StdFunctionKind::UtilIsList => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_list expected 1 argument but got {}",
-                        args.len()
-                    ),));
-                }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::List(_))));
-            }
-            StdFunctionKind::UtilIsStruct => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_struct expected 1 argument but got {}",
-                        args.len()
-                    ),));
-                }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::Struct(_))));
-            }
-            StdFunctionKind::UtilIsError => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_error expected 1 argument but got {}",
-                        args.len()
-                    ),));
-                }
-                self.stack
-                    .push(Value::Bool(matches!(args[0], Value::Error(_))));
+                let (text, old, new) = match (&args[0], &args[1], &args[2]) {
+                    (Value::String(t), Value::String(o), Value::String(n)) => (t, o, n),
+                    _ => bail!(VmError::Runtime(
+                        "string_replace expects three String arguments".to_string()
+                    )),
+                };
+                let result = text.replace(old.as_str(), new.as_str());
+                self.stack.push(Value::String(result));
             }
             StdFunctionKind::EnvGet => {
                 if args.len() != 1 {
@@ -1803,180 +1839,7 @@ impl Vm {
                 let relative = self.compute_relative(&target, &base)?;
                 self.stack.push(Value::String(relative));
             }
-            StdFunctionKind::IoReadLine => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "read_line expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let mut buffer = String::new();
-                let bytes_read = std::io::stdin()
-                    .read_line(&mut buffer)
-                    .map_err(|error| VmError::Runtime(io_error("read_line", &error)))?;
-                if bytes_read == 0 {
-                    self.stack.push(Value::Nil);
-                } else {
-                    if buffer.ends_with('\n') {
-                        buffer.pop();
-                        if buffer.ends_with('\r') {
-                            buffer.pop();
-                        }
-                    }
-                    self.stack.push(Value::String(buffer));
-                }
-            }
-            StdFunctionKind::IoReadAll => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "read_all expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let mut buffer = String::new();
-                std::io::stdin()
-                    .read_to_string(&mut buffer)
-                    .map_err(|error| VmError::Runtime(io_error("read_all", &error)))?;
-                self.stack.push(Value::String(buffer));
-            }
-            StdFunctionKind::IoReadBytes => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "read_bytes expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let mut buffer = Vec::new();
-                std::io::stdin()
-                    .read_to_end(&mut buffer)
-                    .map_err(|error| VmError::Runtime(io_error("read_bytes", &error)))?;
-                let values: Vec<Value> = buffer
-                    .into_iter()
-                    .map(|byte| Value::Int(byte as i64))
-                    .collect();
-                self.stack.push(Value::List(Rc::new(values)));
-            }
-            StdFunctionKind::IoWrite => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "write expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let text = match &args[0] {
-                    Value::String(text) => text.as_bytes(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write expects a String argument".to_string()
-                        ))
-                    }
-                };
-                std::io::stdout()
-                    .write_all(text)
-                    .map_err(|error| VmError::Runtime(io_error("write", &error)))?;
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::IoWriteErr => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "write_err expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let text = match &args[0] {
-                    Value::String(text) => text.as_bytes(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_err expects a String argument".to_string()
-                        ))
-                    }
-                };
-                std::io::stderr()
-                    .write_all(text)
-                    .map_err(|error| VmError::Runtime(io_error("write_err", &error)))?;
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::IoFlush => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "flush expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                std::io::stdout()
-                    .flush()
-                    .map_err(|error| VmError::Runtime(io_error("flush", &error)))?;
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::JsonEncode => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "json.encode expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let json_value = value_to_json(&args[0])?;
-                let encoded = serde_json::to_string(&json_value)
-                    .map_err(|error| VmError::Runtime(format!("failed to encode JSON: {error}")))?;
-                self.stack.push(Value::String(encoded));
-            }
-            StdFunctionKind::JsonDecode => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "json.decode expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let text = match &args[0] {
-                    Value::String(text) => text,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "json.decode expects the input to be a String".to_string()
-                        ))
-                    }
-                };
-                let parsed: JsonValue = serde_json::from_str(text)
-                    .map_err(|error| VmError::Runtime(format!("failed to decode JSON: {error}")))?;
-                let value = json_to_value(&parsed)?;
-                self.stack.push(value);
-            }
-            StdFunctionKind::YamlEncode => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "yaml.encode expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let json_value = value_to_json(&args[0])?;
-                let encoded = serde_yaml::to_string(&json_value)
-                    .map_err(|error| VmError::Runtime(format!("failed to encode YAML: {error}")))?;
-                self.stack.push(Value::String(encoded));
-            }
-            StdFunctionKind::YamlDecode => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "yaml.decode expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let text = match &args[0] {
-                    Value::String(text) => text,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "yaml.decode expects the input to be a String".to_string()
-                        ))
-                    }
-                };
-                let parsed: serde_yaml::Value = serde_yaml::from_str(text)
-                    .map_err(|error| VmError::Runtime(format!("failed to decode YAML: {error}")))?;
-                let json_value = serde_json::to_value(parsed).map_err(|error| {
-                    VmError::Runtime(format!(
-                        "failed to normalise YAML to JSON representation: {error}"
-                    ))
-                })?;
-                let value = json_to_value(&json_value)?;
-                self.stack.push(value);
-            }
+
             StdFunctionKind::FsReadText => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -2049,118 +1912,7 @@ impl Vm {
                 vm_write_atomic(Path::new(&path), contents.as_bytes())?;
                 self.stack.push(Value::Void);
             }
-            StdFunctionKind::FsReadBytes => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "read_bytes expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "read_bytes expects a String path".to_string()
-                        ))
-                    }
-                };
-                let bytes = std::fs::read(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("read_bytes", &path, &error)))?;
-                let values: Vec<Value> = bytes
-                    .into_iter()
-                    .map(|byte| Value::Int(byte as i64))
-                    .collect();
-                self.stack.push(Value::List(Rc::new(values)));
-            }
-            StdFunctionKind::FsWriteBytes => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "write_bytes expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_bytes expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let list = match &args[1] {
-                    Value::List(items) => items.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_bytes expects a List of Int values".to_string(),
-                        ))
-                    }
-                };
-                let mut buffer = Vec::with_capacity(list.len());
-                for (index, value) in list.iter().enumerate() {
-                    match value {
-                        Value::Int(byte) if (0..=255).contains(byte) => {
-                            buffer.push(*byte as u8);
-                        }
-                        Value::Int(_) => {
-                            bail!(VmError::Runtime(format!(
-                                "write_bytes expects byte values between 0 and 255 (argument index {index})"
-                            )))
-                        }
-                        _ => {
-                            bail!(VmError::Runtime(
-                                "write_bytes expects a List[Int]".to_string(),
-                            ))
-                        }
-                    }
-                }
-                std::fs::write(&path, buffer)
-                    .map_err(|error| VmError::Runtime(fs_error("write_bytes", &path, &error)))?;
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::FsWriteBytesAtomic => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "write_bytes_atomic expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_bytes_atomic expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let list = match &args[1] {
-                    Value::List(items) => items.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_bytes_atomic expects a List of Int values".to_string(),
-                        ))
-                    }
-                };
-                let mut buffer = Vec::with_capacity(list.len());
-                for (index, value) in list.iter().enumerate() {
-                    match value {
-                        Value::Int(byte) if (0..=255).contains(byte) => {
-                            buffer.push(*byte as u8);
-                        }
-                        Value::Int(_) => {
-                            bail!(VmError::Runtime(format!(
-                                "write_bytes_atomic expects byte values between 0 and 255 (argument index {index})"
-                            )))
-                        }
-                        _ => {
-                            bail!(VmError::Runtime(
-                                "write_bytes_atomic expects a List[Int]".to_string(),
-                            ))
-                        }
-                    }
-                }
-                vm_write_atomic(Path::new(&path), &buffer)?;
-                self.stack.push(Value::Void);
-            }
+
             StdFunctionKind::FsCreateDir => {
                 if !(1..=2).contains(&args.len()) {
                     bail!(VmError::Runtime(format!(
@@ -2525,97 +2277,7 @@ impl Vm {
                 self.stack
                     .push(vm_metadata_value(fs_path.as_path(), metadata));
             }
-            StdFunctionKind::FsOpenRead => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "open_read expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "open_read expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let file = File::open(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("open_read", &path, &error)))?;
-                let handle_id = self.next_fs_handle;
-                self.next_fs_handle += 1;
-                self.fs_handles.insert(
-                    handle_id,
-                    FsReadHandle {
-                        reader: BufReader::new(file),
-                    },
-                );
-                self.stack.push(Value::Int(handle_id));
-            }
-            StdFunctionKind::FsReadChunk => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "read_chunk expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "read_chunk expects the first argument to be a handle Int".to_string(),
-                        ))
-                    }
-                };
-                let size = match args[1] {
-                    Value::Int(length) if length > 0 => length as usize,
-                    Value::Int(_) => {
-                        bail!(VmError::Runtime(
-                            "read_chunk expects a positive chunk size".to_string(),
-                        ))
-                    }
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "read_chunk expects the chunk size to be an Int".to_string(),
-                        ))
-                    }
-                };
-                let handle = self
-                    .fs_handles
-                    .get_mut(&handle_id)
-                    .ok_or_else(|| VmError::Runtime(format!("invalid file handle {handle_id}")))?;
-                let mut buffer = vec![0u8; size];
-                let bytes_read = handle.reader.read(&mut buffer).map_err(|error| {
-                    let target = format!("handle {handle_id}");
-                    VmError::Runtime(fs_error("read_chunk", &target, &error))
-                })?;
-                buffer.truncate(bytes_read);
-                let values: Vec<Value> = buffer
-                    .into_iter()
-                    .map(|byte| Value::Int(byte as i64))
-                    .collect();
-                self.stack.push(Value::List(Rc::new(values)));
-            }
-            StdFunctionKind::FsClose => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "close expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "close expects the handle to be an Int".to_string(),
-                        ))
-                    }
-                };
-                if self.fs_handles.remove(&handle_id).is_none() {
-                    bail!(VmError::Runtime(format!("invalid file handle {handle_id}")));
-                }
-                self.stack.push(Value::Void);
-            }
+
             StdFunctionKind::ProcessRun => {
                 if args.is_empty() || args.len() > 5 {
                     bail!(VmError::Runtime(format!(
@@ -2925,39 +2587,7 @@ impl Vm {
                 entry.stdin.take();
                 self.stack.push(Value::Void);
             }
-            StdFunctionKind::ProcessWait => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "process.wait expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.wait expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let mut entry = self.process_handles.remove(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                let status = entry.child.wait().map_err(|error| {
-                    VmError::Runtime(process_error("wait", &entry.command, &error))
-                })?;
-                let stdout = Self::read_from_pipe(&mut entry.stdout, None).map_err(|error| {
-                    VmError::Runtime(process_error("wait", &entry.command, &error))
-                })?;
-                let stderr = Self::read_from_pipe(&mut entry.stderr, None).map_err(|error| {
-                    VmError::Runtime(process_error("wait", &entry.command, &error))
-                })?;
-                entry.stdin.take();
-                let exit_code = status.code().unwrap_or(-1) as i64;
-                let result =
-                    self.make_process_result(entry.command.clone(), exit_code, stdout, stderr);
-                self.stack.push(result);
-            }
+
             StdFunctionKind::ProcessKill => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(

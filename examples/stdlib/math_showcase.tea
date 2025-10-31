@@ -1,0 +1,74 @@
+# Showcase of the math module capabilities
+
+use math = "std.math"
+use util = "std.util"
+
+print("=== Math Module Showcase ===\n")
+
+# Basic operations
+print("Basic Operations:")
+print("abs(-42) = " + util.to_string(math.abs(-42)))
+print("max(15, 27) = " + util.to_string(math.max(15, 27)))
+print("clamp(150, 0, 100) = " + util.to_string(math.clamp(150, 0, 100)))
+print("")
+
+# Number theory
+print("Number Theory:")
+print("gcd(48, 18) = " + util.to_string(math.gcd(48, 18)))
+print("lcm(12, 15) = " + util.to_string(math.lcm(12, 15)))
+print("")
+
+# Power and factorials
+print("Exponentiation & Factorials:")
+print("2^10 = " + util.to_string(math.pow(2, 10)))
+print("7! = " + util.to_string(math.factorial(7)))
+print("")
+
+# Fibonacci sequence
+print("Fibonacci Sequence (first 10):")
+var i = 0
+
+while i < 10
+  var fib = math.fibonacci(i)
+  print("F(" + util.to_string(i) + ") = " + util.to_string(fib))
+  i = i + 1
+end
+
+print("")
+
+# Prime numbers
+print("Prime Numbers up to 30:")
+var n = 2
+
+while n <= 30
+  if math.is_prime(n)
+    print(util.to_string(n) + " is prime")
+  end
+
+  n = n + 1
+end
+
+print("")
+
+# Perfect squares
+print("Perfect Squares up to 100:")
+var num = 1
+
+while num <= 100
+  if math.is_perfect_square(num)
+    var sqrt = math.isqrt(num)
+    print(util.to_string(num) + " = " + util.to_string(sqrt) + "^2")
+  end
+
+  num = num + 10
+end
+
+print("")
+
+# Sum and product ranges
+print("Range Operations:")
+print("Sum 1..100 = " + util.to_string(math.sum_range(1, 100)))
+print("Product 1..10 = " + util.to_string(math.product_range(1, 10)))
+print("")
+
+print("=== Math Showcase Complete ===")

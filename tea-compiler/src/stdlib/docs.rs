@@ -16,17 +16,18 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::AssertEq => "Assert that two values are equal.",
         StdFunctionKind::AssertNe => "Assert that two values are not equal.",
         StdFunctionKind::AssertFail => "Unconditionally fail with the provided message.",
-        StdFunctionKind::UtilLen => "Return the number of elements or characters in a value.",
         StdFunctionKind::UtilToString => "Convert a value to its string representation.",
         StdFunctionKind::UtilClampInt => "Clamp an integer between the provided bounds.",
-        StdFunctionKind::UtilIsNil => "Return true if the value is Nil.",
-        StdFunctionKind::UtilIsBool => "Return true if the value is a Bool.",
-        StdFunctionKind::UtilIsInt => "Return true if the value is an Int.",
-        StdFunctionKind::UtilIsFloat => "Return true if the value is a Float.",
-        StdFunctionKind::UtilIsString => "Return true if the value is a String.",
-        StdFunctionKind::UtilIsList => "Return true if the value is a List.",
-        StdFunctionKind::UtilIsStruct => "Return true if the value is a Struct instance.",
-        StdFunctionKind::UtilIsError => "Return true if the value is an Error instance.",
+        StdFunctionKind::StringIndexOf => {
+            "Find the first occurrence of a substring, returning its index or -1."
+        }
+        StdFunctionKind::StringSplit => "Split a string by a delimiter into a list of substrings.",
+        StdFunctionKind::StringContains => {
+            "Return true if the string contains the given substring."
+        }
+        StdFunctionKind::StringReplace => {
+            "Replace all occurrences of a substring with another string."
+        }
         StdFunctionKind::EnvGet => "Lookup an environment variable (returns Nil if unset).",
         StdFunctionKind::EnvGetOr => "Lookup an environment variable or return a default value.",
         StdFunctionKind::EnvHas => "Return true if an environment variable is set.",
@@ -48,9 +49,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::FsWriteTextAtomic => {
             "Write text to a file atomically, preserving existing data on failure."
         }
-        StdFunctionKind::FsReadBytes => "Read a binary file into bytes.",
-        StdFunctionKind::FsWriteBytes => "Write bytes to a file, replacing existing contents.",
-        StdFunctionKind::FsWriteBytesAtomic => "Write bytes to a file atomically.",
         StdFunctionKind::FsCreateDir => "Create a directory and intermediate folders as needed.",
         StdFunctionKind::FsEnsureDir => "Ensure a directory exists, creating it if necessary.",
         StdFunctionKind::FsEnsureParent => "Ensure the parent directory of a path exists.",
@@ -66,9 +64,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::FsGlob => "Return paths matching a glob pattern.",
         StdFunctionKind::FsMetadata => "Return metadata for a path.",
         StdFunctionKind::FsPermissions => "Return the permissions for a path.",
-        StdFunctionKind::FsOpenRead => "Open a file for buffered reading.",
-        StdFunctionKind::FsReadChunk => "Read a fixed number of bytes from an open file.",
-        StdFunctionKind::FsClose => "Close an open file handle.",
         StdFunctionKind::PathJoin => "Join multiple path segments.",
         StdFunctionKind::PathComponents => "Split a path into components.",
         StdFunctionKind::PathDirname => "Return the directory portion of a path.",
@@ -81,16 +76,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::PathRelative => "Compute a relative path between two paths.",
         StdFunctionKind::PathIsAbsolute => "Return true if the path is absolute.",
         StdFunctionKind::PathSeparator => "Return the platform path separator.",
-        StdFunctionKind::IoReadLine => "Read a single line from stdin.",
-        StdFunctionKind::IoReadAll => "Read all remaining input from stdin.",
-        StdFunctionKind::IoReadBytes => "Read raw bytes from stdin.",
-        StdFunctionKind::IoWrite => "Write a string to stdout.",
-        StdFunctionKind::IoWriteErr => "Write a string to stderr.",
-        StdFunctionKind::IoFlush => "Flush stdout and stderr.",
-        StdFunctionKind::JsonEncode => "Serialize a value to JSON.",
-        StdFunctionKind::JsonDecode => "Parse JSON into a Tea value.",
-        StdFunctionKind::YamlEncode => "Serialize a value to YAML.",
-        StdFunctionKind::YamlDecode => "Parse YAML into a Tea value.",
         StdFunctionKind::CliCapture => "Run a command and capture stdout/stderr with options.",
         StdFunctionKind::CliArgs => "Return the current process's command-line arguments.",
         StdFunctionKind::CliParse => "Parse CLI arguments into structured data based on a spec.",
@@ -98,7 +83,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
             "Run a command to completion, returning its status and output."
         }
         StdFunctionKind::ProcessSpawn => "Spawn a process and return a handle for interaction.",
-        StdFunctionKind::ProcessWait => "Wait for a spawned process to finish.",
         StdFunctionKind::ProcessKill => "Send a termination signal to a process.",
         StdFunctionKind::ProcessReadStdout => "Read stdout from a spawned process.",
         StdFunctionKind::ProcessReadStderr => "Read stderr from a spawned process.",

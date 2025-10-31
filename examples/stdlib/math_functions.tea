@@ -1,0 +1,247 @@
+# Comprehensive tests for std.math functions
+
+use math = "std.math"
+use assert = "std.assert"
+
+pub def test_abs() -> Void
+  print("=== Testing math.abs ===")
+
+  assert.assert_eq(math.abs(-5), 5)
+  assert.assert_eq(math.abs(5), 5)
+  assert.assert_eq(math.abs(0), 0)
+  assert.assert_eq(math.abs(-100), 100)
+
+  print("✓ math.abs tests passed")
+end
+
+pub def test_sign() -> Void
+  print("=== Testing math.sign ===")
+
+  assert.assert_eq(math.sign(-5), -1)
+  assert.assert_eq(math.sign(0), 0)
+  assert.assert_eq(math.sign(5), 1)
+  assert.assert_eq(math.sign(-100), -1)
+  assert.assert_eq(math.sign(100), 1)
+
+  print("✓ math.sign tests passed")
+end
+
+pub def test_max_min() -> Void
+  print("=== Testing math.max and math.min ===")
+
+  assert.assert_eq(math.max(5, 10), 10)
+  assert.assert_eq(math.max(10, 5), 10)
+  assert.assert_eq(math.max(5, 5), 5)
+  assert.assert_eq(math.max(-5, -10), -5)
+
+  assert.assert_eq(math.min(5, 10), 5)
+  assert.assert_eq(math.min(10, 5), 5)
+  assert.assert_eq(math.min(5, 5), 5)
+  assert.assert_eq(math.min(-5, -10), -10)
+
+  print("✓ math.max and math.min tests passed")
+end
+
+pub def test_clamp() -> Void
+  print("=== Testing math.clamp ===")
+
+  assert.assert_eq(math.clamp(5, 0, 10), 5)
+  assert.assert_eq(math.clamp(-5, 0, 10), 0)
+  assert.assert_eq(math.clamp(15, 0, 10), 10)
+  assert.assert_eq(math.clamp(0, 0, 10), 0)
+  assert.assert_eq(math.clamp(10, 0, 10), 10)
+
+  print("✓ math.clamp tests passed")
+end
+
+pub def test_gcd() -> Void
+  print("=== Testing math.gcd ===")
+
+  assert.assert_eq(math.gcd(12, 8), 4)
+  assert.assert_eq(math.gcd(15, 25), 5)
+  assert.assert_eq(math.gcd(7, 13), 1)
+  assert.assert_eq(math.gcd(100, 50), 50)
+  assert.assert_eq(math.gcd(17, 17), 17)
+  assert.assert_eq(math.gcd(-12, 8), 4)
+
+  print("✓ math.gcd tests passed")
+end
+
+pub def test_lcm() -> Void
+  print("=== Testing math.lcm ===")
+
+  assert.assert_eq(math.lcm(4, 6), 12)
+  assert.assert_eq(math.lcm(3, 5), 15)
+  assert.assert_eq(math.lcm(12, 8), 24)
+  assert.assert_eq(math.lcm(7, 7), 7)
+  assert.assert_eq(math.lcm(0, 5), 0)
+
+  print("✓ math.lcm tests passed")
+end
+
+pub def test_pow() -> Void
+  print("=== Testing math.pow ===")
+
+  assert.assert_eq(math.pow(2, 3), 8)
+  assert.assert_eq(math.pow(5, 0), 1)
+  assert.assert_eq(math.pow(10, 2), 100)
+  assert.assert_eq(math.pow(2, 10), 1024)
+  assert.assert_eq(math.pow(1, 100), 1)
+  assert.assert_eq(math.pow(0, 5), 0)
+
+  print("✓ math.pow tests passed")
+end
+
+pub def test_factorial() -> Void
+  print("=== Testing math.factorial ===")
+
+  assert.assert_eq(math.factorial(0), 1)
+  assert.assert_eq(math.factorial(1), 1)
+  assert.assert_eq(math.factorial(5), 120)
+  assert.assert_eq(math.factorial(6), 720)
+  assert.assert_eq(math.factorial(10), 3628800)
+
+  print("✓ math.factorial tests passed")
+end
+
+pub def test_is_even_odd() -> Void
+  print("=== Testing math.is_even and math.is_odd ===")
+
+  assert.assert_eq(math.is_even(4), true)
+  assert.assert_eq(math.is_even(5), false)
+  assert.assert_eq(math.is_even(0), true)
+  assert.assert_eq(math.is_even(-4), true)
+  assert.assert_eq(math.is_even(-5), false)
+
+  assert.assert_eq(math.is_odd(4), false)
+  assert.assert_eq(math.is_odd(5), true)
+  assert.assert_eq(math.is_odd(0), false)
+  assert.assert_eq(math.is_odd(-4), false)
+  assert.assert_eq(math.is_odd(-5), true)
+
+  print("✓ math.is_even and math.is_odd tests passed")
+end
+
+pub def test_sum_range() -> Void
+  print("=== Testing math.sum_range ===")
+
+  assert.assert_eq(math.sum_range(1, 5), 15)
+  assert.assert_eq(math.sum_range(1, 10), 55)
+  assert.assert_eq(math.sum_range(5, 10), 45)
+  assert.assert_eq(math.sum_range(3, 3), 3)
+  assert.assert_eq(math.sum_range(10, 5), 0)
+
+  print("✓ math.sum_range tests passed")
+end
+
+pub def test_product_range() -> Void
+  print("=== Testing math.product_range ===")
+
+  assert.assert_eq(math.product_range(1, 5), 120)
+  assert.assert_eq(math.product_range(3, 5), 60)
+  assert.assert_eq(math.product_range(1, 1), 1)
+  assert.assert_eq(math.product_range(5, 3), 1)
+  assert.assert_eq(math.product_range(2, 4), 24)
+
+  print("✓ math.product_range tests passed")
+end
+
+pub def test_is_perfect_square() -> Void
+  print("=== Testing math.is_perfect_square ===")
+
+  assert.assert_eq(math.is_perfect_square(0), true)
+  assert.assert_eq(math.is_perfect_square(1), true)
+  assert.assert_eq(math.is_perfect_square(4), true)
+  assert.assert_eq(math.is_perfect_square(16), true)
+  assert.assert_eq(math.is_perfect_square(25), true)
+  assert.assert_eq(math.is_perfect_square(15), false)
+  assert.assert_eq(math.is_perfect_square(17), false)
+  assert.assert_eq(math.is_perfect_square(-4), false)
+
+  print("✓ math.is_perfect_square tests passed")
+end
+
+pub def test_isqrt() -> Void
+  print("=== Testing math.isqrt ===")
+
+  assert.assert_eq(math.isqrt(0), 0)
+  assert.assert_eq(math.isqrt(1), 1)
+  assert.assert_eq(math.isqrt(4), 2)
+  assert.assert_eq(math.isqrt(16), 4)
+  assert.assert_eq(math.isqrt(25), 5)
+  assert.assert_eq(math.isqrt(15), 3)
+  assert.assert_eq(math.isqrt(100), 10)
+  assert.assert_eq(math.isqrt(99), 9)
+
+  print("✓ math.isqrt tests passed")
+end
+
+pub def test_is_prime() -> Void
+  print("=== Testing math.is_prime ===")
+
+  assert.assert_eq(math.is_prime(0), false)
+  assert.assert_eq(math.is_prime(1), false)
+  assert.assert_eq(math.is_prime(2), true)
+  assert.assert_eq(math.is_prime(3), true)
+  assert.assert_eq(math.is_prime(4), false)
+  assert.assert_eq(math.is_prime(5), true)
+  assert.assert_eq(math.is_prime(7), true)
+  assert.assert_eq(math.is_prime(8), false)
+  assert.assert_eq(math.is_prime(11), true)
+  assert.assert_eq(math.is_prime(13), true)
+  assert.assert_eq(math.is_prime(15), false)
+  assert.assert_eq(math.is_prime(17), true)
+  assert.assert_eq(math.is_prime(100), false)
+
+  print("✓ math.is_prime tests passed")
+end
+
+pub def test_fibonacci() -> Void
+  print("=== Testing math.fibonacci ===")
+
+  assert.assert_eq(math.fibonacci(0), 0)
+  assert.assert_eq(math.fibonacci(1), 1)
+  assert.assert_eq(math.fibonacci(2), 1)
+  assert.assert_eq(math.fibonacci(3), 2)
+  assert.assert_eq(math.fibonacci(4), 3)
+  assert.assert_eq(math.fibonacci(5), 5)
+  assert.assert_eq(math.fibonacci(6), 8)
+  assert.assert_eq(math.fibonacci(7), 13)
+  assert.assert_eq(math.fibonacci(10), 55)
+  assert.assert_eq(math.fibonacci(15), 610)
+
+  print("✓ math.fibonacci tests passed")
+end
+
+pub def test_digit_count() -> Void
+  print("=== Testing math.digit_count ===")
+
+  assert.assert_eq(math.digit_count(0), 1)
+  assert.assert_eq(math.digit_count(5), 1)
+  assert.assert_eq(math.digit_count(123), 3)
+  assert.assert_eq(math.digit_count(9999), 4)
+  assert.assert_eq(math.digit_count(-456), 3)
+  assert.assert_eq(math.digit_count(-1), 1)
+
+  print("✓ math.digit_count tests passed")
+end
+
+# Run all tests
+test_abs()
+test_sign()
+test_max_min()
+test_clamp()
+test_gcd()
+test_lcm()
+test_pow()
+test_factorial()
+test_is_even_odd()
+test_sum_range()
+test_product_range()
+test_is_perfect_square()
+test_isqrt()
+test_is_prime()
+test_fibonacci()
+test_digit_count()
+
+print("\n=== All Math Function Tests Complete ===")

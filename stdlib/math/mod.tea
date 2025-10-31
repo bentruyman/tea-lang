@@ -1,0 +1,132 @@
+# Mathematical utilities for integer arithmetic operations.
+#
+# This module provides pure Tea implementations of common mathematical functions
+# built on top of Tea's arithmetic operators (+, -, *, /, %, <, >, ==).
+#
+# All functions work with integers. Floating point operations are not yet supported.
+
+use intrinsics = "std.intrinsics"
+
+# Get the absolute value of a number.
+#
+# Examples:
+#   math.abs(-5)  # => 5
+#   math.abs(5)   # => 5
+#   math.abs(0)   # => 0
+pub def abs(n: Int) -> Int
+  if n < 0
+    return - n
+  end
+
+  n
+end
+
+# Get the sign of a number (-1, 0, or 1).
+#
+# Examples:
+#   math.sign(-5)  # => -1
+#   math.sign(0)   # => 0
+#   math.sign(5)   # => 1
+pub def sign(n: Int) -> Int
+  if n < 0
+    return - 1
+  end
+
+  if n > 0
+    return 1
+  end
+
+  0
+end
+
+# Get the maximum of two integers.
+#
+# Examples:
+#   math.max(5, 10)  # => 10
+#   math.max(10, 5)  # => 10
+#   math.max(5, 5)   # => 5
+pub def max(a: Int, b: Int) -> Int
+  if a > b
+    return a
+  end
+
+  b
+end
+
+# Get the minimum of two integers.
+#
+# Examples:
+#   math.min(5, 10)  # => 5
+#   math.min(10, 5)  # => 5
+#   math.min(5, 5)   # => 5
+pub def min(a: Int, b: Int) -> Int
+  if a < b
+    return a
+  end
+
+  b
+end
+
+# Clamp a value between a minimum and maximum bound.
+#
+# Examples:
+#   math.clamp(5, 0, 10)   # => 5
+#   math.clamp(-5, 0, 10)  # => 0
+#   math.clamp(15, 0, 10)  # => 10
+pub def clamp(value: Int, min_val: Int, max_val: Int) -> Int
+  if value < min_val
+    return min_val
+  end
+
+  if value > max_val
+    return max_val
+  end
+
+  value
+end
+
+# Raise a base to an integer exponent.
+#
+# Examples:
+#   math.pow(2, 3)   # => 8
+#   math.pow(5, 0)   # => 1
+#   math.pow(10, 2)  # => 100
+pub def pow(base: Int, exp: Int) -> Int
+  if exp < 0
+    intrinsics.fail("Negative exponent not supported for integer power")
+  end
+
+  if exp == 0
+    return 1
+  end
+
+  var result = 1
+  var i = 0
+
+  while i < exp
+    result = result * base
+    i = i + 1
+  end
+
+  result
+end
+
+# Check if a number is even.
+#
+# Examples:
+#   math.is_even(4)  # => true
+#   math.is_even(5)  # => false
+#   math.is_even(0)  # => true
+pub def is_even(n: Int) -> Bool
+  n % 2 == 0
+end
+
+# Check if a number is odd.
+#
+# Examples:
+#   math.is_odd(4)  # => false
+#   math.is_odd(5)  # => true
+#   math.is_odd(0)  # => false
+pub def is_odd(n: Int) -> Bool
+  n % 2 != 0
+end

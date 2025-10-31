@@ -1644,10 +1644,10 @@ impl CodeGenerator {
                         // Load counter
                         counter_slot.emit_get(chunk);
 
-                        // Get list length using util.len builtin
+                        // Get list length using length builtin
                         list_slot.emit_get(chunk);
                         chunk.emit(Instruction::BuiltinCall {
-                            kind: StdFunctionKind::UtilLen,
+                            kind: StdFunctionKind::Length,
                             arg_count: 1,
                         });
 
@@ -1758,10 +1758,10 @@ impl CodeGenerator {
                         // Load counter
                         counter_slot.emit_get(chunk);
 
-                        // Get keys length using util.len builtin
+                        // Get keys length using length builtin
                         keys_slot.emit_get(chunk);
                         chunk.emit(Instruction::BuiltinCall {
-                            kind: StdFunctionKind::UtilLen,
+                            kind: StdFunctionKind::Length,
                             arg_count: 1,
                         });
 
@@ -1876,8 +1876,18 @@ impl CodeGenerator {
         resolver: &mut R,
     ) -> Result<()> {
         self.compile_expression(&index.object, chunk, resolver)?;
-        self.compile_expression(&index.index, chunk, resolver)?;
-        chunk.emit(Instruction::Index);
+
+        // Check if this is a slice operation (range index)
+        if let ExpressionKind::Range(range) = &index.index.kind {
+            self.compile_expression(&range.start, chunk, resolver)?;
+            self.compile_expression(&range.end, chunk, resolver)?;
+            chunk.emit(Instruction::Slice {
+                inclusive: range.inclusive,
+            });
+        } else {
+            self.compile_expression(&index.index, chunk, resolver)?;
+            chunk.emit(Instruction::Index);
+        }
         Ok(())
     }
 

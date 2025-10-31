@@ -184,8 +184,6 @@ fn build_errors_script_runs_successfully() {
     fs::write(
         &source_path,
         r#"
-use io = "std.io"
-
 error DataError {
   Missing(path: String)
   Permission
@@ -210,16 +208,13 @@ def describe(path: String) -> String
 end
 
 var from_cases = describe("missing")
-io.write(from_cases)
-io.write("\n")
+print(from_cases)
 
 var passthrough = read("notes.txt") catch "fallback"
-io.write(passthrough)
-io.write("\n")
+print(passthrough)
 
 var fallback = try read("secret") catch "handled"
-io.write(fallback)
-io.flush()
+print(fallback)
 "#,
     )
     .expect("write errors script");
@@ -258,7 +253,7 @@ io.flush()
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(
-        stdout, "missing:missing\ncontent\nhandled",
+        stdout, "missing:missing\ncontent\nhandled\n",
         "compiled program should produce expected output"
     );
 }

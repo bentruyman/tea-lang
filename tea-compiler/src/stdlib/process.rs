@@ -33,13 +33,6 @@ const PROCESS_FUNCTIONS: &[StdFunction] = &[
         StdType::Int,
     ),
     std_function(
-        "wait",
-        StdFunctionKind::ProcessWait,
-        StdArity::Exact(1),
-        &[StdType::Int],
-        StdType::Struct,
-    ),
-    std_function(
         "kill",
         StdFunctionKind::ProcessKill,
         StdArity::Exact(1),

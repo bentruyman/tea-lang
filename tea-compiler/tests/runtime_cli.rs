@@ -30,7 +30,7 @@ assert.assert(result.command == "demo")
 assert.assert(result.options["count"] == 3)
 assert.assert(result.options["verbose"] == true)
 assert.assert(result.positionals["input"] == "input.txt")
-assert.assert(util.len(result.rest) == 0)
+assert.assert(length(result.rest) == 0)
 assert.assert(result.scopes[0]["name"] == "demo")
 assert.assert(result.scopes[0]["options"]["count"] == 3)
 assert.assert(result.help != "")
@@ -68,11 +68,10 @@ assert.assert(result.help != "")
 fn cli_args_reflect_vm_context() -> Result<()> {
     let source = r#"
 use assert = "std.assert"
-use util = "std.util"
 use cli = "support.cli"
 
 var argv = cli.args()
-assert.assert(util.len(argv) == 2)
+assert.assert(length(argv) == 2)
 assert.assert(argv[0] == "one")
 assert.assert(argv[1] == "two")
 "#;

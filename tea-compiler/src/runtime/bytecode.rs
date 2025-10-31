@@ -115,6 +115,9 @@ pub enum Instruction {
     Call(usize),
     MakeList(usize),
     Index,
+    Slice {
+        inclusive: bool,
+    },
     SetIndex,
     MakeDict(usize),
     DictKeys,
@@ -172,6 +175,11 @@ impl fmt::Display for Instruction {
             Instruction::Call(args) => write!(f, "CALL {args}"),
             Instruction::MakeList(count) => write!(f, "MAKE_LIST {count}"),
             Instruction::Index => write!(f, "INDEX"),
+            Instruction::Slice { inclusive } => write!(
+                f,
+                "SLICE {}",
+                if *inclusive { "inclusive" } else { "exclusive" }
+            ),
             Instruction::SetIndex => write!(f, "SET_INDEX"),
             Instruction::MakeDict(count) => write!(f, "MAKE_DICT {count}"),
             Instruction::DictKeys => write!(f, "DICT_KEYS"),

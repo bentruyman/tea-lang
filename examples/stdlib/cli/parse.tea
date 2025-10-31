@@ -18,7 +18,7 @@ var spec = {
 # Parse either supplied arguments or a demo set when run without CLI args
 var argv = cli.args()
 
-if util.len(argv) == 0
+if length(argv) == 0
   argv = ["--count", "3", "--verbose", "input.txt"]
 end
 

@@ -2,13 +2,6 @@ use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, St
 
 const UTIL_FUNCTIONS: &[StdFunction] = &[
     std_function(
-        "len",
-        StdFunctionKind::UtilLen,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Int,
-    ),
-    std_function(
         "to_string",
         StdFunctionKind::UtilToString,
         StdArity::Exact(1),
@@ -21,62 +14,6 @@ const UTIL_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(3),
         &[StdType::Int, StdType::Int, StdType::Int],
         StdType::Int,
-    ),
-    std_function(
-        "is_nil",
-        StdFunctionKind::UtilIsNil,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_bool",
-        StdFunctionKind::UtilIsBool,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_int",
-        StdFunctionKind::UtilIsInt,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_float",
-        StdFunctionKind::UtilIsFloat,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_string",
-        StdFunctionKind::UtilIsString,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_list",
-        StdFunctionKind::UtilIsList,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_struct",
-        StdFunctionKind::UtilIsStruct,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_error",
-        StdFunctionKind::UtilIsError,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
     ),
 ];
 

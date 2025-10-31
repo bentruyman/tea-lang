@@ -2,6 +2,12 @@
 #
 # This module provides a Tea-native interface to filesystem operations,
 # delegating to low-level intrinsics and providing higher-level helpers.
+#
+# Pure Tea helpers (no intrinsics):
+#   - ensure_dir() / ensure_parent() - recursive directory creation
+#   - has_extension() - check file extension
+#   - is_file() - check if path is a regular file
+#   - filter_by_extension() - filter file lists by extension
 
 use intrinsics = "std.intrinsics"
 use path = "std.path"
@@ -170,4 +176,153 @@ end
 #   var meta = fs.metadata("file.txt")
 pub def metadata(file_path: String) -> Dict[String, String]
   return intrinsics.fs_metadata(file_path)
+end
+
+# Check if a path is a regular file (not a directory or symlink).
+#
+# Examples:
+#   if fs.is_file("script.tea")
+#     print("It's a file")
+#   end
+#
+# Pure Tea implementation - uses exists() and is_dir() intrinsics.
+pub def is_file(file_path: String) -> Bool
+  if ! exists(file_path)
+    return false
+  end
+
+  !is_dir(file_path)
+end
+
+# Check if a file has a specific extension.
+#
+# Examples:
+#   if fs.has_extension("script.tea", "tea")
+#     print("It's a Tea file")
+#   end
+#
+# Pure Tea implementation - uses path.extension().
+pub def has_extension(file_path: String, ext: String) -> Bool
+  path.extension(file_path) == ext
+end
+
+# Filter a list of paths by file extension.
+#
+# Examples:
+#   var tea_files = fs.filter_by_extension(all_files, "tea")
+#   var js_files = fs.filter_by_extension(all_files, "js")
+#
+# Pure Tea implementation - uses path.extension() and list operations.
+pub def filter_by_extension(files: List[String], ext: String) -> List[String]
+  var result = []
+  var i = 0
+  var len = length(files)
+
+  while i < len
+    if path.extension(files[i]) == ext
+      result = result +[files[i]]
+    end
+
+    i = i + 1
+  end
+
+  result
+end
+
+# Filter a list of paths to only include files (not directories).
+#
+# Examples:
+#   var files_only = fs.filter_files(all_paths)
+#
+# Pure Tea implementation - uses is_file() on each path.
+pub def filter_files(paths: List[String]) -> List[String]
+  var result = []
+  var i = 0
+  var len = length(paths)
+
+  while i < len
+    if is_file(paths[i])
+      result = result +[paths[i]]
+    end
+
+    i = i + 1
+  end
+
+  result
+end
+
+# Filter a list of paths to only include directories.
+#
+# Examples:
+#   var dirs_only = fs.filter_dirs(all_paths)
+#
+# Pure Tea implementation - uses is_dir() on each path.
+pub def filter_dirs(paths: List[String]) -> List[String]
+  var result = []
+  var i = 0
+  var len = length(paths)
+
+  while i < len
+    if is_dir(paths[i])
+      result = result +[paths[i]]
+    end
+
+    i = i + 1
+  end
+
+  result
+end
+
+# Read a file if it exists, otherwise return a default value.
+#
+# Examples:
+#   var config = fs.read_text_or("config.txt", "{}")
+#
+# Pure Tea implementation - checks existence before reading.
+pub def read_text_or(file_path: String, default_value: String) -> String
+  if ! exists(file_path)
+    return default_value
+  end
+
+  read_text(file_path)
+end
+
+# Write text to a file, ensuring the parent directory exists.
+#
+# Examples:
+#   fs.write_text_safe("deep/path/file.txt", "content")
+#
+# Pure Tea implementation - calls ensure_parent() before writing.
+pub def write_text_safe(file_path: String, content: String) -> Void
+  ensure_parent(file_path)
+  write_text(file_path, content)
+end
+
+# Check if a directory is empty (contains no entries).
+#
+# Examples:
+#   if fs.is_empty_dir("temp")
+#     print("Directory is empty")
+#   end
+#
+# Pure Tea implementation - lists directory and checks length.
+pub def is_empty_dir(dir_path: String) -> Bool
+  if ! is_dir(dir_path)
+    return false
+  end
+
+  var entries = list_dir(dir_path)
+  length(entries) == 0
+end
+
+# Remove a file if it exists (no error if missing).
+#
+# Examples:
+#   fs.remove_if_exists("temp.txt")
+#
+# Pure Tea implementation - checks existence before removing.
+pub def remove_if_exists(file_path: String) -> Void
+  if exists(file_path)
+    remove(file_path)
+  end
 end

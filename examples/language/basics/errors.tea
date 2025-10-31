@@ -57,7 +57,7 @@ end
 
 def safe_length(path: String) -> Int
   var text = open(path) catch ""
-  return util.len(text)
+  return length(text)
 end
 
 print(shout("tea"))

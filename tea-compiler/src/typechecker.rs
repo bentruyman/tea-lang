@@ -2725,7 +2725,7 @@ impl TypeChecker {
                     type_arguments: Vec::new(),
                 });
             }
-            StdFunctionKind::ProcessRun | StdFunctionKind::ProcessWait => {
+            StdFunctionKind::ProcessRun => {
                 return_type = Type::Struct(StructType {
                     name: "ProcessResult".to_string(),
                     type_arguments: Vec::new(),
@@ -3394,9 +3394,22 @@ impl TypeChecker {
 
         match object_type {
             Type::List(element_type) => {
-                let int_type = Type::Int;
-                self.ensure_compatible(&int_type, &index_type, "list index", Some(span));
-                (*element_type).clone()
+                // Check if it's a range (slice) or single index
+                if let ExpressionKind::Range(range_expr) = &index.index.kind {
+                    // Validate that range start and end are Int
+                    let start_type = self.infer_expression(&range_expr.start);
+                    let end_type = self.infer_expression(&range_expr.end);
+                    let int_type = Type::Int;
+                    self.ensure_compatible(&int_type, &start_type, "range start", Some(span));
+                    self.ensure_compatible(&int_type, &end_type, "range end", Some(span));
+                    // Return a list of the same element type
+                    Type::List(element_type.clone())
+                } else {
+                    // Single element index
+                    let int_type = Type::Int;
+                    self.ensure_compatible(&int_type, &index_type, "list index", Some(span));
+                    (*element_type).clone()
+                }
             }
             Type::Dict(value_type) => {
                 let string_type = Type::String;
@@ -3404,9 +3417,21 @@ impl TypeChecker {
                 (*value_type).clone()
             }
             Type::String => {
-                let int_type = Type::Int;
-                self.ensure_compatible(&int_type, &index_type, "string index", Some(span));
-                Type::String
+                // Check if it's a range (slice) or single index
+                if let ExpressionKind::Range(range_expr) = &index.index.kind {
+                    // Validate that range start and end are Int
+                    let start_type = self.infer_expression(&range_expr.start);
+                    let end_type = self.infer_expression(&range_expr.end);
+                    let int_type = Type::Int;
+                    self.ensure_compatible(&int_type, &start_type, "range start", Some(span));
+                    self.ensure_compatible(&int_type, &end_type, "range end", Some(span));
+                    Type::String
+                } else {
+                    // Single character index
+                    let int_type = Type::Int;
+                    self.ensure_compatible(&int_type, &index_type, "string index", Some(span));
+                    Type::String
+                }
             }
             Type::Unknown => Type::Unknown,
             other => {
@@ -4053,19 +4078,7 @@ impl TypeChecker {
                             Some(&qualified),
                             Some(span),
                         );
-                        return match function.kind {
-                            StdFunctionKind::JsonDecode => self.type_from_json_decode(
-                                call,
-                                span,
-                                function.signature.return_type.clone(),
-                            ),
-                            StdFunctionKind::YamlDecode => self.type_from_yaml_decode(
-                                call,
-                                span,
-                                function.signature.return_type.clone(),
-                            ),
-                            _ => function.signature.return_type.clone(),
-                        };
+                        return function.signature.return_type.clone();
                     } else {
                         self.report_error(
                             format!(
@@ -4217,31 +4230,11 @@ impl TypeChecker {
                 };
                 self.record_function_instance(span, &identifier.name, instance);
 
-                if let Some(kind) = self.builtins.get(&identifier.name).copied() {
-                    match kind {
-                        StdFunctionKind::JsonDecode => {
-                            return self.type_from_json_decode(call, span, instantiated_return);
-                        }
-                        StdFunctionKind::YamlDecode => {
-                            return self.type_from_yaml_decode(call, span, instantiated_return);
-                        }
-                        _ => {}
-                    }
-                }
-
                 return instantiated_return;
             }
 
-            if let Some(kind) = self.builtins.get(&identifier.name).copied() {
-                return match kind {
-                    StdFunctionKind::JsonDecode => {
-                        self.type_from_json_decode(call, span, Type::Unknown)
-                    }
-                    StdFunctionKind::YamlDecode => {
-                        self.type_from_yaml_decode(call, span, Type::Unknown)
-                    }
-                    _ => Type::Nil,
-                };
+            if self.builtins.get(&identifier.name).is_some() {
+                return Type::Nil;
             }
         }
 

@@ -31,12 +31,11 @@ fn fs_roundtrip_through_vm() -> anyhow::Result<()> {
         r#"
 use assert = "std.assert"
 use fs = "std.fs"
-use util = "std.util"
 
 fs.ensure_dir("{dir}")
 
 var before = fs.list_dir("{dir}")
-assert.assert_eq(util.len(before), 0)
+assert.assert_eq(length(before), 0)
 
 fs.write_text_atomic("{file}", "hello fs")
 assert.assert(fs.exists("{file}"))
@@ -45,10 +44,6 @@ assert.assert(fs.is_symlink("{file}") == false)
 
 var original = fs.read_text("{file}")
 assert.assert_eq(original, "hello fs")
-
-var bytes = fs.read_bytes("{file}")
-assert.assert_eq(util.len(bytes), 8)
-assert.assert_eq(bytes[0], 104)
 
 var info = fs.metadata("{file}")
 assert.assert(info["is_file"])
@@ -62,42 +57,36 @@ var perms = fs.permissions("{file}")
 assert.assert(perms > 0)
 
 var after_write = fs.list_dir("{dir}")
-assert.assert_eq(util.len(after_write), 1)
+assert.assert_eq(length(after_write), 1)
 assert.assert_eq(after_write[0], "{file}")
 
 var matches = fs.glob("{dir}/*.txt")
-assert.assert_eq(util.len(matches), 1)
+assert.assert_eq(length(matches), 1)
 assert.assert_eq(matches[0], "{file}")
 
 var visit_before = fs.walk("{dir}")
-assert.assert_eq(util.len(visit_before), 1)
+assert.assert_eq(length(visit_before), 1)
 assert.assert_eq(visit_before[0], "{file}")
 
 fs.ensure_parent("{copy}")
-fs.write_bytes_atomic("{copy}", bytes)
+fs.write_text("{copy}", "hello fs")
 assert.assert(fs.exists("{copy}"))
 assert.assert_eq(fs.size("{copy}"), fs.size("{file}"))
 assert.assert(fs.modified("{file}") > 0)
 
 var after_copy = fs.list_dir("{dir}")
-assert.assert_eq(util.len(after_copy), 2)
+assert.assert_eq(length(after_copy), 2)
 assert.assert_eq(after_copy[0], "{backups}")
 assert.assert_eq(after_copy[1], "{file}")
 
 var visit_after = fs.walk("{dir}")
-assert.assert_eq(util.len(visit_after), 3)
+assert.assert_eq(length(visit_after), 3)
 
 var copy_info = fs.metadata("{copy}")
 assert.assert(copy_info["is_file"])
 
 var pattern_all = fs.glob("{dir}/**/*")
-assert.assert(util.len(pattern_all) >= 3)
-
-var handle = fs.open_read("{copy}")
-var chunk = fs.read_chunk(handle, 4)
-assert.assert_eq(util.len(chunk), 4)
-assert.assert_eq(chunk[0], bytes[0])
-fs.close(handle)
+assert.assert(length(pattern_all) >= 3)
 
 fs.remove("{copy}")
 fs.remove("{backups}")

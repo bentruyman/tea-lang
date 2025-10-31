@@ -2,69 +2,41 @@ use super::{std_function, StdArity, StdFunction, StdFunctionKind, StdModule, Std
 use crate::stdlib::std_module;
 
 const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
-    // Type predicates - these map directly to intrinsic calls in AOT
-    std_function(
-        "is_nil",
-        StdFunctionKind::UtilIsNil,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_bool",
-        StdFunctionKind::UtilIsBool,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_int",
-        StdFunctionKind::UtilIsInt,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_float",
-        StdFunctionKind::UtilIsFloat,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_string",
-        StdFunctionKind::UtilIsString,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_list",
-        StdFunctionKind::UtilIsList,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_struct",
-        StdFunctionKind::UtilIsStruct,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_error",
-        StdFunctionKind::UtilIsError,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::Bool,
-    ),
     // Conversion
     std_function(
         "to_string",
         StdFunctionKind::UtilToString,
         StdArity::Exact(1),
         &[StdType::Any],
+        StdType::String,
+    ),
+    // String utilities
+    std_function(
+        "string_index_of",
+        StdFunctionKind::StringIndexOf,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Int,
+    ),
+    std_function(
+        "string_split",
+        StdFunctionKind::StringSplit,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::List,
+    ),
+    std_function(
+        "string_contains",
+        StdFunctionKind::StringContains,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
+        "string_replace",
+        StdFunctionKind::StringReplace,
+        StdArity::Exact(3),
+        &[StdType::String, StdType::String, StdType::String],
         StdType::String,
     ),
     // Assertions
@@ -344,42 +316,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[],
         StdType::String,
     ),
-    // I/O
-    std_function(
-        "io_read_line",
-        StdFunctionKind::IoReadLine,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
-    std_function(
-        "io_read_all",
-        StdFunctionKind::IoReadAll,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
-    std_function(
-        "io_write",
-        StdFunctionKind::IoWrite,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "io_write_err",
-        StdFunctionKind::IoWriteErr,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "io_flush",
-        StdFunctionKind::IoFlush,
-        StdArity::Exact(0),
-        &[],
-        StdType::Void,
-    ),
     // Process
     std_function(
         "process_run",
@@ -387,35 +323,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::List],
         StdType::Struct,
-    ),
-    // Codecs
-    std_function(
-        "json_encode",
-        StdFunctionKind::JsonEncode,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::String,
-    ),
-    std_function(
-        "json_decode",
-        StdFunctionKind::JsonDecode,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Any,
-    ),
-    std_function(
-        "yaml_encode",
-        StdFunctionKind::YamlEncode,
-        StdArity::Exact(1),
-        &[StdType::Any],
-        StdType::String,
-    ),
-    std_function(
-        "yaml_decode",
-        StdFunctionKind::YamlDecode,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Any,
     ),
     // CLI
     std_function(

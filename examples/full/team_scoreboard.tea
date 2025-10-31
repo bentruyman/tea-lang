@@ -1,5 +1,4 @@
 # Expect: Team scoreboard, Ada: 7 wins / 3 losses, Grace: 9 wins / 1 loss, Linus: 5 wins / 5 losses, Top team: Grace, Grace is dominating the league, Fan favorite: Grace: 9 wins / 1 loss, Sorry, Unknown is not on the schedule
-use util = "std.util"
 
 struct Team {
   name: String
@@ -23,7 +22,7 @@ print("Team scoreboard")
 
 var index = 0
 
-while index < util.len(teams)
+while index < length(teams)
   print(format_team(teams[index]))
   index = index + 1
 end
@@ -31,7 +30,7 @@ end
 var champion = teams[0]
 var next_index = 1
 
-while next_index < util.len(teams)
+while next_index < length(teams)
   var contender = teams[next_index]
 
   if contender.wins > champion.wins
@@ -62,7 +61,7 @@ print(describe_margin(champion))
 def find_team(name: String) -> Team ! TeamError.NotFound
   var idx = 0
 
-  while idx < util.len(teams)
+  while idx < length(teams)
     var candidate = teams[idx]
 
     if candidate.name == name

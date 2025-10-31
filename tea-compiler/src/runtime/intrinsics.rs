@@ -6,18 +6,14 @@
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Intrinsic {
-    // Type predicates
-    IsNil,
-    IsBool,
-    IsInt,
-    IsFloat,
-    IsString,
-    IsList,
-    IsStruct,
-    IsError,
-
     // Conversion
     ToString,
+
+    // String utilities
+    StringIndexOf,
+    StringSplit,
+    StringContains,
+    StringReplace,
 
     // Assertions
     Fail,
@@ -39,9 +35,6 @@ pub enum Intrinsic {
     FsReadText,
     FsWriteText,
     FsWriteTextAtomic,
-    FsReadBytes,
-    FsWriteBytes,
-    FsWriteBytesAtomic,
     FsCreateDir,
     FsRemove,
     FsExists,
@@ -55,9 +48,6 @@ pub enum Intrinsic {
     FsWalk,
     FsGlob,
     FsMetadata,
-    FsOpenRead,
-    FsReadChunk,
-    FsClose,
 
     // Path
     PathJoin,
@@ -73,30 +63,15 @@ pub enum Intrinsic {
     PathIsAbsolute,
     PathSeparator,
 
-    // I/O
-    IoReadLine,
-    IoReadAll,
-    IoReadBytes,
-    IoWrite,
-    IoWriteErr,
-    IoFlush,
-
     // Process
     ProcessRun,
     ProcessSpawn,
-    ProcessWait,
     ProcessKill,
     ProcessReadStdout,
     ProcessReadStderr,
     ProcessWriteStdin,
     ProcessCloseStdin,
     ProcessClose,
-
-    // Codecs
-    JsonEncode,
-    JsonDecode,
-    YamlEncode,
-    YamlDecode,
 
     // CLI
     CliArgs,
@@ -111,18 +86,14 @@ impl Intrinsic {
         let name = name.strip_prefix("__intrinsic_")?;
 
         Some(match name {
-            // Type predicates
-            "is_nil" => Self::IsNil,
-            "is_bool" => Self::IsBool,
-            "is_int" => Self::IsInt,
-            "is_float" => Self::IsFloat,
-            "is_string" => Self::IsString,
-            "is_list" => Self::IsList,
-            "is_struct" => Self::IsStruct,
-            "is_error" => Self::IsError,
-
             // Conversion
             "to_string" => Self::ToString,
+
+            // String utilities
+            "string_index_of" => Self::StringIndexOf,
+            "string_split" => Self::StringSplit,
+            "string_contains" => Self::StringContains,
+            "string_replace" => Self::StringReplace,
 
             // Assertions
             "fail" => Self::Fail,
@@ -144,9 +115,6 @@ impl Intrinsic {
             "fs_read_text" => Self::FsReadText,
             "fs_write_text" => Self::FsWriteText,
             "fs_write_text_atomic" => Self::FsWriteTextAtomic,
-            "fs_read_bytes" => Self::FsReadBytes,
-            "fs_write_bytes" => Self::FsWriteBytes,
-            "fs_write_bytes_atomic" => Self::FsWriteBytesAtomic,
             "fs_create_dir" => Self::FsCreateDir,
             "fs_remove" => Self::FsRemove,
             "fs_exists" => Self::FsExists,
@@ -160,9 +128,6 @@ impl Intrinsic {
             "fs_walk" => Self::FsWalk,
             "fs_glob" => Self::FsGlob,
             "fs_metadata" => Self::FsMetadata,
-            "fs_open_read" => Self::FsOpenRead,
-            "fs_read_chunk" => Self::FsReadChunk,
-            "fs_close" => Self::FsClose,
 
             // Path
             "path_join" => Self::PathJoin,
@@ -178,30 +143,15 @@ impl Intrinsic {
             "path_is_absolute" => Self::PathIsAbsolute,
             "path_separator" => Self::PathSeparator,
 
-            // I/O
-            "io_read_line" => Self::IoReadLine,
-            "io_read_all" => Self::IoReadAll,
-            "io_read_bytes" => Self::IoReadBytes,
-            "io_write" => Self::IoWrite,
-            "io_write_err" => Self::IoWriteErr,
-            "io_flush" => Self::IoFlush,
-
             // Process
             "process_run" => Self::ProcessRun,
             "process_spawn" => Self::ProcessSpawn,
-            "process_wait" => Self::ProcessWait,
             "process_kill" => Self::ProcessKill,
             "process_read_stdout" => Self::ProcessReadStdout,
             "process_read_stderr" => Self::ProcessReadStderr,
             "process_write_stdin" => Self::ProcessWriteStdin,
             "process_close_stdin" => Self::ProcessCloseStdin,
             "process_close" => Self::ProcessClose,
-
-            // Codecs
-            "json_encode" => Self::JsonEncode,
-            "json_decode" => Self::JsonDecode,
-            "yaml_encode" => Self::YamlEncode,
-            "yaml_decode" => Self::YamlDecode,
 
             // CLI
             "cli_args" => Self::CliArgs,
@@ -216,18 +166,14 @@ impl Intrinsic {
     #[allow(dead_code)]
     pub fn name(self) -> &'static str {
         match self {
-            // Type predicates
-            Self::IsNil => "__intrinsic_is_nil",
-            Self::IsBool => "__intrinsic_is_bool",
-            Self::IsInt => "__intrinsic_is_int",
-            Self::IsFloat => "__intrinsic_is_float",
-            Self::IsString => "__intrinsic_is_string",
-            Self::IsList => "__intrinsic_is_list",
-            Self::IsStruct => "__intrinsic_is_struct",
-            Self::IsError => "__intrinsic_is_error",
-
             // Conversion
             Self::ToString => "__intrinsic_to_string",
+
+            // String utilities
+            Self::StringIndexOf => "__intrinsic_string_index_of",
+            Self::StringSplit => "__intrinsic_string_split",
+            Self::StringContains => "__intrinsic_string_contains",
+            Self::StringReplace => "__intrinsic_string_replace",
 
             // Assertions
             Self::Fail => "__intrinsic_fail",
@@ -249,9 +195,6 @@ impl Intrinsic {
             Self::FsReadText => "__intrinsic_fs_read_text",
             Self::FsWriteText => "__intrinsic_fs_write_text",
             Self::FsWriteTextAtomic => "__intrinsic_fs_write_text_atomic",
-            Self::FsReadBytes => "__intrinsic_fs_read_bytes",
-            Self::FsWriteBytes => "__intrinsic_fs_write_bytes",
-            Self::FsWriteBytesAtomic => "__intrinsic_fs_write_bytes_atomic",
             Self::FsCreateDir => "__intrinsic_fs_create_dir",
             Self::FsRemove => "__intrinsic_fs_remove",
             Self::FsExists => "__intrinsic_fs_exists",
@@ -265,9 +208,6 @@ impl Intrinsic {
             Self::FsWalk => "__intrinsic_fs_walk",
             Self::FsGlob => "__intrinsic_fs_glob",
             Self::FsMetadata => "__intrinsic_fs_metadata",
-            Self::FsOpenRead => "__intrinsic_fs_open_read",
-            Self::FsReadChunk => "__intrinsic_fs_read_chunk",
-            Self::FsClose => "__intrinsic_fs_close",
 
             // Path
             Self::PathJoin => "__intrinsic_path_join",
@@ -283,30 +223,15 @@ impl Intrinsic {
             Self::PathIsAbsolute => "__intrinsic_path_is_absolute",
             Self::PathSeparator => "__intrinsic_path_separator",
 
-            // I/O
-            Self::IoReadLine => "__intrinsic_io_read_line",
-            Self::IoReadAll => "__intrinsic_io_read_all",
-            Self::IoReadBytes => "__intrinsic_io_read_bytes",
-            Self::IoWrite => "__intrinsic_io_write",
-            Self::IoWriteErr => "__intrinsic_io_write_err",
-            Self::IoFlush => "__intrinsic_io_flush",
-
             // Process
             Self::ProcessRun => "__intrinsic_process_run",
             Self::ProcessSpawn => "__intrinsic_process_spawn",
-            Self::ProcessWait => "__intrinsic_process_wait",
             Self::ProcessKill => "__intrinsic_process_kill",
             Self::ProcessReadStdout => "__intrinsic_process_read_stdout",
             Self::ProcessReadStderr => "__intrinsic_process_read_stderr",
             Self::ProcessWriteStdin => "__intrinsic_process_write_stdin",
             Self::ProcessCloseStdin => "__intrinsic_process_close_stdin",
             Self::ProcessClose => "__intrinsic_process_close",
-
-            // Codecs
-            Self::JsonEncode => "__intrinsic_json_encode",
-            Self::JsonDecode => "__intrinsic_json_decode",
-            Self::YamlEncode => "__intrinsic_yaml_encode",
-            Self::YamlDecode => "__intrinsic_yaml_decode",
 
             // CLI
             Self::CliArgs => "__intrinsic_cli_args",
@@ -320,17 +245,13 @@ impl Intrinsic {
     pub fn all() -> impl Iterator<Item = Self> {
         use Intrinsic::*;
         [
-            // Type predicates
-            IsNil,
-            IsBool,
-            IsInt,
-            IsFloat,
-            IsString,
-            IsList,
-            IsStruct,
-            IsError,
             // Conversion
             ToString,
+            // String utilities
+            StringIndexOf,
+            StringSplit,
+            StringContains,
+            StringReplace,
             // Assertions
             Fail,
             AssertSnapshot,
@@ -349,9 +270,6 @@ impl Intrinsic {
             FsReadText,
             FsWriteText,
             FsWriteTextAtomic,
-            FsReadBytes,
-            FsWriteBytes,
-            FsWriteBytesAtomic,
             FsCreateDir,
             FsRemove,
             FsExists,
@@ -365,9 +283,6 @@ impl Intrinsic {
             FsWalk,
             FsGlob,
             FsMetadata,
-            FsOpenRead,
-            FsReadChunk,
-            FsClose,
             // Path
             PathJoin,
             PathComponents,
@@ -381,28 +296,15 @@ impl Intrinsic {
             PathRelative,
             PathIsAbsolute,
             PathSeparator,
-            // I/O
-            IoReadLine,
-            IoReadAll,
-            IoReadBytes,
-            IoWrite,
-            IoWriteErr,
-            IoFlush,
             // Process
             ProcessRun,
             ProcessSpawn,
-            ProcessWait,
             ProcessKill,
             ProcessReadStdout,
             ProcessReadStderr,
             ProcessWriteStdin,
             ProcessCloseStdin,
             ProcessClose,
-            // Codecs
-            JsonEncode,
-            JsonDecode,
-            YamlEncode,
-            YamlDecode,
             // CLI
             CliArgs,
             CliParse,

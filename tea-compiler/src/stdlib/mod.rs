@@ -5,12 +5,9 @@ mod docs;
 mod env;
 mod fs;
 mod intrinsics;
-mod io;
-mod json;
 mod path;
 mod process;
 mod util;
-mod yaml;
 
 use docs::function_doc;
 
@@ -30,17 +27,12 @@ pub enum StdFunctionKind {
     AssertEq,
     AssertNe,
     AssertFail,
-    UtilLen,
     UtilToString,
     UtilClampInt,
-    UtilIsNil,
-    UtilIsBool,
-    UtilIsInt,
-    UtilIsFloat,
-    UtilIsString,
-    UtilIsList,
-    UtilIsStruct,
-    UtilIsError,
+    StringIndexOf,
+    StringSplit,
+    StringContains,
+    StringReplace,
     EnvGet,
     EnvGetOr,
     EnvHas,
@@ -56,9 +48,6 @@ pub enum StdFunctionKind {
     FsReadText,
     FsWriteText,
     FsWriteTextAtomic,
-    FsReadBytes,
-    FsWriteBytes,
-    FsWriteBytesAtomic,
     FsCreateDir,
     FsEnsureDir,
     FsEnsureParent,
@@ -74,9 +63,6 @@ pub enum StdFunctionKind {
     FsGlob,
     FsMetadata,
     FsPermissions,
-    FsOpenRead,
-    FsReadChunk,
-    FsClose,
     PathJoin,
     PathComponents,
     PathDirname,
@@ -89,16 +75,6 @@ pub enum StdFunctionKind {
     PathRelative,
     PathIsAbsolute,
     PathSeparator,
-    IoReadLine,
-    IoReadAll,
-    IoReadBytes,
-    IoWrite,
-    IoWriteErr,
-    IoFlush,
-    JsonEncode,
-    JsonDecode,
-    YamlEncode,
-    YamlDecode,
     AssertSnapshot,
     AssertEmpty,
     CliCapture,
@@ -106,7 +82,6 @@ pub enum StdFunctionKind {
     CliParse,
     ProcessRun,
     ProcessSpawn,
-    ProcessWait,
     ProcessKill,
     ProcessReadStdout,
     ProcessReadStderr,
@@ -205,11 +180,8 @@ pub static MODULES: &[StdModule] = &[
     env::MODULE,
     fs::MODULE,
     path::MODULE,
-    io::MODULE,
     cli::MODULE,
     process::MODULE,
-    json::MODULE,
-    yaml::MODULE,
     intrinsics::MODULE,
 ];
 

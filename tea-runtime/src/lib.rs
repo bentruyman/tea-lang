@@ -1959,6 +1959,29 @@ pub extern "C" fn tea_list_get(list: *const TeaList, index: c_longlong) -> TeaVa
 }
 
 #[no_mangle]
+pub extern "C" fn tea_string_index(string: *const TeaString, index: c_longlong) -> *mut TeaString {
+    if string.is_null() {
+        panic!("null string");
+    }
+    if index < 0 {
+        panic!("negative index");
+    }
+    unsafe {
+        let string_ref = &*string;
+        let bytes =
+            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let text = std::str::from_utf8(bytes).unwrap_or_else(|_| panic!("invalid UTF-8 in string"));
+        let chars: Vec<char> = text.chars().collect();
+        let idx = index as usize;
+        if idx >= chars.len() {
+            panic!("index out of bounds");
+        }
+        let ch = chars[idx];
+        alloc_tea_string(&ch.to_string())
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_dict_new() -> *mut TeaDict {
     Box::into_raw(Box::new(TeaDict {
         entries: HashMap::new(),

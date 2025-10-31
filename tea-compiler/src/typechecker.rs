@@ -3403,11 +3403,16 @@ impl TypeChecker {
                 self.ensure_compatible(&string_type, &index_type, "dict index", Some(span));
                 (*value_type).clone()
             }
+            Type::String => {
+                let int_type = Type::Int;
+                self.ensure_compatible(&int_type, &index_type, "string index", Some(span));
+                Type::String
+            }
             Type::Unknown => Type::Unknown,
             other => {
                 self.report_error(
                     format!(
-                        "indexing requires a list or dict value, found {}",
+                        "indexing requires a list, dict, or string value, found {}",
                         other.describe()
                     ),
                     Some(span),

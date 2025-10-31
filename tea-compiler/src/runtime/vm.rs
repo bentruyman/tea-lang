@@ -507,8 +507,8 @@ impl Vm {
                 }
                 Instruction::Index => {
                     let index_value = self.pop()?;
-                    let list_value = self.pop()?;
-                    match (list_value, index_value) {
+                    let collection_value = self.pop()?;
+                    match (collection_value, index_value) {
                         (Value::List(list), Value::Int(index)) => {
                             if index < 0 {
                                 bail!(VmError::Runtime("negative index".to_string()));
@@ -529,6 +529,17 @@ impl Vm {
                                 )));
                             }
                         }
+                        (Value::String(s), Value::Int(index)) => {
+                            if index < 0 {
+                                bail!(VmError::Runtime("negative index".to_string()));
+                            }
+                            let chars: Vec<char> = s.chars().collect();
+                            let idx = index as usize;
+                            if idx >= chars.len() {
+                                bail!(VmError::Runtime("index out of bounds".to_string()));
+                            }
+                            self.stack.push(Value::String(chars[idx].to_string()));
+                        }
                         (Value::List(_), _) => {
                             bail!(VmError::Runtime("list index must be an Int".to_string()));
                         }
@@ -537,9 +548,12 @@ impl Vm {
                                 "dictionary index must be a String".to_string()
                             ));
                         }
+                        (Value::String(_), _) => {
+                            bail!(VmError::Runtime("string index must be an Int".to_string()));
+                        }
                         _ => {
                             bail!(VmError::Runtime(
-                                "indexing requires a list or dictionary value".to_string()
+                                "indexing requires a list, dictionary, or string value".to_string()
                             ));
                         }
                     }

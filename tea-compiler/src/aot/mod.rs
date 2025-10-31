@@ -808,6 +808,7 @@ struct LlvmCodeGenerator<'ctx> {
     alloc_struct_fn: Option<FunctionValue<'ctx>>,
     list_set_fn: Option<FunctionValue<'ctx>>,
     list_get_fn: Option<FunctionValue<'ctx>>,
+    string_index_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
     struct_get_fn: Option<FunctionValue<'ctx>>,
     error_alloc_fn: Option<FunctionValue<'ctx>>,
@@ -1043,6 +1044,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             alloc_struct_fn: None,
             list_set_fn: None,
             list_get_fn: None,
+            string_index_fn: None,
             struct_set_fn: None,
             struct_get_fn: None,
             error_alloc_fn: None,
@@ -3447,7 +3449,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .into_struct_value();
                 self.tea_value_to_expr(tea_value, *value_type)
             }
-            _ => bail!("indexing expects a list value"),
+            ExprValue::String(string_ptr) => {
+                let index_value = key_expr.into_int()?;
+                let string_index_fn = self.ensure_string_index();
+                let result_ptr = self
+                    .call_function(
+                        string_index_fn,
+                        &[string_ptr.into(), index_value.into()],
+                        "string_index",
+                    )?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("expected String from string_index"))?
+                    .into_pointer_value();
+                Ok(ExprValue::String(result_ptr))
+            }
+            _ => bail!("indexing expects a list, dict, or string value"),
         }
     }
 
@@ -11184,6 +11201,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_list_get", fn_type, Some(Linkage::External));
         self.list_get_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_index(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_index_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.int_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_string_index", fn_type, Some(Linkage::External));
+        self.string_index_fn = Some(func);
         func
     }
 

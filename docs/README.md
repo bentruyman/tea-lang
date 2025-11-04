@@ -22,12 +22,17 @@ Technical specifications and API documentation.
 
 - [Language Semantics](reference/language/semantics.md)
 - [Type System](reference/language/type-system.md)
+- [Intrinsics](reference/language/intrinsics.md)
+- [Intrinsics Implementation](reference/language/intrinsics-implementation.md)
+- [Tea Stdlib Design](reference/language/tea-stdlib-design.md)
+- [AOT Optimization Results](reference/aot-optimization-results.md)
 
 ### Explanation
 
 Architecture decisions, design rationale, and deep dives.
 
 - [AOT Backend Architecture](explanation/aot-backend.md)
+- [LLVM AOT Implementation](explanation/aot-llvm-implementation.md)
 - [Compiler Code Generation](explanation/compiler-codegen.md)
 
 ### Roadmap
@@ -41,13 +46,17 @@ Project planning and feature roadmaps.
 
 Version migration guides and breaking change documentation.
 
-- [AST Migration Guide](migrations/ast-migration.md)
+- [AST Codegen Migration Guide](migrations/ast-codegen-migration.md)
 
-### RFCs
+### Archive
 
-Proposals and technical plans for major features.
+Historical documents for completed migrations and analyses. These are kept for reference but represent work that has been completed.
 
-- [LLVM AOT Backend Plan](rfcs/aot-llvm-plan.md)
+See [archive/](archive/) for:
+
+- Stdlib migration summaries and analysis
+- Optimization roadmaps and comparisons
+- Completed migration plans
 
 ## Contributing to Documentation
 
@@ -65,7 +74,7 @@ Proposals and technical plans for major features.
 - **Explanation**: Understanding-oriented, context, alternatives
 - **Roadmap**: Future plans, timelines, priorities
 - **Migrations**: Version transitions, breaking changes
-- **RFCs**: Proposals, design discussions, not-yet-implemented
+- **Archive**: Historical documents from completed work
 
 ### Writing Style
 

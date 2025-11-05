@@ -1,16 +1,12 @@
 # Comprehensive test of Tea-native stdlib modules
-# Tests all migrated modules: env, fs, path, cli
+# Tests all migrated modules: env, fs, path
 
 use env = "std.env"
 use fs = "std.fs"
 use path = "std.path"
-use cli = "std.cli"
 
 pub def test_env() -> Void
   print("=== Testing std.env ===")
-
-  # Test get
-  print(env.home_dir())
 
   # Test cwd
   print(env.cwd())
@@ -32,10 +28,6 @@ pub def test_env() -> Void
   if ! env.has("TEA_TEST_VAR")
     print("✓ env.unset works")
   end
-
-  # Test temp_dir and config_dir
-  print(env.temp_dir())
-  print(env.config_dir())
 end
 
 pub def test_path() -> Void
@@ -52,33 +44,21 @@ pub def test_path() -> Void
   # Test extension
   print(path.extension("script.tea"))
 
-  # Test strip_extension
-  print(path.strip_extension("script.tea"))
-
   # Test separator
   print(path.separator())
-
-  # Test is_absolute
-  if path.is_absolute("/usr/local")
-    print("✓ is_absolute works")
-  end
 end
 
 pub def test_fs() -> Void
   print("=== Testing std.fs ===")
 
-  # Test exists and is_dir on current directory
+  # Test exists on current directory
   var cwd = env.cwd()
 
   if fs.exists(cwd)
     print("✓ fs.exists works")
   end
 
-  if fs.is_dir(cwd)
-    print("✓ fs.is_dir works")
-  end
-
-  # Test ensure_dir and ensure_parent
+  # Test ensure_dir
   var test_dir = "/tmp/tea_test_dir/nested"
   fs.ensure_dir(test_dir)
 
@@ -97,11 +77,6 @@ pub def test_fs() -> Void
     print("✓ fs.write_text and fs.read_text work")
   end
 
-  # Test size (checking that file exists and has content)
-  if fs.size(test_file) > 0
-    print("✓ fs.size works")
-  end
-
   # Clean up
   fs.remove(test_file)
 
@@ -110,18 +85,9 @@ pub def test_fs() -> Void
   end
 end
 
-pub def test_cli() -> Void
-  print("=== Testing std.cli ===")
-
-  var args = cli.args()
-  print("Program arguments:")
-  print(args)
-end
-
 # Run all tests
 test_env()
 test_path()
 test_fs()
-test_cli()
 
 print("=== All Stdlib Tests Complete ===")

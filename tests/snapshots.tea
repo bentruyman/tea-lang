@@ -1,13 +1,13 @@
 use assert = "std.assert"
 
 test "basic snapshot"
-  assert.assert_snapshot("basic", "hello snapshot\n")
+  assert.snapshot("basic", "hello snapshot\n")
 end
 
 test "empty string helper"
-  assert.assert_empty("")
+  assert.empty("")
 end
 
 test "labelled snapshot"
-  assert.assert_snapshot("with_label", "labelled output\n", "stdout")
+  assert.snapshot("with_label", "labelled output\n", "stdout")
 end

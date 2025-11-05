@@ -27,11 +27,11 @@ fn test_lists_discovered_tests() {
 use assert = "std.assert"
 
 test "one"
-  assert.assert_eq(1, 1)
+  assert.eq(1, 1)
 end
 
 test "two"
-  assert.assert_eq(2, 2)
+  assert.eq(2, 2)
 end
 "#,
     )
@@ -71,7 +71,7 @@ fn test_runs_tests_and_reports_failures() {
 use assert = "std.assert"
 
 test "passing"
-  assert.assert_eq(3, 3)
+  assert.eq(3, 3)
 end
 "#,
     )
@@ -103,7 +103,7 @@ end
 use assert = "std.assert"
 
 test "failing"
-  assert.assert_eq(1, 2)
+  assert.eq(1, 2)
 end
 "#,
     )

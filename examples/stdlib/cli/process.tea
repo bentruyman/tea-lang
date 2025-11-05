@@ -1,9 +1,0 @@
-use process = "std.process"
-use util = "std.util"
-
-# Run a command and capture its output.
-var result = process.run("sh", ["-c", "printf hello"])
-print("run stdout:")
-print(result.stdout)
-print("run exit code:")
-print(util.to_string(result.exit))

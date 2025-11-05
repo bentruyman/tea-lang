@@ -76,23 +76,3 @@ fn parse_lambdas_example() -> anyhow::Result<()> {
 fn parse_basic_test_example() -> anyhow::Result<()> {
     compile_example("examples/language/basics/basic_test.tea")
 }
-
-#[test]
-fn parse_cli_parse_example() -> anyhow::Result<()> {
-    compile_example("examples/stdlib/cli/parse.tea")
-}
-
-#[test]
-fn parse_cli_fs_example() -> anyhow::Result<()> {
-    compile_example("examples/stdlib/cli/fs.tea")
-}
-
-#[test]
-fn parse_cli_process_example() -> anyhow::Result<()> {
-    compile_example("examples/stdlib/cli/process.tea")
-}
-
-#[test]
-fn parse_cli_env_example() -> anyhow::Result<()> {
-    compile_example("examples/stdlib/cli/env.tea")
-}

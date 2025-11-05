@@ -8,13 +8,10 @@
 #   ✓ basename() - extracts filename
 #   ✓ dirname() - extracts directory
 #   ✓ extension() - extracts file extension
-#   ✓ strip_extension() - removes extension
-#   ✓ set_extension() - replaces extension
 #   ✓ normalize() - resolves . and .. components
 #
 # Remaining intrinsics (require OS interaction or platform-specific logic):
 #   - separator() - platform-specific ("/" vs "\")
-#   - is_absolute() - platform-specific (Unix vs Windows drive letters)
 #   - absolute() - requires OS interaction to resolve current directory
 #   - relative() - complex path resolution logic
 
@@ -240,45 +237,6 @@ pub def extension(file_path: String) -> String
   base[pos + 1...length(base)]
 end
 
-# Remove the extension from a path.
-#
-# Examples:
-#   var no_ext = path.strip_extension("file.tea")  # => "file"
-#   var no_ext = path.strip_extension("/path/to/file.tar.gz")  # => "/path/to/file.tar"
-#   var no_ext = path.strip_extension(".env")  # => ".env"
-#
-# Pure Tea implementation - removes everything after the last dot in basename.
-pub def strip_extension(file_path: String) -> String
-  var ext = extension(file_path)
-
-  # No extension to strip
-  if length(ext) == 0
-    return file_path
-  end
-
-  # Remove the extension and the dot
-  var ext_len = length(ext) + 1
-  file_path[0..length(file_path) - ext_len]
-end
-
-# Set the extension of a path.
-#
-# Examples:
-#   var new_path = path.set_extension("file.txt", "md")  # => "file.md"
-#   var new_path = path.set_extension("file", "txt")  # => "file.txt"
-#   var new_path = path.set_extension("/path/to/file.old", "new")  # => "/path/to/file.new"
-#
-# Pure Tea implementation - strips existing extension and appends new one.
-pub def set_extension(file_path: String, ext: String) -> String
-  var without_ext = strip_extension(file_path)
-
-  if length(ext) == 0
-    return without_ext
-  end
-
-  without_ext + "." + ext
-end
-
 # Normalize a path (remove . and .. components).
 #
 # Examples:
@@ -293,7 +251,8 @@ pub def normalize(file_path: String) -> String
   end
 
   var sep = intrinsics.path_separator()
-  var is_abs = intrinsics.path_is_absolute(file_path)
+  # Check if path is absolute by looking at first character
+  var is_abs = length(file_path) > 0 && file_path[0] == sep
   var parts = components(file_path)
   var stack = []
   var i = 0
@@ -358,20 +317,6 @@ end
 #   var rel = path.relative("/usr/local", "/usr/local/bin")  # => "bin"
 pub def relative(from: String, to: String) -> String
   intrinsics.path_relative(from, to)
-end
-
-# Check if a path is absolute.
-#
-# Examples:
-#   if path.is_absolute("/usr/local")
-#     print("Absolute path")
-#   end
-#
-# NOTE: Uses intrinsic because Tea lacks string comparison operators (>, <, >=, <=)
-# needed to check if a character is in a range (e.g., 'A' to 'Z').
-# A pure Tea implementation would need character comparison or a contains() function.
-pub def is_absolute(file_path: String) -> Bool
-  intrinsics.path_is_absolute(file_path)
 end
 
 # Get the system path separator ("/" or "\").

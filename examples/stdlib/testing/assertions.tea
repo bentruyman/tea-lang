@@ -1,15 +1,10 @@
 use assert = "std.assert"
-use util = "std.util"
 
 var words = ["tea", "lang"]
 
 assert.assert(length(words) == 2, "expected two elements")
-assert.assert_eq(true, true)
-assert.assert_ne(1, 2)
+assert.eq(true, true)
+assert.ne(1, 2)
 
 print("len of 'tea':")
 print(length("tea"))
-print("clamped:")
-print(util.clamp_int(12, 0, 5))
-print("as string:")
-print(util.to_string(words))

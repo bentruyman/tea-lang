@@ -24,7 +24,7 @@ use assert = "std.assert"
 
 var x = 5
 x += 3
-assert.assert_eq(x, 8)
+assert.eq(x, 8)
 "#;
     run_code(code)
 }
@@ -36,7 +36,7 @@ use assert = "std.assert"
 
 var x = 5.5
 x += 2.5
-assert.assert_eq(x, 8.0)
+assert.eq(x, 8.0)
 "#;
     run_code(code)
 }
@@ -48,7 +48,7 @@ use assert = "std.assert"
 
 var x = 10
 x -= 3
-assert.assert_eq(x, 7)
+assert.eq(x, 7)
 "#;
     run_code(code)
 }
@@ -60,7 +60,7 @@ use assert = "std.assert"
 
 var x = 10.5
 x -= 2.5
-assert.assert_eq(x, 8.0)
+assert.eq(x, 8.0)
 "#;
     run_code(code)
 }
@@ -72,7 +72,7 @@ use assert = "std.assert"
 
 var x = 5
 x *= 3
-assert.assert_eq(x, 15)
+assert.eq(x, 15)
 "#;
     run_code(code)
 }
@@ -84,7 +84,7 @@ use assert = "std.assert"
 
 var x = 2.5
 x *= 4.0
-assert.assert_eq(x, 10.0)
+assert.eq(x, 10.0)
 "#;
     run_code(code)
 }
@@ -98,7 +98,7 @@ var x = 10
 x += 5
 x -= 3
 x *= 2
-assert.assert_eq(x, 24)
+assert.eq(x, 24)
 "#;
     run_code(code)
 }
@@ -111,7 +111,7 @@ use assert = "std.assert"
 var x = 5
 var y = 3
 x += y + 2
-assert.assert_eq(x, 10)
+assert.eq(x, 10)
 "#;
     run_code(code)
 }
@@ -127,7 +127,7 @@ def increment(n: Int) -> Int
   return result
 end
 
-assert.assert_eq(increment(5), 6)
+assert.eq(increment(5), 6)
 "#;
     run_code(code)
 }
@@ -141,7 +141,7 @@ var sum = 0
 for i of [1, 2, 3, 4, 5]
   sum += i
 end
-assert.assert_eq(sum, 15)
+assert.eq(sum, 15)
 "#;
     run_code(code)
 }

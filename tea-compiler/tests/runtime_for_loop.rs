@@ -15,7 +15,7 @@ test "for loop iterates over list"
     sum = sum + num
   end
   
-  assert.assert_eq(sum, 6)
+  assert.eq(sum, 6)
 end
 "#;
 
@@ -58,7 +58,7 @@ test "for loop with empty list"
     count = count + 1
   end
   
-  assert.assert_eq(count, 0)
+  assert.eq(count, 0)
 end
 "#;
 
@@ -92,17 +92,16 @@ end
 fn for_loop_with_strings() -> anyhow::Result<()> {
     let source = r#"
 use assert = "std.assert"
-use util = "std.util"
 
 test "for loop with string list"
   var count = 0
   var words = ["Hello", "World", "!"]
   
   for word of words
-    count = count + util.len(word)
+    count = count + length(word)
   end
   
-  assert.assert_eq(count, 11)
+  assert.eq(count, 11)
 end
 "#;
 
@@ -149,7 +148,7 @@ test "nested for loops"
   end
   
   # (1*10 + 1*20 + 2*10 + 2*20) = 10 + 20 + 20 + 40 = 90
-  assert.assert_eq(result, 90)
+  assert.eq(result, 90)
 end
 "#;
 
@@ -195,7 +194,7 @@ test "for loop with break"
     sum = sum + num
   end
   
-  assert.assert_eq(sum, 6)  # 1 + 2 + 3 = 6
+  assert.eq(sum, 6)  # 1 + 2 + 3 = 6
 end
 "#;
 
@@ -241,7 +240,7 @@ test "for loop with continue"
     sum = sum + num
   end
   
-  assert.assert_eq(sum, 12)  # 1 + 2 + 4 + 5 = 12
+  assert.eq(sum, 12)  # 1 + 2 + 4 + 5 = 12
 end
 "#;
 

@@ -37,20 +37,6 @@ const PATH_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
-        "set_extension",
-        StdFunctionKind::PathSetExtension,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::String,
-    ),
-    std_function(
-        "strip_extension",
-        StdFunctionKind::PathStripExtension,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::String,
-    ),
-    std_function(
         "normalize",
         StdFunctionKind::PathNormalize,
         StdArity::Exact(1),
@@ -73,13 +59,6 @@ const PATH_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
         StdType::String,
-    ),
-    std_function(
-        "is_absolute",
-        StdFunctionKind::PathIsAbsolute,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
     ),
     std_function(
         "separator",

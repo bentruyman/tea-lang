@@ -14,9 +14,6 @@ end
 pub def test_environment() -> Void
   print("=== Environment ===")
 
-  var home = intrinsics.env_home_dir()
-  print(home)
-
   var cwd = intrinsics.env_cwd()
   print(cwd)
 
@@ -56,12 +53,6 @@ pub def test_filesystem() -> Void
 
   if exists
     print("✓ Current directory exists")
-  end
-
-  var is_dir = intrinsics.fs_is_dir(cwd)
-
-  if is_dir
-    print("✓ Current directory is a directory")
   end
 end
 

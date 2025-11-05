@@ -12,14 +12,14 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "assert_eq",
+        "eq",
         StdFunctionKind::AssertEq,
         StdArity::Exact(2),
         &[StdType::Any, StdType::Any],
         StdType::Void,
     ),
     std_function(
-        "assert_ne",
+        "ne",
         StdFunctionKind::AssertNe,
         StdArity::Exact(2),
         &[StdType::Any, StdType::Any],
@@ -33,7 +33,7 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "assert_snapshot",
+        "snapshot",
         StdFunctionKind::AssertSnapshot,
         StdArity::Range {
             min: 2,
@@ -43,7 +43,7 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "assert_empty",
+        "empty",
         StdFunctionKind::AssertEmpty,
         StdArity::Exact(1),
         &[StdType::String],

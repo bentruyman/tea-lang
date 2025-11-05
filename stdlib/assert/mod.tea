@@ -18,9 +18,9 @@ end
 # Asserts that two values are equal.
 #
 # Examples:
-#   assert_eq(1 + 1, 2)
-#   assert_eq("hello", "hello")
-pub def assert_eq(left, right)
+#   eq(1 + 1, 2)
+#   eq("hello", "hello")
+pub def eq(left, right)
   if left != right
     fail("assertion failed: `{left}` != `{right}`")
   end
@@ -29,9 +29,9 @@ end
 # Asserts that two values are not equal.
 #
 # Examples:
-#   assert_ne(1, 2)
-#   assert_ne("hello", "world")
-pub def assert_ne(left, right)
+#   ne(1, 2)
+#   ne("hello", "world")
+pub def ne(left, right)
   if left == right
     fail("assertion failed: `{left}` == `{right}`")
   end
@@ -48,9 +48,9 @@ end
 # Asserts that a value matches a saved snapshot.
 #
 # Examples:
-#   assert_snapshot("test_name", result)
-#   assert_snapshot("test_name", result, "custom/path")
-pub def assert_snapshot(name, value, path)
+#   snapshot("test_name", result)
+#   snapshot("test_name", result, "custom/path")
+pub def snapshot(name, value, path)
   if path == nil
     __intrinsic_assert_snapshot(name, value, "__snapshots__")
   else
@@ -61,8 +61,8 @@ end
 # Asserts that a string is empty.
 #
 # Examples:
-#   assert_empty("")
-pub def assert_empty(value)
+#   empty("")
+pub def empty(value)
   if length(value) != 0
     fail("assertion failed: expected empty string, got `{value}`")
   end
@@ -76,11 +76,11 @@ pub def tea_assert(condition, message)
 end
 
 pub def tea_assert_eq(left, right)
-  assert_eq(left, right)
+  eq(left, right)
 end
 
 pub def tea_assert_ne(left, right)
-  assert_ne(left, right)
+  ne(left, right)
 end
 
 pub def tea_fail(message)
@@ -88,9 +88,9 @@ pub def tea_fail(message)
 end
 
 pub def tea_assert_snapshot(name, value, path)
-  assert_snapshot(name, value, path)
+  snapshot(name, value, path)
 end
 
 pub def tea_assert_empty(value)
-  assert_empty(value)
+  empty(value)
 end

@@ -67,24 +67,6 @@ pub def min(a: Int, b: Int) -> Int
   b
 end
 
-# Clamp a value between a minimum and maximum bound.
-#
-# Examples:
-#   math.clamp(5, 0, 10)   # => 5
-#   math.clamp(-5, 0, 10)  # => 0
-#   math.clamp(15, 0, 10)  # => 10
-pub def clamp(value: Int, min_val: Int, max_val: Int) -> Int
-  if value < min_val
-    return min_val
-  end
-
-  if value > max_val
-    return max_val
-  end
-
-  value
-end
-
 # Raise a base to an integer exponent.
 #
 # Examples:
@@ -111,22 +93,3 @@ pub def pow(base: Int, exp: Int) -> Int
   result
 end
 
-# Check if a number is even.
-#
-# Examples:
-#   math.is_even(4)  # => true
-#   math.is_even(5)  # => false
-#   math.is_even(0)  # => true
-pub def is_even(n: Int) -> Bool
-  n % 2 == 0
-end
-
-# Check if a number is odd.
-#
-# Examples:
-#   math.is_odd(4)  # => false
-#   math.is_odd(5)  # => true
-#   math.is_odd(0)  # => false
-pub def is_odd(n: Int) -> Bool
-  n % 2 != 0
-end

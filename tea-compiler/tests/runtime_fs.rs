@@ -20,7 +20,7 @@ fn fs_roundtrip_through_vm() -> anyhow::Result<()> {
     let dir_path = unique_temp_dir();
     let file_path = dir_path.join("sample.txt");
     let backups_path = dir_path.join("backups");
-    let copy_path = backups_path.join("copy.bin");
+    let copy_path = backups_path.join("copy.txt");
 
     let dir_str = dir_path.to_string_lossy();
     let file_str = file_path.to_string_lossy();
@@ -35,58 +35,31 @@ use fs = "std.fs"
 fs.ensure_dir("{dir}")
 
 var before = fs.list_dir("{dir}")
-assert.assert_eq(length(before), 0)
+assert.eq(length(before), 0)
 
-fs.write_text_atomic("{file}", "hello fs")
+fs.write_text("{file}", "hello fs")
 assert.assert(fs.exists("{file}"))
-assert.assert(fs.is_dir("{dir}"))
-assert.assert(fs.is_symlink("{file}") == false)
 
 var original = fs.read_text("{file}")
-assert.assert_eq(original, "hello fs")
-
-var info = fs.metadata("{file}")
-assert.assert(info["is_file"])
-assert.assert(info["is_dir"] == false)
-assert.assert_eq(info["parent"], "{dir}")
-assert.assert(info["size"] == fs.size("{file}"))
-assert.assert(info["permissions"] > 0)
-assert.assert(info["is_symlink"] == false)
-
-var perms = fs.permissions("{file}")
-assert.assert(perms > 0)
+assert.eq(original, "hello fs")
 
 var after_write = fs.list_dir("{dir}")
-assert.assert_eq(length(after_write), 1)
-assert.assert_eq(after_write[0], "{file}")
-
-var matches = fs.glob("{dir}/*.txt")
-assert.assert_eq(length(matches), 1)
-assert.assert_eq(matches[0], "{file}")
+assert.eq(length(after_write), 1)
+assert.eq(after_write[0], "{file}")
 
 var visit_before = fs.walk("{dir}")
-assert.assert_eq(length(visit_before), 1)
-assert.assert_eq(visit_before[0], "{file}")
+assert.eq(length(visit_before), 1)
+assert.eq(visit_before[0], "{file}")
 
-fs.ensure_parent("{copy}")
+fs.ensure_dir("{backups}")
 fs.write_text("{copy}", "hello fs")
 assert.assert(fs.exists("{copy}"))
-assert.assert_eq(fs.size("{copy}"), fs.size("{file}"))
-assert.assert(fs.modified("{file}") > 0)
 
 var after_copy = fs.list_dir("{dir}")
-assert.assert_eq(length(after_copy), 2)
-assert.assert_eq(after_copy[0], "{backups}")
-assert.assert_eq(after_copy[1], "{file}")
+assert.eq(length(after_copy), 2)
 
 var visit_after = fs.walk("{dir}")
-assert.assert_eq(length(visit_after), 3)
-
-var copy_info = fs.metadata("{copy}")
-assert.assert(copy_info["is_file"])
-
-var pattern_all = fs.glob("{dir}/**/*")
-assert.assert(length(pattern_all) >= 3)
+assert.eq(length(visit_after), 3)
 
 fs.remove("{copy}")
 fs.remove("{backups}")

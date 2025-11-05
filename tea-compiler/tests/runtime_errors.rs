@@ -39,10 +39,10 @@ def maybe_fail(flag: Bool) -> Int ! ExampleError.Failure
 end
 
 var handled = try maybe_fail(true) catch 42
-assert.assert_eq(handled, 42)
+assert.eq(handled, 42)
 
 var passthrough = try maybe_fail(false) catch 13
-assert.assert_eq(passthrough, 7)
+assert.eq(passthrough, 7)
 "#;
 
     let compilation = compile_program(source)?;
@@ -93,21 +93,21 @@ var timeout = try combined(true, false) catch err
   case is ParseError.Invalid => -2
   case _ => -3
 end
-assert.assert_eq(timeout, -1)
+assert.eq(timeout, -1)
 
 var invalid = try combined(false, true) catch err
   case is NetError.Timeout => -1
   case is ParseError.Invalid => -2
   case _ => -3
 end
-assert.assert_eq(invalid, -2)
+assert.eq(invalid, -2)
 
 var success = try combined(false, false) catch err
   case is NetError.Timeout => -1
   case is ParseError.Invalid => -2
   case _ => -3
 end
-assert.assert_eq(success, 7)
+assert.eq(success, 7)
 "#;
 
     let compilation = compile_program(source)?;
@@ -144,21 +144,21 @@ var missing = try read("missing") catch err
   case is FsError.Permission => "Permission denied"
   case _ => "unknown"
 end
-assert.assert_eq(missing, "Missing: missing")
+assert.eq(missing, "Missing: missing")
 
 var forbidden = try read("forbidden") catch err
   case is FsError.NotFound => `Missing: ${err.path}`
   case is FsError.Permission => "Permission denied"
   case _ => "unknown"
 end
-assert.assert_eq(forbidden, "Permission denied")
+assert.eq(forbidden, "Permission denied")
 
 var success = try read("file.txt") catch err
   case is FsError.NotFound => `Missing: ${err.path}`
   case is FsError.Permission => "Permission denied"
   case _ => "unknown"
 end
-assert.assert_eq(success, "ok")
+assert.eq(success, "ok")
 "#;
 
     let compilation = compile_program(source)?;

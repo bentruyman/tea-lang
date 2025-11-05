@@ -15,7 +15,7 @@ test "for loop iterates over dict with key and value"
     sum = sum + value
   end
   
-  assert.assert_eq(sum, 7)
+  assert.eq(sum, 7)
 end
 "#;
 
@@ -58,7 +58,7 @@ test "for loop with empty dict"
     count = count + 1
   end
   
-  assert.assert_eq(count, 0)
+  assert.eq(count, 0)
 end
 "#;
 
@@ -92,18 +92,17 @@ end
 fn for_loop_dict_keys_accessible() -> anyhow::Result<()> {
     let source = r#"
 use assert = "std.assert"
-use util = "std.util"
 
 test "for loop can access dict keys"
   var scores = { "alice": 10, "bob": 8 }
   var key_count = 0
   
   for key, value of scores
-    key_count = key_count + util.len(key)
+    key_count = key_count + length(key)
   end
   
   # "alice" = 5, "bob" = 3, total = 8
-  assert.assert_eq(key_count, 8)
+  assert.eq(key_count, 8)
 end
 "#;
 
@@ -198,7 +197,7 @@ test "for loop dict with continue"
   end
   
   # Should sum 1 + 3 = 4 (skipping 2)
-  assert.assert_eq(sum, 4)
+  assert.eq(sum, 4)
 end
 "#;
 

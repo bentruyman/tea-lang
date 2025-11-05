@@ -12,7 +12,7 @@ def greet(name: String) -> String
 end
 
 test "greet formats name"
-  assert.assert_eq(greet("Tea"), "Hello, Tea!")
+  assert.eq(greet("Tea"), "Hello, Tea!")
 end
 "#;
 
@@ -81,20 +81,20 @@ def build_string(count: Int) -> String
 end
 
 test "concatenates two strings"
-  assert.assert_eq(concat("hello", "world"), "helloworld")
+  assert.eq(concat("hello", "world"), "helloworld")
 end
 
 test "concatenates with empty string"
-  assert.assert_eq("" + "test", "test")
-  assert.assert_eq("test" + "", "test")
+  assert.eq("" + "test", "test")
+  assert.eq("test" + "", "test")
 end
 
 test "concatenates multiple strings"
-  assert.assert_eq("a" + "b" + "c", "abc")
+  assert.eq("a" + "b" + "c", "abc")
 end
 
 test "builds string with loop"
-  assert.assert_eq(build_string(5), "xxxxx")
+  assert.eq(build_string(5), "xxxxx")
 end
 "#;
 

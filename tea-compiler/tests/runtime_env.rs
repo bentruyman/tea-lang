@@ -8,16 +8,13 @@ fn env_helpers_operate_via_vm() -> anyhow::Result<()> {
     let source = r#"
 use assert = "std.assert"
 use env = "std.env"
-use util = "std.util"
 
 assert.assert(env.has("TEA_LANG_TEST_VAR") == false)
-assert.assert_eq(env.get("TEA_LANG_TEST_VAR"), "")
-assert.assert_eq(env.get_or("TEA_LANG_TEST_VAR", "fallback"), "fallback")
+assert.eq(env.get("TEA_LANG_TEST_VAR"), "")
 
 env.set("TEA_LANG_TEST_VAR", "configured")
 assert.assert(env.has("TEA_LANG_TEST_VAR"))
-assert.assert_eq(env.get("TEA_LANG_TEST_VAR"), "configured")
-assert.assert_eq(env.require("TEA_LANG_TEST_VAR"), "configured")
+assert.eq(env.get("TEA_LANG_TEST_VAR"), "configured")
 
 var vars = env.vars()
 assert.assert(vars["TEA_LANG_TEST_VAR"] == "configured")
@@ -27,14 +24,6 @@ assert.assert(env.has("TEA_LANG_TEST_VAR") == false)
 
 var cwd = env.cwd()
 assert.assert(cwd != "")
-
-var tmp = env.temp_dir()
-assert.assert(tmp != "")
-
-var home = env.home_dir()
-assert.assert(home != "")
-
-var config = env.config_dir()
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

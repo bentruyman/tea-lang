@@ -681,6 +681,8 @@ impl<'ctx> ExprValue<'ctx> {
     }
 }
 
+// Many fields are for removed functionality but kept for potential future use
+#[allow(dead_code)]
 struct LlvmCodeGenerator<'ctx> {
     context: &'ctx Context,
     module: LlvmModule<'ctx>,
@@ -866,6 +868,8 @@ struct LlvmCodeGenerator<'ctx> {
     function_can_throw_stack: Vec<bool>,
 }
 
+// Many methods are for removed functionality but kept for potential future use
+#[allow(dead_code)]
 impl<'ctx> LlvmCodeGenerator<'ctx> {
     fn new(
         context: &'ctx Context,
@@ -5018,9 +5022,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::UtilToString => {
                 self.compile_util_to_string_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::UtilClampInt => {
-                self.compile_util_clamp_int_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::StringIndexOf => {
                 self.compile_string_index_of_call(&call.arguments, function, locals)
             }
@@ -5034,13 +5035,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_string_replace_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
-            StdFunctionKind::EnvGetOr => {
-                self.compile_env_get_or_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
-            StdFunctionKind::EnvRequire => {
-                self.compile_env_require_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
             StdFunctionKind::EnvUnset => {
                 self.compile_env_unset_call(&call.arguments, function, locals)
@@ -5049,18 +5044,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_env_vars_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvCwd => self.compile_env_cwd_call(&call.arguments, function, locals),
-            StdFunctionKind::EnvSetCwd => {
-                self.compile_env_set_cwd_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::EnvTempDir => {
-                self.compile_env_temp_dir_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::EnvHomeDir => {
-                self.compile_env_home_dir_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::EnvConfigDir => {
-                self.compile_env_config_dir_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::PathJoin => {
                 self.compile_path_join_call(&call.arguments, function, locals)
             }
@@ -5076,12 +5059,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::PathExtension => {
                 self.compile_path_extension_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::PathSetExtension => {
-                self.compile_path_set_extension_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::PathStripExtension => {
-                self.compile_path_strip_extension_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::PathNormalize => {
                 self.compile_path_normalize_call(&call.arguments, function, locals)
             }
@@ -5091,9 +5068,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::PathRelative => {
                 self.compile_path_relative_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::PathIsAbsolute => {
-                self.compile_path_is_absolute_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::PathSeparator => self.compile_path_separator_call(&call.arguments),
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
@@ -5101,17 +5075,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsWriteText => {
                 self.compile_fs_write_text_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::FsWriteTextAtomic => {
-                self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsEnsureDir => {
                 self.compile_fs_ensure_dir_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsEnsureParent => {
-                self.compile_fs_ensure_parent_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsRemove => {
                 self.compile_fs_remove_call(&call.arguments, function, locals)
@@ -5119,63 +5087,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsExists => {
                 self.compile_fs_exists_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::FsIsDir => {
-                self.compile_fs_is_dir_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsIsSymlink => {
-                self.compile_fs_is_symlink_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
-            StdFunctionKind::FsGlob => self.compile_fs_glob_call(&call.arguments, function, locals),
-            StdFunctionKind::FsSize => self.compile_fs_size_call(&call.arguments, function, locals),
-            StdFunctionKind::FsModified => {
-                self.compile_fs_modified_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsPermissions => {
-                self.compile_fs_permissions_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsIsReadonly => {
-                self.compile_fs_is_readonly_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsMetadata => {
-                self.compile_fs_metadata_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessRun => {
-                self.compile_process_run_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessSpawn => {
-                self.compile_process_spawn_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessKill => {
-                self.compile_process_kill_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessReadStdout => {
-                self.compile_process_read_call(&call.arguments, function, locals, true)
-            }
-            StdFunctionKind::ProcessReadStderr => {
-                self.compile_process_read_call(&call.arguments, function, locals, false)
-            }
-            StdFunctionKind::ProcessWriteStdin => {
-                self.compile_process_write_stdin_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessCloseStdin => {
-                self.compile_process_close_stdin_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::ProcessClose => {
-                self.compile_process_close_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::CliArgs => {
-                self.compile_cli_args_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::CliParse => {
-                self.compile_cli_parse_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::CliCapture => {
-                bail!("support.cli.capture is not supported by the LLVM backend yet")
-            }
         }
     }
 
@@ -5221,18 +5136,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
             Intrinsic::EnvVars => self.compile_env_vars_call(&call.arguments, function, locals),
             Intrinsic::EnvCwd => self.compile_env_cwd_call(&call.arguments, function, locals),
-            Intrinsic::EnvSetCwd => {
-                self.compile_env_set_cwd_call(&call.arguments, function, locals)
-            }
-            Intrinsic::EnvTempDir => {
-                self.compile_env_temp_dir_call(&call.arguments, function, locals)
-            }
-            Intrinsic::EnvHomeDir => {
-                self.compile_env_home_dir_call(&call.arguments, function, locals)
-            }
-            Intrinsic::EnvConfigDir => {
-                self.compile_env_config_dir_call(&call.arguments, function, locals)
-            }
 
             // Filesystem
             Intrinsic::FsReadText => {
@@ -5241,36 +5144,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::FsWriteText => {
                 self.compile_fs_write_text_call(&call.arguments, function, locals)
             }
-            Intrinsic::FsWriteTextAtomic => {
-                self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
-            }
+
             Intrinsic::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
             Intrinsic::FsRemove => self.compile_fs_remove_call(&call.arguments, function, locals),
             Intrinsic::FsExists => self.compile_fs_exists_call(&call.arguments, function, locals),
-            Intrinsic::FsIsDir => self.compile_fs_is_dir_call(&call.arguments, function, locals),
-            Intrinsic::FsIsSymlink => {
-                self.compile_fs_is_symlink_call(&call.arguments, function, locals)
-            }
-            Intrinsic::FsSize => self.compile_fs_size_call(&call.arguments, function, locals),
-            Intrinsic::FsModified => {
-                self.compile_fs_modified_call(&call.arguments, function, locals)
-            }
-            Intrinsic::FsPermissions => {
-                self.compile_fs_permissions_call(&call.arguments, function, locals)
-            }
-            Intrinsic::FsIsReadonly => {
-                self.compile_fs_is_readonly_call(&call.arguments, function, locals)
-            }
+
             Intrinsic::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
             Intrinsic::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
-            Intrinsic::FsGlob => self.compile_fs_glob_call(&call.arguments, function, locals),
-            Intrinsic::FsMetadata => {
-                self.compile_fs_metadata_call(&call.arguments, function, locals)
-            }
 
             // Path
             Intrinsic::PathJoin => self.compile_path_join_call(&call.arguments, function, locals),
@@ -5286,12 +5170,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::PathExtension => {
                 self.compile_path_extension_call(&call.arguments, function, locals)
             }
-            Intrinsic::PathSetExtension => {
-                self.compile_path_set_extension_call(&call.arguments, function, locals)
-            }
-            Intrinsic::PathStripExtension => {
-                self.compile_path_strip_extension_call(&call.arguments, function, locals)
-            }
+
             Intrinsic::PathNormalize => {
                 self.compile_path_normalize_call(&call.arguments, function, locals)
             }
@@ -5301,37 +5180,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             Intrinsic::PathRelative => {
                 self.compile_path_relative_call(&call.arguments, function, locals)
             }
-            Intrinsic::PathIsAbsolute => {
-                self.compile_path_is_absolute_call(&call.arguments, function, locals)
-            }
-            Intrinsic::PathSeparator => self.compile_path_separator_call(&call.arguments),
 
+            Intrinsic::PathSeparator => self.compile_path_separator_call(&call.arguments),
             // Process
-            Intrinsic::ProcessRun => {
-                self.compile_process_run_call(&call.arguments, function, locals)
-            }
-            Intrinsic::ProcessSpawn => bail!("__intrinsic_process_spawn is not implemented yet"),
-            Intrinsic::ProcessKill => bail!("__intrinsic_process_kill is not implemented yet"),
-            Intrinsic::ProcessReadStdout => {
-                bail!("__intrinsic_process_read_stdout is not implemented yet")
-            }
-            Intrinsic::ProcessReadStderr => {
-                bail!("__intrinsic_process_read_stderr is not implemented yet")
-            }
-            Intrinsic::ProcessWriteStdin => {
-                bail!("__intrinsic_process_write_stdin is not implemented yet")
-            }
-            Intrinsic::ProcessCloseStdin => {
-                bail!("__intrinsic_process_close_stdin is not implemented yet")
-            }
-            Intrinsic::ProcessClose => bail!("__intrinsic_process_close is not implemented yet"),
 
             // Codecs (removed - now handled by runtime)
 
             // CLI
-            Intrinsic::CliArgs => self.compile_cli_args_call(&call.arguments, function, locals),
-            Intrinsic::CliParse => bail!("__intrinsic_cli_parse is not implemented yet"),
-            Intrinsic::CliCapture => bail!("__intrinsic_cli_capture is not implemented yet"),
         }
     }
 
@@ -5574,22 +5429,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if arguments.len() != 1 {
             bail!("type guard expects exactly 1 argument");
         }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for type guard");
-        }
-        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let tea_value = self.expr_to_tea_value(value_expr)?;
-        let (func, label) = match kind {
-            _ => bail!("unsupported util predicate - type predicates have been removed"),
-        };
-        let raw = self
-            .call_function(func, &[tea_value.into()], label)?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!(format!("{label} returned no value")))?
-            .into_int_value();
-        let bool_val = self.i32_to_bool(raw, &(label.to_string() + "_bool"))?;
-        Ok(ExprValue::Bool(bool_val))
+        // Type predicates have been removed from the stdlib
+        let _ = (arguments, function, locals, kind);
+        bail!("unsupported util predicate - type predicates have been removed")
     }
 
     fn compile_string_index_of_call(

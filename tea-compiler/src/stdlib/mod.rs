@@ -1,13 +1,10 @@
 mod assert;
 mod builtins;
-mod cli;
 mod docs;
 mod env;
 mod fs;
 mod intrinsics;
 mod path;
-mod process;
-mod util;
 
 use docs::function_doc;
 
@@ -28,66 +25,35 @@ pub enum StdFunctionKind {
     AssertNe,
     AssertFail,
     UtilToString,
-    UtilClampInt,
     StringIndexOf,
     StringSplit,
     StringContains,
     StringReplace,
     EnvGet,
-    EnvGetOr,
     EnvHas,
-    EnvRequire,
     EnvSet,
     EnvUnset,
     EnvVars,
     EnvCwd,
-    EnvSetCwd,
-    EnvTempDir,
-    EnvHomeDir,
-    EnvConfigDir,
     FsReadText,
     FsWriteText,
-    FsWriteTextAtomic,
     FsCreateDir,
     FsEnsureDir,
-    FsEnsureParent,
     FsRemove,
     FsExists,
-    FsIsDir,
     FsListDir,
     FsWalk,
-    FsSize,
-    FsModified,
-    FsIsReadonly,
-    FsIsSymlink,
-    FsGlob,
-    FsMetadata,
-    FsPermissions,
     PathJoin,
     PathComponents,
     PathDirname,
     PathBasename,
     PathExtension,
-    PathSetExtension,
-    PathStripExtension,
     PathNormalize,
     PathAbsolute,
     PathRelative,
-    PathIsAbsolute,
     PathSeparator,
     AssertSnapshot,
     AssertEmpty,
-    CliCapture,
-    CliArgs,
-    CliParse,
-    ProcessRun,
-    ProcessSpawn,
-    ProcessKill,
-    ProcessReadStdout,
-    ProcessReadStderr,
-    ProcessWriteStdin,
-    ProcessCloseStdin,
-    ProcessClose,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -176,12 +142,9 @@ pub(crate) use std_module;
 
 pub static MODULES: &[StdModule] = &[
     assert::MODULE,
-    util::MODULE,
     env::MODULE,
     fs::MODULE,
     path::MODULE,
-    cli::MODULE,
-    process::MODULE,
     intrinsics::MODULE,
 ];
 

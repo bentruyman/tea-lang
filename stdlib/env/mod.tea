@@ -2,13 +2,6 @@
 #
 # This module provides a Tea-native interface to environment operations,
 # delegating to low-level intrinsics.
-#
-# Pure Tea helpers (no intrinsics):
-#   - get_or() - get with default value
-#   - require() - get or fail
-#   - require_all() - require multiple variables
-#   - has_any() - check if any of multiple variables exist
-
 use intrinsics = "std.intrinsics"
 
 # Get the value of an environment variable.
@@ -17,18 +10,6 @@ use intrinsics = "std.intrinsics"
 #   var path = env.get("PATH")
 pub def get(name: String) -> String
   intrinsics.env_get(name)
-end
-
-# Get the value of an environment variable, or return a default if not set.
-#
-# Examples:
-#   var editor = env.get_or("EDITOR", "vim")
-pub def get_or(name: String, default_value: String) -> String
-  if intrinsics.env_has(name)
-    intrinsics.env_get(name)
-  else
-    default_value
-  end
 end
 
 # Set an environment variable.
@@ -57,18 +38,6 @@ pub def has(name: String) -> Bool
   intrinsics.env_has(name)
 end
 
-# Require an environment variable to be set, fail if not.
-#
-# Examples:
-#   var token = env.require("API_TOKEN")
-pub def require(name: String) -> String
-  if ! intrinsics.env_has(name)
-    intrinsics.fail("Required environment variable not set: " + name)
-  end
-
-  return intrinsics.env_get(name)
-end
-
 # Get all environment variables as a dictionary.
 #
 # Examples:
@@ -85,174 +54,3 @@ pub def cwd() -> String
   intrinsics.env_cwd()
 end
 
-# Set the current working directory.
-#
-# Examples:
-#   env.set_cwd("/tmp")
-pub def set_cwd(path: String) -> Void
-  intrinsics.env_set_cwd(path)
-end
-
-# Get the system's temporary directory.
-#
-# Examples:
-#   var tmp = env.temp_dir()
-pub def temp_dir() -> String
-  intrinsics.env_temp_dir()
-end
-
-# Get the user's home directory.
-#
-# Examples:
-#   var home = env.home_dir()
-pub def home_dir() -> String
-  intrinsics.env_home_dir()
-end
-
-# Get the user's config directory.
-#
-# Examples:
-#   var config = env.config_dir()
-pub def config_dir() -> String
-  intrinsics.env_config_dir()
-end
-
-# Require multiple environment variables to be set, fail if any are missing.
-#
-# Examples:
-#   env.require_all(["DATABASE_URL", "API_KEY", "SECRET"])
-#
-# Pure Tea implementation - loops through names and calls require() on each.
-pub def require_all(names: List[String]) -> Void
-  var i = 0
-  var len = length(names)
-
-  while i < len
-    # Call require which will fail if variable doesn't exist
-    # We don't need the return value, but calling it enforces the check
-    if length(require(names[i])) >= 0
-      i = i + 1
-    end
-  end
-
-  return
-end
-
-# Check if any of the given environment variables exist.
-#
-# Examples:
-#   if env.has_any(["EDITOR", "VISUAL"])
-#     print("Editor is configured")
-#   end
-#
-# Pure Tea implementation - checks each variable until one is found.
-pub def has_any(names: List[String]) -> Bool
-  var i = 0
-  var len = length(names)
-
-  while i < len
-    if has(names[i])
-      return true
-    end
-
-    i = i + 1
-  end
-
-  false
-end
-
-# Check if all of the given environment variables exist.
-#
-# Examples:
-#   if env.has_all(["HOME", "USER", "PATH"])
-#     print("All required vars set")
-#   end
-#
-# Pure Tea implementation - checks each variable and returns false if any missing.
-pub def has_all(names: List[String]) -> Bool
-  var i = 0
-  var len = length(names)
-
-  while i < len
-    if ! has(names[i])
-      return false
-    end
-
-    i = i + 1
-  end
-
-  true
-end
-
-# Get the first available environment variable from a list.
-#
-# Examples:
-#   var editor = env.get_first(["EDITOR", "VISUAL"], "vim")
-#
-# Pure Tea implementation - returns first set variable or default.
-pub def get_first(names: List[String], default_value: String) -> String
-  var i = 0
-  var len = length(names)
-
-  while i < len
-    if has(names[i])
-      return get(names[i])
-    end
-
-    i = i + 1
-  end
-
-  default_value
-end
-
-# Check if an environment variable is set to a truthy value.
-#
-# Examples:
-#   if env.is_true("DEBUG")
-#     print("Debug mode enabled")
-#   end
-#
-# Recognizes: "1", "true", "TRUE", "yes", "YES" as truthy.
-# Pure Tea implementation - uses string comparison.
-pub def is_true(name: String) -> Bool
-  if ! has(name)
-    return false
-  end
-
-  var value = get(name)
-
-  if value == "1"
-    return true
-  end
-
-  if value == "true"
-    return true
-  end
-
-  if value == "TRUE"
-    return true
-  end
-
-  if value == "yes"
-    return true
-  end
-
-  if value == "YES"
-    return true
-  end
-
-  false
-end
-
-# Check if an environment variable is set to a falsy value or not set.
-#
-# Examples:
-#   if env.is_false("PRODUCTION")
-#     print("Not in production")
-#   end
-#
-# Recognizes: "0", "false", "FALSE", "no", "NO", or missing as falsy.
-# Pure Tea implementation - inverse of is_true().
-pub def is_false(name: String) -> Bool
-  !is_true(name)
-end

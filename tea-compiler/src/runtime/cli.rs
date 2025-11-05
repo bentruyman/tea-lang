@@ -1,3 +1,6 @@
+// This module is kept for potential future use but currently unused
+#![allow(dead_code)]
+
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashMap;
 use std::rc::Rc;

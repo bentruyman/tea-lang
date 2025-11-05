@@ -30,7 +30,7 @@ var label = match status
   case Status.Pending => "wait"
   case _ => "unknown"
 end
-assert.assert_eq(label, "wait")
+assert.eq(label, "wait")
 
 var code = 302
 var message = match code
@@ -38,7 +38,7 @@ var message = match code
   case 301 | 302 => "redirect"
   case _ => "other"
 end
-assert.assert_eq(message, "redirect")
+assert.eq(message, "redirect")
 
 var calls = 0
 
@@ -51,15 +51,15 @@ var observed = match tick()
   case 1 => "once"
   case _ => "many"
 end
-assert.assert_eq(observed, "once")
-assert.assert_eq(calls, 1)
+assert.eq(observed, "once")
+assert.eq(calls, 1)
 
 var flag = true
 var bool_result = match flag
   case true => "ok"
   case false => "not ok"
 end
-assert.assert_eq(bool_result, "ok")
+assert.eq(bool_result, "ok")
 
 enum Color {
   Red
@@ -73,7 +73,7 @@ var output = match color
   case Color.Green => "green"
   case Color.Blue => "blue"
 end
-assert.assert_eq(output, "red")
+assert.eq(output, "red")
 
 union Shape {
   String
@@ -85,13 +85,13 @@ var shape_label = match shape
   case is String => "string"
   case is Int => "int"
 end
-assert.assert_eq(shape_label, "int")
+assert.eq(shape_label, "int")
 
 var tag = "unknown"
 if shape is Int
   tag = "int"
 end
-assert.assert_eq(tag, "int")
+assert.eq(tag, "int")
 "#;
 
     let compilation = compile_program(source)?;
@@ -134,7 +134,7 @@ match code
     counter = counter + 100
 end
 
-assert.assert_eq(counter, 10)
+assert.eq(counter, 10)
 "#;
 
     let compilation = compile_program(source)?;

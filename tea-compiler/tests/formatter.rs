@@ -381,15 +381,15 @@ var mapper = | value: Int | => base + value
 fn indents_test_blocks() {
     let input = r#"
 test "fib"
-assert.assert_eq(fib_module.fib(0), 0)
-assert.assert_eq(fib_module.fib(1), 1)
+assert.eq(fib_module.fib(0), 0)
+assert.eq(fib_module.fib(1), 1)
 end
 "#;
 
     let expected = [
         "test \"fib\"",
-        "  assert.assert_eq(fib_module.fib(0), 0)",
-        "  assert.assert_eq(fib_module.fib(1), 1)",
+        "  assert.eq(fib_module.fib(0), 0)",
+        "  assert.eq(fib_module.fib(1), 1)",
         "end",
     ];
 

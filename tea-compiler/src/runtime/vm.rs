@@ -4,20 +4,18 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 use std::rc::Rc;
 use std::time::UNIX_EPOCH;
 
-use dirs_next::{config_dir, home_dir};
-use glob::glob;
 use path_clean::PathClean;
 use pathdiff::diff_paths;
-use tea_support::{cli_error, cli_target_error, env_error, fs_error, process_error};
+use tea_support::{env_error, fs_error};
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 use super::bytecode::{Instruction, Program, TypeCheck};
-use super::cli::{parse_cli, CliParseOutcome, CliScopeOutcome};
+use super::cli::{CliParseOutcome, CliScopeOutcome};
 use super::value::{
     ClosureInstance, ErrorTemplate, ErrorVariantValue, StructInstance, StructTemplate, Value,
 };
@@ -83,13 +81,20 @@ pub struct Vm {
     globals: Vec<Value>,
     frames: Vec<Frame>,
     catch_stack: Vec<CatchFrame>,
+    #[allow(dead_code)]
     next_fs_handle: i64,
+    #[allow(dead_code)]
     fs_handles: HashMap<i64, FsReadHandle>,
+    #[allow(dead_code)]
     next_process_handle: i64,
+    #[allow(dead_code)]
     process_handles: HashMap<i64, ProcessEntry>,
     snapshot_settings: Option<SnapshotSettings>,
+    #[allow(dead_code)]
     cli_result_template: Rc<StructTemplate>,
+    #[allow(dead_code)]
     cli_parse_result_template: Rc<StructTemplate>,
+    #[allow(dead_code)]
     process_result_template: Rc<StructTemplate>,
     error_templates: Vec<Rc<ErrorTemplate>>,
     cli_args: Vec<String>,
@@ -109,10 +114,13 @@ enum ChunkRef {
     Function(usize),
 }
 
+// Structs for removed fs/process functionality - kept for potential future use
+#[allow(dead_code)]
 struct FsReadHandle {
     reader: BufReader<File>,
 }
 
+#[allow(dead_code)]
 struct ProcessEntry {
     child: Child,
     stdout: Option<BufReader<ChildStdout>>,
@@ -129,6 +137,8 @@ struct CatchFrame {
     handler_ip: usize,
 }
 
+// Helper functions for removed fs functionality - kept for potential future use
+#[allow(dead_code)]
 fn vm_write_atomic(path: &Path, data: &[u8]) -> Result<(), VmError> {
     let parent = path
         .parent()
@@ -152,6 +162,7 @@ fn vm_strings_to_list(entries: Vec<String>) -> Value {
     Value::List(Rc::new(values))
 }
 
+#[allow(dead_code)]
 fn vm_collect_modified(metadata: &fs::Metadata) -> Option<i64> {
     metadata
         .modified()
@@ -160,24 +171,28 @@ fn vm_collect_modified(metadata: &fs::Metadata) -> Option<i64> {
         .map(|duration| duration.as_secs() as i64)
 }
 
+#[allow(dead_code)]
 #[cfg(unix)]
 fn vm_metadata_mode(metadata: &fs::Metadata) -> i64 {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() as i64
 }
 
+#[allow(dead_code)]
 #[cfg(windows)]
 fn vm_metadata_mode(metadata: &fs::Metadata) -> i64 {
     use std::os::windows::fs::MetadataExt;
     metadata.file_attributes() as i64
 }
 
+#[allow(dead_code)]
 #[cfg(not(any(unix, windows)))]
 fn vm_metadata_mode(metadata: &fs::Metadata) -> i64 {
     let _ = metadata;
     0
 }
 
+#[allow(dead_code)]
 fn vm_metadata_value(path: &Path, metadata: fs::Metadata) -> Value {
     let mut map = HashMap::new();
     map.insert(
@@ -1403,46 +1418,6 @@ impl Vm {
                 }
                 self.stack.push(Value::String(args[0].to_string()));
             }
-            StdFunctionKind::UtilClampInt => {
-                if args.len() != 3 {
-                    bail!(VmError::Runtime(format!(
-                        "clamp_int expected 3 arguments but got {}",
-                        args.len()
-                    ),));
-                }
-                let value = match args[0] {
-                    Value::Int(v) => v,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "clamp_int value must be an Int".to_string(),
-                        ))
-                    }
-                };
-                let min = match args[1] {
-                    Value::Int(v) => v,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "clamp_int minimum must be an Int".to_string(),
-                        ))
-                    }
-                };
-                let max = match args[2] {
-                    Value::Int(v) => v,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "clamp_int maximum must be an Int".to_string(),
-                        ))
-                    }
-                };
-                let clamped = if min > max {
-                    bail!(VmError::Runtime(
-                        "clamp_int expects minimum to be <= maximum".to_string(),
-                    ));
-                } else {
-                    value.clamp(min, max)
-                };
-                self.stack.push(Value::Int(clamped));
-            }
 
             StdFunctionKind::StringIndexOf => {
                 if args.len() != 2 {
@@ -1526,20 +1501,7 @@ impl Vm {
                 let value = env::var(&key).unwrap_or_default();
                 self.stack.push(Value::String(value));
             }
-            StdFunctionKind::EnvGetOr => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "env.get_or expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let key =
-                    self.expect_string(&args[0], "env.get_or expects the name to be a String")?;
-                let fallback =
-                    self.expect_string(&args[1], "env.get_or expects the fallback to be a String")?;
-                let value = env::var(&key).unwrap_or(fallback);
-                self.stack.push(Value::String(value));
-            }
+
             StdFunctionKind::EnvHas => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -1551,27 +1513,7 @@ impl Vm {
                     self.expect_string(&args[0], "env.has expects the name to be a String")?;
                 self.stack.push(Value::Bool(env::var_os(&key).is_some()));
             }
-            StdFunctionKind::EnvRequire => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "env.require expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let key =
-                    self.expect_string(&args[0], "env.require expects the name to be a String")?;
-                match env::var(&key) {
-                    Ok(value) => self.stack.push(Value::String(value)),
-                    Err(_) => {
-                        return Err(VmError::Runtime(env_error(
-                            "require",
-                            Some(&key),
-                            "variable not set",
-                        ))
-                        .into());
-                    }
-                }
-            }
+
             StdFunctionKind::EnvSet => {
                 if args.len() != 2 {
                     bail!(VmError::Runtime(format!(
@@ -1627,55 +1569,7 @@ impl Vm {
                     }
                 }
             }
-            StdFunctionKind::EnvSetCwd => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "env.set_cwd expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path =
-                    self.expect_string(&args[0], "env.set_cwd expects the path to be a String")?;
-                if let Err(error) = env::set_current_dir(&path) {
-                    return Err(VmError::Runtime(env_error("set_cwd", Some(&path), error)).into());
-                }
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::EnvTempDir => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "env.temp_dir expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let tmp = env::temp_dir();
-                self.stack
-                    .push(Value::String(tmp.to_string_lossy().into_owned()));
-            }
-            StdFunctionKind::EnvHomeDir => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "env.home_dir expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let value = home_dir()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                self.stack.push(Value::String(value));
-            }
-            StdFunctionKind::EnvConfigDir => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "env.config_dir expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let value = config_dir()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                self.stack.push(Value::String(value));
-            }
+
             StdFunctionKind::PathSeparator => {
                 if !args.is_empty() {
                     bail!(VmError::Runtime(format!(
@@ -1686,16 +1580,7 @@ impl Vm {
                 self.stack
                     .push(Value::String(std::path::MAIN_SEPARATOR.to_string()));
             }
-            StdFunctionKind::PathIsAbsolute => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_absolute expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = self.expect_string(&args[0], "is_absolute expects a String argument")?;
-                self.stack.push(Value::Bool(Path::new(&path).is_absolute()));
-            }
+
             StdFunctionKind::PathJoin => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -1764,38 +1649,7 @@ impl Vm {
                     .unwrap_or_default();
                 self.stack.push(Value::String(ext));
             }
-            StdFunctionKind::PathSetExtension => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "set_extension expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let path =
-                    self.expect_string(&args[0], "set_extension expects the path to be a String")?;
-                let extension = self.expect_string(
-                    &args[1],
-                    "set_extension expects the extension to be a String",
-                )?;
-                let mut buf = PathBuf::from(path);
-                buf.set_extension(extension);
-                self.stack
-                    .push(Value::String(self.path_to_string(buf.as_path())));
-            }
-            StdFunctionKind::PathStripExtension => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "strip_extension expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = self
-                    .expect_string(&args[0], "strip_extension expects the path to be a String")?;
-                let mut buf = PathBuf::from(path);
-                buf.set_extension("");
-                self.stack
-                    .push(Value::String(self.path_to_string(buf.as_path())));
-            }
+
             StdFunctionKind::PathNormalize => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -1886,32 +1740,6 @@ impl Vm {
                     .map_err(|error| VmError::Runtime(fs_error("write_text", &path, &error)))?;
                 self.stack.push(Value::Void);
             }
-            StdFunctionKind::FsWriteTextAtomic => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "write_text_atomic expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_text_atomic expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let contents = match &args[1] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "write_text_atomic expects the contents to be a String".to_string(),
-                        ))
-                    }
-                };
-                vm_write_atomic(Path::new(&path), contents.as_bytes())?;
-                self.stack.push(Value::Void);
-            }
 
             StdFunctionKind::FsCreateDir => {
                 if !(1..=2).contains(&args.len()) {
@@ -1969,31 +1797,7 @@ impl Vm {
                     .map_err(|error| VmError::Runtime(fs_error("ensure_dir", &path, &error)))?;
                 self.stack.push(Value::Void);
             }
-            StdFunctionKind::FsEnsureParent => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "ensure_parent expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "ensure_parent expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let fs_path = Path::new(&path);
-                if let Some(parent) = fs_path.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        fs::create_dir_all(parent).map_err(|error| {
-                            VmError::Runtime(fs_error("ensure_parent", &path, &error))
-                        })?;
-                    }
-                }
-                self.stack.push(Value::Void);
-            }
+
             StdFunctionKind::FsRemove => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -2038,132 +1842,7 @@ impl Vm {
                 };
                 self.stack.push(Value::Bool(Path::new(&path).exists()));
             }
-            StdFunctionKind::FsIsDir => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_dir expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path_text = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "is_dir expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let is_dir = Path::new(&path_text).is_dir();
-                self.stack.push(Value::Bool(is_dir));
-            }
-            StdFunctionKind::FsIsSymlink => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_symlink expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "is_symlink expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let metadata = fs::symlink_metadata(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("is_symlink", &path, &error)))?;
-                self.stack
-                    .push(Value::Bool(metadata.file_type().is_symlink()));
-            }
-            StdFunctionKind::FsSize => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "size expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "size expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let metadata = std::fs::metadata(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("size", &path, &error)))?;
-                self.stack.push(Value::Int(metadata.len() as i64));
-            }
-            StdFunctionKind::FsModified => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "modified expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "modified expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let metadata = std::fs::metadata(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("modified", &path, &error)))?;
-                let modified_time = metadata
-                    .modified()
-                    .map_err(|error| VmError::Runtime(fs_error("modified", &path, &error)))?;
-                let seconds = match modified_time.duration_since(UNIX_EPOCH) {
-                    Ok(duration) => duration.as_secs() as i64,
-                    Err(error) => {
-                        bail!(VmError::Runtime(format!(
-                            "modified time for '{path}' precedes Unix epoch: {error}"
-                        )))
-                    }
-                };
-                self.stack.push(Value::Int(seconds));
-            }
-            StdFunctionKind::FsPermissions => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "permissions expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "permissions expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let metadata = fs::symlink_metadata(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("permissions", &path, &error)))?;
-                self.stack.push(Value::Int(vm_metadata_mode(&metadata)));
-            }
-            StdFunctionKind::FsIsReadonly => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "is_readonly expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "is_readonly expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let metadata = std::fs::metadata(&path)
-                    .map_err(|error| VmError::Runtime(fs_error("is_readonly", &path, &error)))?;
-                self.stack
-                    .push(Value::Bool(metadata.permissions().readonly()));
-            }
+
             StdFunctionKind::FsListDir => {
                 if args.len() != 1 {
                     bail!(VmError::Runtime(format!(
@@ -2227,473 +1906,6 @@ impl Vm {
                 entries.sort();
                 self.stack.push(vm_strings_to_list(entries));
             }
-            StdFunctionKind::FsGlob => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "glob expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let pattern = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "glob expects the pattern to be a String".to_string(),
-                        ))
-                    }
-                };
-                let mut matches = Vec::new();
-                let paths = glob(&pattern)
-                    .map_err(|error| VmError::Runtime(fs_error("glob", &pattern, &error)))?;
-                for entry in paths {
-                    match entry {
-                        Ok(path_buf) => matches.push(path_buf.to_string_lossy().into_owned()),
-                        Err(error) => {
-                            bail!(VmError::Runtime(fs_error("glob", &pattern, &error)))
-                        }
-                    }
-                }
-                matches.sort();
-                self.stack.push(vm_strings_to_list(matches));
-            }
-            StdFunctionKind::FsMetadata => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "metadata expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let path = match &args[0] {
-                    Value::String(text) => text.clone(),
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "metadata expects the path to be a String".to_string(),
-                        ))
-                    }
-                };
-                let fs_path = PathBuf::from(&path);
-                let metadata = fs::symlink_metadata(&fs_path)
-                    .map_err(|error| VmError::Runtime(fs_error("metadata", &path, &error)))?;
-                self.stack
-                    .push(vm_metadata_value(fs_path.as_path(), metadata));
-            }
-
-            StdFunctionKind::ProcessRun => {
-                if args.is_empty() || args.len() > 5 {
-                    bail!(VmError::Runtime(format!(
-                        "process.run expected between 1 and 5 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let command =
-                    self.expect_string(&args[0], "process.run expects the command to be a String")?;
-                let arg_list = if args.len() >= 2 {
-                    match &args[1] {
-                        Value::Nil => Vec::new(),
-                        value => self.expect_string_list(
-                            value,
-                            "process.run expects args to be a List[String]",
-                        )?,
-                    }
-                } else {
-                    Vec::new()
-                };
-                let env_map = if args.len() >= 3 {
-                    match &args[2] {
-                        Value::Nil => HashMap::new(),
-                        value => self.expect_string_dict(
-                            value,
-                            "process.run expects env to be a Dict[String, String]",
-                        )?,
-                    }
-                } else {
-                    HashMap::new()
-                };
-                let cwd = if args.len() >= 4 {
-                    match &args[3] {
-                        Value::Nil => None,
-                        value => Some(
-                            self.expect_string(value, "process.run expects cwd to be a String")?,
-                        ),
-                    }
-                } else {
-                    None
-                };
-                let stdin_data = if args.len() >= 5 {
-                    match &args[4] {
-                        Value::Nil => None,
-                        Value::String(text) => Some(text.clone()),
-                        _ => {
-                            bail!(VmError::Runtime(
-                                "process.run expects stdin to be a String when provided"
-                                    .to_string()
-                            ))
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                let mut command_proc = Command::new(&command);
-                if !arg_list.is_empty() {
-                    command_proc.args(&arg_list);
-                }
-                for (key, value) in &env_map {
-                    command_proc.env(key, value);
-                }
-                if let Some(dir) = &cwd {
-                    command_proc.current_dir(dir);
-                }
-                if stdin_data.is_some() {
-                    command_proc.stdin(Stdio::piped());
-                } else {
-                    command_proc.stdin(Stdio::null());
-                }
-                command_proc.stdout(Stdio::piped());
-                command_proc.stderr(Stdio::piped());
-
-                let mut child = command_proc
-                    .spawn()
-                    .map_err(|error| VmError::Runtime(process_error("run", &command, &error)))?;
-
-                if let Some(input) = stdin_data {
-                    if let Some(mut stdin) = child.stdin.take() {
-                        stdin.write_all(input.as_bytes()).map_err(|error| {
-                            VmError::Runtime(process_error("run", &command, &error))
-                        })?;
-                    }
-                }
-
-                let output = child
-                    .wait_with_output()
-                    .map_err(|error| VmError::Runtime(process_error("run", &command, &error)))?;
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                let exit_code = output.status.code().unwrap_or(-1) as i64;
-                let result = self.make_process_result(command.clone(), exit_code, stdout, stderr);
-                self.stack.push(result);
-            }
-            StdFunctionKind::ProcessSpawn => {
-                if args.is_empty() || args.len() > 4 {
-                    bail!(VmError::Runtime(format!(
-                        "process.spawn expected between 1 and 4 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let command = self
-                    .expect_string(&args[0], "process.spawn expects the command to be a String")?;
-                let arg_list = if args.len() >= 2 {
-                    match &args[1] {
-                        Value::Nil => Vec::new(),
-                        value => self.expect_string_list(
-                            value,
-                            "process.spawn expects args to be a List[String]",
-                        )?,
-                    }
-                } else {
-                    Vec::new()
-                };
-                let env_map = if args.len() >= 3 {
-                    match &args[2] {
-                        Value::Nil => HashMap::new(),
-                        value => self.expect_string_dict(
-                            value,
-                            "process.spawn expects env to be a Dict[String, String]",
-                        )?,
-                    }
-                } else {
-                    HashMap::new()
-                };
-                let cwd = if args.len() >= 4 {
-                    match &args[3] {
-                        Value::Nil => None,
-                        value => Some(
-                            self.expect_string(value, "process.spawn expects cwd to be a String")?,
-                        ),
-                    }
-                } else {
-                    None
-                };
-
-                let mut command_proc = Command::new(&command);
-                if !arg_list.is_empty() {
-                    command_proc.args(&arg_list);
-                }
-                for (key, value) in &env_map {
-                    command_proc.env(key, value);
-                }
-                if let Some(dir) = &cwd {
-                    command_proc.current_dir(dir);
-                }
-                command_proc.stdin(Stdio::piped());
-                command_proc.stdout(Stdio::piped());
-                command_proc.stderr(Stdio::piped());
-
-                let mut child = command_proc
-                    .spawn()
-                    .map_err(|error| VmError::Runtime(process_error("spawn", &command, &error)))?;
-
-                let stdout = child.stdout.take().map(BufReader::new);
-                let stderr = child.stderr.take().map(BufReader::new);
-                let stdin = child.stdin.take();
-
-                let handle_id = self.next_process_handle;
-                self.next_process_handle += 1;
-                self.process_handles.insert(
-                    handle_id,
-                    ProcessEntry {
-                        child,
-                        stdout,
-                        stderr,
-                        stdin,
-                        command: command.clone(),
-                    },
-                );
-                self.stack.push(Value::Int(handle_id));
-            }
-            StdFunctionKind::ProcessReadStdout => {
-                if args.is_empty() || args.len() > 2 {
-                    bail!(VmError::Runtime(format!(
-                        "process.read_stdout expected 1 or 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.read_stdout expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let size = if args.len() == 2 {
-                    match &args[1] {
-                        Value::Nil => None,
-                        Value::Int(value) if *value > 0 => Some(*value as usize),
-                        Value::Int(_) => {
-                            bail!(VmError::Runtime(
-                                "process.read_stdout expects bytes to be a positive Int"
-                                    .to_string()
-                            ))
-                        }
-                        _ => {
-                            bail!(VmError::Runtime(
-                                "process.read_stdout expects bytes to be an Int".to_string()
-                            ))
-                        }
-                    }
-                } else {
-                    None
-                };
-                let entry = self.process_handles.get_mut(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                let output = Self::read_from_pipe(&mut entry.stdout, size).map_err(|error| {
-                    VmError::Runtime(process_error("read_stdout", &entry.command, &error))
-                })?;
-                self.stack.push(Value::String(output));
-            }
-            StdFunctionKind::ProcessReadStderr => {
-                if args.is_empty() || args.len() > 2 {
-                    bail!(VmError::Runtime(format!(
-                        "process.read_stderr expected 1 or 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.read_stderr expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let size = if args.len() == 2 {
-                    match &args[1] {
-                        Value::Nil => None,
-                        Value::Int(value) if *value > 0 => Some(*value as usize),
-                        Value::Int(_) => {
-                            bail!(VmError::Runtime(
-                                "process.read_stderr expects bytes to be a positive Int"
-                                    .to_string()
-                            ))
-                        }
-                        _ => {
-                            bail!(VmError::Runtime(
-                                "process.read_stderr expects bytes to be an Int".to_string()
-                            ))
-                        }
-                    }
-                } else {
-                    None
-                };
-                let entry = self.process_handles.get_mut(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                let output = Self::read_from_pipe(&mut entry.stderr, size).map_err(|error| {
-                    VmError::Runtime(process_error("read_stderr", &entry.command, &error))
-                })?;
-                self.stack.push(Value::String(output));
-            }
-            StdFunctionKind::ProcessWriteStdin => {
-                if args.len() != 2 {
-                    bail!(VmError::Runtime(format!(
-                        "process.write_stdin expected 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.write_stdin expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let data = self
-                    .expect_string(&args[1], "process.write_stdin expects data to be a String")?;
-                let entry = self.process_handles.get_mut(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                if let Some(stdin) = entry.stdin.as_mut() {
-                    stdin.write_all(data.as_bytes()).map_err(|error| {
-                        VmError::Runtime(process_error("write_stdin", &entry.command, &error))
-                    })?;
-                    self.stack.push(Value::Void);
-                } else {
-                    bail!(VmError::Runtime(
-                        "process stdin has already been closed".to_string()
-                    ));
-                }
-            }
-            StdFunctionKind::ProcessCloseStdin => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "process.close_stdin expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.close_stdin expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let entry = self.process_handles.get_mut(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                entry.stdin.take();
-                self.stack.push(Value::Void);
-            }
-
-            StdFunctionKind::ProcessKill => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "process.kill expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.kill expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                let entry = self.process_handles.get_mut(&handle_id).ok_or_else(|| {
-                    VmError::Runtime(format!("invalid process handle {handle_id}"))
-                })?;
-                entry.child.kill().map_err(|error| {
-                    VmError::Runtime(process_error("kill", &entry.command, &error))
-                })?;
-                self.stack.push(Value::Bool(true));
-            }
-            StdFunctionKind::ProcessClose => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "process.close expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let handle_id = match args[0] {
-                    Value::Int(id) => id,
-                    _ => {
-                        bail!(VmError::Runtime(
-                            "process.close expects the handle to be an Int".to_string()
-                        ))
-                    }
-                };
-                if let Some(mut entry) = self.process_handles.remove(&handle_id) {
-                    let _ = entry.child.kill();
-                }
-                self.stack.push(Value::Void);
-            }
-            StdFunctionKind::CliArgs => {
-                if !args.is_empty() {
-                    bail!(VmError::Runtime(format!(
-                        "cli.args expected 0 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                let values: Vec<Value> = self.cli_args.iter().cloned().map(Value::String).collect();
-                self.stack.push(Value::List(Rc::new(values)));
-            }
-            StdFunctionKind::CliParse => {
-                if !(args.len() == 1 || args.len() == 2) {
-                    bail!(VmError::Runtime(format!(
-                        "cli.parse expected 1 or 2 arguments but got {}",
-                        args.len()
-                    )));
-                }
-                if !matches!(args[0], Value::Dict(_)) {
-                    bail!(VmError::Runtime(
-                        "cli.parse expects the first argument to be a Dict".to_string()
-                    ));
-                }
-                let override_args = if args.len() == 2 {
-                    Some(self.expect_string_list(
-                        &args[1],
-                        "cli.parse expects additional arguments to be a list of Strings",
-                    )?)
-                } else {
-                    None
-                };
-                let cli_args = override_args.unwrap_or_else(|| self.cli_args.clone());
-                let outcome = parse_cli(&args[0], &cli_args, self.program_name.as_deref())
-                    .map_err(|error| VmError::Runtime(cli_error("parse", &error)))?;
-                let value = self.make_cli_parse_result(&outcome);
-                self.stack.push(value);
-            }
-            StdFunctionKind::CliCapture => {
-                if args.len() != 1 {
-                    bail!(VmError::Runtime(format!(
-                        "cli.capture expected 1 argument but got {}",
-                        args.len()
-                    )));
-                }
-                let argv =
-                    self.expect_string_list(&args[0], "cli.capture expects a list of Strings")?;
-                if argv.is_empty() {
-                    bail!(VmError::Runtime(
-                        "cli.capture requires at least one argument".to_string()
-                    ));
-                }
-                let mut command = Command::new(&argv[0]);
-                if argv.len() > 1 {
-                    command.args(&argv[1..]);
-                }
-                let output = command.output().map_err(|error| {
-                    VmError::Runtime(cli_target_error("capture", &argv[0], &error))
-                })?;
-                let exit_code = output.status.code().unwrap_or(-1) as i64;
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                let value = self.make_cli_result(exit_code, stdout, stderr);
-                self.stack.push(value);
-            }
         }
         Ok(())
     }
@@ -2718,6 +1930,8 @@ impl Vm {
         }
     }
 
+    // Methods for removed functionality - kept for potential future use
+    #[allow(dead_code)]
     fn expect_string_dict(&self, value: &Value, context: &str) -> Result<HashMap<String, String>> {
         match value {
             Value::Dict(entries) => {
@@ -2819,6 +2033,7 @@ impl Vm {
         }
     }
 
+    #[allow(dead_code)]
     fn make_process_result(
         &self,
         command: String,
@@ -2838,6 +2053,7 @@ impl Vm {
         }))
     }
 
+    #[allow(dead_code)]
     fn read_from_pipe<R: Read>(
         reader: &mut Option<BufReader<R>>,
         size: Option<usize>,
@@ -2856,6 +2072,7 @@ impl Vm {
         }
     }
 
+    #[allow(dead_code)]
     fn make_cli_result(&self, exit: i64, stdout: String, stderr: String) -> Value {
         Value::Struct(Rc::new(StructInstance {
             template: Rc::clone(&self.cli_result_template),
@@ -2867,6 +2084,7 @@ impl Vm {
         }))
     }
 
+    #[allow(dead_code)]
     fn make_cli_parse_result(&self, outcome: &CliParseOutcome) -> Value {
         let options = Self::dict_from_map(&outcome.options);
         let positionals = Self::dict_from_map(&outcome.positionals);
@@ -2891,6 +2109,7 @@ impl Vm {
         }))
     }
 
+    #[allow(dead_code)]
     fn dict_from_map(map: &HashMap<String, Value>) -> Value {
         Value::Dict(Rc::new(
             map.iter()
@@ -2899,12 +2118,14 @@ impl Vm {
         ))
     }
 
+    #[allow(dead_code)]
     fn list_from_strings(items: &[String]) -> Value {
         Value::List(Rc::new(
             items.iter().cloned().map(Value::String).collect::<Vec<_>>(),
         ))
     }
 
+    #[allow(dead_code)]
     fn scopes_to_value(scopes: &[CliScopeOutcome]) -> Value {
         let items: Vec<Value> = scopes
             .iter()
@@ -3238,6 +2459,8 @@ impl Vm {
     }
 }
 
+// JSON helper functions - kept for potential future use
+#[allow(dead_code)]
 fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
     Ok(match value {
         Value::Nil => JsonValue::Null,
@@ -3288,6 +2511,7 @@ fn value_to_json(value: &Value) -> Result<JsonValue, VmError> {
     })
 }
 
+#[allow(dead_code)]
 fn json_to_value(json: &JsonValue) -> Result<Value, VmError> {
     Ok(match json {
         JsonValue::Null => Value::Nil,

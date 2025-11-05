@@ -243,6 +243,7 @@ impl ErrorSet {
 #[derive(Debug, Clone)]
 struct ModuleFunctionInfo {
     signature: FunctionSignature,
+    #[allow(dead_code)]
     kind: StdFunctionKind,
 }
 
@@ -2659,49 +2660,7 @@ impl TypeChecker {
                     *first = Type::List(Box::new(Type::String));
                 }
             }
-            StdFunctionKind::CliCapture => {
-                if let Some(first) = params.get_mut(0) {
-                    *first = Type::List(Box::new(Type::String));
-                }
-            }
-            StdFunctionKind::CliParse => {
-                if let Some(first) = params.get_mut(0) {
-                    *first = Type::Dict(Box::new(Type::Unknown));
-                }
-                if let Some(second) = params.get_mut(1) {
-                    *second = Type::List(Box::new(Type::String));
-                }
-            }
-            StdFunctionKind::ProcessRun => {
-                if let Some(second) = params.get_mut(1) {
-                    *second = Type::List(Box::new(Type::String));
-                }
-                if let Some(third) = params.get_mut(2) {
-                    *third = Type::Dict(Box::new(Type::String));
-                }
-                if let Some(fourth) = params.get_mut(3) {
-                    *fourth = Type::String;
-                }
-                if let Some(fifth) = params.get_mut(4) {
-                    *fifth = Type::String;
-                }
-            }
-            StdFunctionKind::ProcessSpawn => {
-                if let Some(second) = params.get_mut(1) {
-                    *second = Type::List(Box::new(Type::String));
-                }
-                if let Some(third) = params.get_mut(2) {
-                    *third = Type::Dict(Box::new(Type::String));
-                }
-                if let Some(fourth) = params.get_mut(3) {
-                    *fourth = Type::String;
-                }
-            }
-            StdFunctionKind::ProcessReadStdout | StdFunctionKind::ProcessReadStderr => {
-                if let Some(second) = params.get_mut(1) {
-                    *second = Type::Int;
-                }
-            }
+
             _ => {}
         }
 
@@ -2710,28 +2669,7 @@ impl TypeChecker {
             StdFunctionKind::PathComponents => {
                 return_type = Type::List(Box::new(Type::String));
             }
-            StdFunctionKind::CliCapture => {
-                return_type = Type::Struct(StructType {
-                    name: "CliResult".to_string(),
-                    type_arguments: Vec::new(),
-                });
-            }
-            StdFunctionKind::CliArgs => {
-                return_type = Type::List(Box::new(Type::String));
-            }
-            StdFunctionKind::CliParse => {
-                return_type = Type::Struct(StructType {
-                    name: "CliParseResult".to_string(),
-                    type_arguments: Vec::new(),
-                });
-            }
-            StdFunctionKind::ProcessRun => {
-                return_type = Type::Struct(StructType {
-                    name: "ProcessResult".to_string(),
-                    type_arguments: Vec::new(),
-                });
-            }
-            StdFunctionKind::FsListDir | StdFunctionKind::FsWalk | StdFunctionKind::FsGlob => {
+            StdFunctionKind::FsListDir | StdFunctionKind::FsWalk => {
                 return_type = Type::List(Box::new(Type::String));
             }
             StdFunctionKind::EnvVars => {
@@ -4581,6 +4519,8 @@ impl TypeChecker {
         })
     }
 
+    // Methods for removed json/yaml functionality - kept for potential future use
+    #[allow(dead_code)]
     fn type_from_json_decode(
         &mut self,
         call: &CallExpression,
@@ -4614,6 +4554,7 @@ impl TypeChecker {
         }
     }
 
+    #[allow(dead_code)]
     fn type_from_yaml_decode(
         &mut self,
         call: &CallExpression,
@@ -5327,6 +5268,8 @@ impl<'a> TypeAnnotationParser<'a> {
     }
 }
 
+// Helper functions for json/yaml type inference - kept for potential future use
+#[allow(dead_code)]
 fn json_value_to_type(value: &JsonValue) -> Type {
     match value {
         JsonValue::Null => Type::Nil,
@@ -5358,6 +5301,7 @@ fn json_value_to_type(value: &JsonValue) -> Type {
     }
 }
 
+#[allow(dead_code)]
 fn merge_literal_types(left: Type, right: Type) -> Type {
     match (left, right) {
         (Type::Unknown, other) => other,

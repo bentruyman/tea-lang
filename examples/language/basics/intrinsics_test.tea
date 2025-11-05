@@ -2,24 +2,6 @@
 
 use intrinsics = "std.intrinsics"
 
-pub def test_type_checks() -> Void
-  var x = 42
-  var s = "hello"
-  var b = true
-
-  if intrinsics.is_int(x)
-    print("x is an int")
-  end
-
-  if intrinsics.is_string(s)
-    print("s is a string")
-  end
-
-  if intrinsics.is_bool(b)
-    print("b is a bool")
-  end
-end
-
 pub def test_conversions() -> Void
   var num = 123
   var str = intrinsics.to_string(num)
@@ -32,6 +14,5 @@ pub def test_env() -> Void
   print(path)
 end
 
-test_type_checks()
 test_conversions()
 test_env()

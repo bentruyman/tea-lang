@@ -15,7 +15,7 @@ def apply(value: Int) -> Int
 end
 
 test "const bindings"
-  assert.assert_eq(apply(3), 17)
+  assert.eq(apply(3), 17)
 end
 "#;
 

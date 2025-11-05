@@ -16,13 +16,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "write_text_atomic",
-        StdFunctionKind::FsWriteTextAtomic,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::Void,
-    ),
-    std_function(
         "create_dir",
         StdFunctionKind::FsCreateDir,
         StdArity::Range {
@@ -35,13 +28,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "ensure_dir",
         StdFunctionKind::FsEnsureDir,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "ensure_parent",
-        StdFunctionKind::FsEnsureParent,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::Void,
@@ -61,48 +47,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::Bool,
     ),
     std_function(
-        "is_dir",
-        StdFunctionKind::FsIsDir,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
-        "is_symlink",
-        StdFunctionKind::FsIsSymlink,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
-        "size",
-        StdFunctionKind::FsSize,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "modified",
-        StdFunctionKind::FsModified,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "permissions",
-        StdFunctionKind::FsPermissions,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "is_readonly",
-        StdFunctionKind::FsIsReadonly,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "list_dir",
         StdFunctionKind::FsListDir,
         StdArity::Exact(1),
@@ -115,20 +59,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
-    ),
-    std_function(
-        "glob",
-        StdFunctionKind::FsGlob,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::List,
-    ),
-    std_function(
-        "metadata",
-        StdFunctionKind::FsMetadata,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Dict,
     ),
 ];
 

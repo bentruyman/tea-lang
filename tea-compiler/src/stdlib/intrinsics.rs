@@ -2,7 +2,7 @@ use super::{std_function, StdArity, StdFunction, StdFunctionKind, StdModule, Std
 use crate::stdlib::std_module;
 
 const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
-    // Conversion
+    // Conversion (internal only)
     std_function(
         "to_string",
         StdFunctionKind::UtilToString,
@@ -90,34 +90,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[],
         StdType::String,
     ),
-    std_function(
-        "env_set_cwd",
-        StdFunctionKind::EnvSetCwd,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "env_temp_dir",
-        StdFunctionKind::EnvTempDir,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
-    std_function(
-        "env_home_dir",
-        StdFunctionKind::EnvHomeDir,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
-    std_function(
-        "env_config_dir",
-        StdFunctionKind::EnvConfigDir,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
     // Filesystem
     std_function(
         "fs_read_text",
@@ -129,13 +101,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "fs_write_text",
         StdFunctionKind::FsWriteText,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "fs_write_text_atomic",
-        StdFunctionKind::FsWriteTextAtomic,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
         StdType::Void,
@@ -162,48 +127,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Bool,
     ),
     std_function(
-        "fs_is_dir",
-        StdFunctionKind::FsIsDir,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
-        "fs_is_symlink",
-        StdFunctionKind::FsIsSymlink,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
-        "fs_size",
-        StdFunctionKind::FsSize,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "fs_modified",
-        StdFunctionKind::FsModified,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "fs_permissions",
-        StdFunctionKind::FsPermissions,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Int,
-    ),
-    std_function(
-        "fs_is_readonly",
-        StdFunctionKind::FsIsReadonly,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "fs_list_dir",
         StdFunctionKind::FsListDir,
         StdArity::Exact(1),
@@ -216,20 +139,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
-    ),
-    std_function(
-        "fs_glob",
-        StdFunctionKind::FsGlob,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::List,
-    ),
-    std_function(
-        "fs_metadata",
-        StdFunctionKind::FsMetadata,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Struct,
     ),
     // Path
     std_function(
@@ -268,20 +177,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
-        "path_set_extension",
-        StdFunctionKind::PathSetExtension,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::String,
-    ),
-    std_function(
-        "path_strip_extension",
-        StdFunctionKind::PathStripExtension,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::String,
-    ),
-    std_function(
         "path_normalize",
         StdFunctionKind::PathNormalize,
         StdArity::Exact(1),
@@ -303,34 +198,11 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
-        "path_is_absolute",
-        StdFunctionKind::PathIsAbsolute,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "path_separator",
         StdFunctionKind::PathSeparator,
         StdArity::Exact(0),
         &[],
         StdType::String,
-    ),
-    // Process
-    std_function(
-        "process_run",
-        StdFunctionKind::ProcessRun,
-        StdArity::Exact(1),
-        &[StdType::List],
-        StdType::Struct,
-    ),
-    // CLI
-    std_function(
-        "cli_args",
-        StdFunctionKind::CliArgs,
-        StdArity::Exact(0),
-        &[],
-        StdType::List,
     ),
 ];
 

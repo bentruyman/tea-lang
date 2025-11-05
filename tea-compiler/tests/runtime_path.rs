@@ -39,8 +39,6 @@ fn path_builtins_roundtrip_through_vm() -> anyhow::Result<()> {
         .extension()
         .map(|ext| ext.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let replaced_ext = PathBuf::from("report.md").to_string_lossy().into_owned();
-    let stripped_ext = PathBuf::from("report").to_string_lossy().into_owned();
 
     let normalize_input = PathBuf::from_iter(["logs", ".", "day", "..", "current"]);
     let normalize_expected = normalize_input.clean().to_string_lossy().into_owned();
@@ -57,34 +55,29 @@ fn path_builtins_roundtrip_through_vm() -> anyhow::Result<()> {
         r#"
 use assert = "std.assert"
 use path = "std.path"
-use util = "std.util"
 
 var joined = path.join(["foo", "bar", "baz"])
-assert.assert_eq(joined, "{joined}")
+assert.eq(joined, "{joined}")
 
 var parts = path.components(joined)
-assert.assert_eq(util.len(parts), {component_count})
-assert.assert_eq(parts[0], "{part0}")
-assert.assert_eq(parts[1], "{part1}")
-assert.assert_eq(parts[2], "{part2}")
+assert.eq(length(parts), {component_count})
+assert.eq(parts[0], "{part0}")
+assert.eq(parts[1], "{part1}")
+assert.eq(parts[2], "{part2}")
 
-assert.assert_eq(path.dirname(joined), "{dirname}")
-assert.assert_eq(path.basename(joined), "{basename}")
+assert.eq(path.dirname(joined), "{dirname}")
+assert.eq(path.basename(joined), "{basename}")
 
-assert.assert_eq(path.extension("{with_ext}"), "{extension}")
-assert.assert_eq(path.set_extension("{with_ext}", "md"), "{replaced_ext}")
-assert.assert_eq(path.strip_extension("{with_ext}"), "{stripped_ext}")
+assert.eq(path.extension("{with_ext}"), "{extension}")
 
-assert.assert_eq(path.normalize("logs/./day/../current"), "{normalized}")
+assert.eq(path.normalize("logs/./day/../current"), "{normalized}")
 
 var abs_path = path.absolute("bin/tea", "{base}")
-assert.assert_eq(abs_path, "{absolute}")
-assert.assert(path.is_absolute(abs_path))
-assert.assert(path.is_absolute(joined) == false)
+assert.eq(abs_path, "{absolute}")
 
 var relative_value = path.relative("{target}", "{base}")
 assert.assert(relative_value != "")
-assert.assert_eq(path.separator(), "{separator}")
+assert.eq(path.separator(), "{separator}")
 "#,
         joined = escape(&joined_str),
         component_count = components.len(),
@@ -95,8 +88,6 @@ assert.assert_eq(path.separator(), "{separator}")
         basename = escape(&basename),
         with_ext = escape(&with_ext.to_string_lossy()),
         extension = escape(&extension),
-        replaced_ext = escape(&replaced_ext),
-        stripped_ext = escape(&stripped_ext),
         normalized = escape(&normalize_expected),
         base = escape(&base_path.to_string_lossy()),
         absolute = escape(&absolute_str),

@@ -8,11 +8,11 @@ fn vm_executes_test_blocks_with_results() -> anyhow::Result<()> {
 use assert = "std.assert"
 
 test "passing assertion"
-  assert.assert_eq(1, 1)
+  assert.eq(1, 1)
 end
 
 test "failing assertion"
-  assert.assert_eq(2, 3)
+  assert.eq(2, 3)
 end
 "#;
 

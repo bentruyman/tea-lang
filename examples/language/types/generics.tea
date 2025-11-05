@@ -13,7 +13,7 @@ def make_box[T](value: T) -> Box[T]
 end
 
 var int_box = make_box[Int](identity[Int](42))
-assert.assert_eq(int_box.value, 42)
+assert.eq(int_box.value, 42)
 
 var string_box = make_box[String]("tea")
-assert.assert_eq(string_box.value, "tea")
+assert.eq(string_box.value, "tea")

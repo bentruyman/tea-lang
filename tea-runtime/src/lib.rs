@@ -473,11 +473,7 @@ fn compute_relative(target: &str, base: &str) -> Result<String> {
 #[no_mangle]
 pub extern "C" fn tea_path_join(parts: *const TeaList) -> *mut TeaString {
     let segments = expect_string_list_from_list(parts, "path.join expects a List[String]");
-    let mut buf = PathBuf::new();
-    for segment in segments {
-        buf.push(segment);
-    }
-    let result = path_to_string(buf.as_path());
+    let result = tea_intrinsics::path::join(&segments);
     alloc_tea_string(&result)
 }
 
@@ -508,10 +504,7 @@ pub extern "C" fn tea_path_basename(path: *const TeaString) -> *mut TeaString {
 #[no_mangle]
 pub extern "C" fn tea_path_extension(path: *const TeaString) -> *mut TeaString {
     let input = expect_path(path);
-    let extension = Path::new(&input)
-        .extension()
-        .map(|ext| ext.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let extension = tea_intrinsics::path::extension(&input);
     alloc_tea_string(&extension)
 }
 
@@ -543,9 +536,8 @@ pub extern "C" fn tea_path_strip_extension(path: *const TeaString) -> *mut TeaSt
 #[no_mangle]
 pub extern "C" fn tea_path_normalize(path: *const TeaString) -> *mut TeaString {
     let input = expect_path(path);
-    let normalized = Path::new(&input).clean();
-    let result = path_to_string(normalized.as_path());
-    alloc_tea_string(&result)
+    let normalized = tea_intrinsics::path::normalize(&input);
+    alloc_tea_string(&normalized)
 }
 
 #[no_mangle]
@@ -560,7 +552,8 @@ pub extern "C" fn tea_path_absolute(
     } else {
         None
     };
-    let resolved = compute_absolute(&input, base_value).unwrap_or_else(|error| panic!("{error}"));
+    let resolved = tea_intrinsics::path::absolute(&input, base_value.as_deref())
+        .unwrap_or_else(|error| panic!("{error}"));
     alloc_tea_string(&resolved)
 }
 
@@ -571,8 +564,7 @@ pub extern "C" fn tea_path_relative(
 ) -> *mut TeaString {
     let target_path = expect_path(target);
     let base_path = expect_path(base);
-    let relative =
-        compute_relative(&target_path, &base_path).unwrap_or_else(|error| panic!("{error}"));
+    let relative = tea_intrinsics::path::relative(&base_path, &target_path);
     alloc_tea_string(&relative)
 }
 
@@ -588,14 +580,14 @@ pub extern "C" fn tea_path_is_absolute(path: *const TeaString) -> c_int {
 
 #[no_mangle]
 pub extern "C" fn tea_path_separator() -> *mut TeaString {
-    let sep = std::path::MAIN_SEPARATOR.to_string();
+    let sep = tea_intrinsics::path::separator();
     alloc_tea_string(&sep)
 }
 
 #[no_mangle]
 pub extern "C" fn tea_env_get(name: *const TeaString) -> *mut TeaString {
     let key = expect_string(name, "env.get expects the name to be a valid UTF-8 string");
-    let value = env::var(&key).unwrap_or_default();
+    let value = tea_intrinsics::env::get(&key);
     alloc_tea_string(&value)
 }
 
@@ -619,7 +611,7 @@ pub extern "C" fn tea_env_get_or(
 #[no_mangle]
 pub extern "C" fn tea_env_has(name: *const TeaString) -> c_int {
     let key = expect_string(name, "env.has expects the name to be a valid UTF-8 string");
-    if env::var_os(&key).is_some() {
+    if tea_intrinsics::env::has(&key) {
         1
     } else {
         0
@@ -645,7 +637,7 @@ pub extern "C" fn tea_env_set(name: *const TeaString, value: *const TeaString) {
         value,
         "env.set expects the value to be a valid UTF-8 string",
     );
-    env::set_var(key, val);
+    tea_intrinsics::env::set(&key, &val);
 }
 
 #[no_mangle]
@@ -654,13 +646,14 @@ pub extern "C" fn tea_env_unset(name: *const TeaString) {
         name,
         "env.unset expects the name to be a valid UTF-8 string",
     );
-    env::remove_var(key);
+    tea_intrinsics::env::unset(&key);
 }
 
 #[no_mangle]
 pub extern "C" fn tea_env_vars() -> TeaValue {
     let dict = tea_dict_new();
-    for (key, value) in env::vars() {
+    let env_vars = tea_intrinsics::env::vars();
+    for (key, value) in env_vars {
         dict_set_string(dict, &key, &value);
     }
     tea_value_from_dict(dict)
@@ -668,9 +661,9 @@ pub extern "C" fn tea_env_vars() -> TeaValue {
 
 #[no_mangle]
 pub extern "C" fn tea_env_cwd() -> *mut TeaString {
-    match env::current_dir() {
-        Ok(path) => alloc_tea_string(&path.to_string_lossy()),
-        Err(error) => panic!("{}", env_error("cwd", None, error)),
+    match tea_intrinsics::env::cwd() {
+        Ok(path) => alloc_tea_string(&path),
+        Err(error) => panic!("{}", error),
     }
 }
 
@@ -1542,8 +1535,8 @@ pub extern "C" fn tea_util_is_error(value: TeaValue) -> c_int {
 #[no_mangle]
 pub extern "C" fn tea_fs_read_text(path: *const TeaString) -> *mut TeaString {
     let path_str = expect_path(path);
-    let contents = fs::read_to_string(&path_str)
-        .unwrap_or_else(|error| panic!("{}", fs_error("read_text", &path_str, &error)));
+    let contents =
+        tea_intrinsics::fs::read_text(&path_str).unwrap_or_else(|error| panic!("{}", error));
     let bytes = contents.as_bytes();
     tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
 }
@@ -1555,8 +1548,7 @@ pub extern "C" fn tea_fs_write_text(path: *const TeaString, contents: *const Tea
         contents,
         "write_text expects the contents argument to be a valid string",
     );
-    fs::write(&path_str, text.as_bytes())
-        .unwrap_or_else(|error| panic!("{}", fs_error("write_text", &path_str, &error)));
+    tea_intrinsics::fs::write_text(&path_str, &text).unwrap_or_else(|error| panic!("{}", error));
 }
 
 #[no_mangle]
@@ -1634,19 +1626,16 @@ pub extern "C" fn tea_fs_write_bytes_atomic(path: *const TeaString, data: *const
 pub extern "C" fn tea_fs_create_dir(path: *const TeaString, recursive: c_int) {
     let path_str = expect_path(path);
     if recursive != 0 {
-        fs::create_dir_all(&path_str)
-            .unwrap_or_else(|error| panic!("{}", fs_error("create_dir", &path_str, &error)));
+        tea_intrinsics::fs::ensure_dir(&path_str).unwrap_or_else(|error| panic!("{}", error));
     } else {
-        fs::create_dir(&path_str)
-            .unwrap_or_else(|error| panic!("{}", fs_error("create_dir", &path_str, &error)));
+        tea_intrinsics::fs::create_dir(&path_str).unwrap_or_else(|error| panic!("{}", error));
     }
 }
 
 #[no_mangle]
 pub extern "C" fn tea_fs_ensure_dir(path: *const TeaString) {
     let path_str = expect_path(path);
-    fs::create_dir_all(&path_str)
-        .unwrap_or_else(|error| panic!("{}", fs_error("ensure_dir", &path_str, &error)));
+    tea_intrinsics::fs::ensure_dir(&path_str).unwrap_or_else(|error| panic!("{}", error));
 }
 
 #[no_mangle]
@@ -1666,20 +1655,13 @@ pub extern "C" fn tea_fs_ensure_parent(path: *const TeaString) {
 #[no_mangle]
 pub extern "C" fn tea_fs_remove(path: *const TeaString) {
     let path_str = expect_path(path);
-    let fs_path = Path::new(&path_str);
-    if fs_path.is_dir() {
-        fs::remove_dir_all(fs_path)
-            .unwrap_or_else(|error| panic!("{}", fs_error("remove", &path_str, &error)));
-    } else {
-        fs::remove_file(fs_path)
-            .unwrap_or_else(|error| panic!("{}", fs_error("remove", &path_str, &error)));
-    }
+    tea_intrinsics::fs::remove(&path_str).unwrap_or_else(|error| panic!("{}", error));
 }
 
 #[no_mangle]
 pub extern "C" fn tea_fs_exists(path: *const TeaString) -> c_int {
     let path_str = expect_path(path);
-    if Path::new(&path_str).exists() {
+    if tea_intrinsics::fs::exists(&path_str) {
         1
     } else {
         0
@@ -1756,41 +1738,15 @@ pub extern "C" fn tea_fs_is_readonly(path: *const TeaString) -> c_int {
 #[no_mangle]
 pub extern "C" fn tea_fs_list_dir(path: *const TeaString) -> *mut TeaList {
     let path_str = expect_path(path);
-    let mut entries = Vec::new();
-    let dir = fs::read_dir(&path_str)
-        .unwrap_or_else(|error| panic!("{}", fs_error("list_dir", &path_str, &error)));
-    for entry in dir {
-        match entry {
-            Ok(dir_entry) => {
-                let entry_path = dir_entry.path();
-                let display = entry_path.to_string_lossy().into_owned();
-                entries.push(display);
-            }
-            Err(error) => panic!("{}", fs_error("list_dir", &path_str, &error)),
-        }
-    }
-    entries.sort();
+    let entries =
+        tea_intrinsics::fs::list_dir(&path_str).unwrap_or_else(|error| panic!("{}", error));
     strings_to_list(entries)
 }
 
 #[no_mangle]
 pub extern "C" fn tea_fs_walk(path: *const TeaString) -> *mut TeaList {
     let path_str = expect_path(path);
-    let mut entries = Vec::new();
-    for entry in WalkDir::new(&path_str) {
-        match entry {
-            Ok(dir_entry) => {
-                if dir_entry.depth() == 0 {
-                    continue;
-                }
-                let entry_path = dir_entry.path();
-                let display = entry_path.to_string_lossy().into_owned();
-                entries.push(display);
-            }
-            Err(error) => panic!("{}", fs_error("walk", &path_str, &error)),
-        }
-    }
-    entries.sort();
+    let entries = tea_intrinsics::fs::walk(&path_str).unwrap_or_else(|error| panic!("{}", error));
     strings_to_list(entries)
 }
 

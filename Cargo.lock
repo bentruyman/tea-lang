@@ -1091,10 +1091,22 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tea-intrinsics",
  "tea-runtime",
  "tea-support",
  "tempfile",
  "thiserror",
+ "walkdir",
+]
+
+[[package]]
+name = "tea-intrinsics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "path-clean",
+ "pathdiff",
+ "tea-support",
  "walkdir",
 ]
 
@@ -1121,6 +1133,7 @@ dependencies = [
  "pathdiff",
  "serde_json",
  "serde_yaml",
+ "tea-intrinsics",
  "tea-support",
  "tempfile",
  "walkdir",

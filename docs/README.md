@@ -23,6 +23,9 @@ Technical specifications and API documentation.
 - [Language Semantics](reference/language/semantics.md)
 - [Type System](reference/language/type-system.md)
 - [Tea Stdlib Design](reference/language/tea-stdlib-design.md)
+- [Standard Library Reference](stdlib-reference.md)
+- [Intrinsics Reference](intrinsics-reference.md)
+- [Maintainer Guide](maintainer-guide.md) - How to extend Tea with new intrinsics and stdlib functions
 
 ### Explanation
 

@@ -22,6 +22,7 @@ walkdir = "2"
 inkwell = { version = "0.5.0", optional = true, default-features = false, features = ["llvm17-0"] }
 tea-runtime = { path = "../tea-runtime", optional = true }
 tea-support = { path = "../tea-support" }
+tea-intrinsics = { path = "../tea-intrinsics" }
 path-clean = "1"
 pathdiff = "0.2"
 dirs-next = "2"

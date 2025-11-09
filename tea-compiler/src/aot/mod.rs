@@ -28,12 +28,14 @@ use crate::ast::{
     Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement, VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
-use crate::runtime::Intrinsic;
 use crate::stdlib::{self, StdFunctionKind};
+
+mod intrinsics;
 use crate::typechecker::{
     ErrorDefinition, FunctionInstance, StructDefinition, StructInstance, StructType, Type,
     TypeChecker,
 };
+use intrinsics::Intrinsic;
 
 fn format_type_name(ty: &Type) -> String {
     match ty {

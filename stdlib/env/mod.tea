@@ -28,16 +28,6 @@ pub def unset(name: String) -> Void
   intrinsics.env_unset(name)
 end
 
-# Check if an environment variable exists.
-#
-# Examples:
-#   if env.has("HOME")
-#     print("HOME is set")
-#   end
-pub def has(name: String) -> Bool
-  intrinsics.env_has(name)
-end
-
 # Get all environment variables as a dictionary.
 #
 # Examples:

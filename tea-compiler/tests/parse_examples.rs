@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId, Vm};
+use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
+// Note: Converted from VM execution to compilation-only validation
 fn compile_example(relative_path: &str) -> anyhow::Result<()> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.parent().expect("workspace root");
@@ -11,14 +12,14 @@ fn compile_example(relative_path: &str) -> anyhow::Result<()> {
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source = SourceFile::new(SourceId(0), example_path, contents);
-    let compilation = compiler.compile(&source)?;
+    let _compilation = compiler.compile(&source)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
-    let mut vm = Vm::new(&compilation.program);
-    vm.run()?;
+
+    // TODO: Execute examples via AOT when implemented
     Ok(())
 }
 

@@ -11,7 +11,6 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::{ArgAction, Parser, ValueEnum};
 use tea_compiler::{
     format_source, CompileOptions, Compiler, Diagnostic, DiagnosticLevel, SourceFile, SourceId,
-    TestRunOptions, Vm,
 };
 
 #[cfg(feature = "llvm-aot")]
@@ -44,30 +43,9 @@ See `tea <subcommand> --help` for command-specific options.";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Emit {
     Ast,
-    Bytecode,
     LlvmIr,
     #[cfg(feature = "llvm-aot")]
     Obj,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
-enum Backend {
-    #[default]
-    Bytecode,
-    #[cfg(feature = "llvm-aot")]
-    Llvm,
-}
-
-impl Backend {
-    #[cfg(feature = "llvm-aot")]
-    const fn build_default() -> Self {
-        Backend::Llvm
-    }
-
-    #[cfg(not(feature = "llvm-aot"))]
-    const fn build_default() -> Self {
-        Backend::Bytecode
-    }
 }
 
 #[derive(Parser)]
@@ -86,17 +64,13 @@ struct RunCli {
     #[arg(long)]
     dump_tokens: bool,
 
-    /// Emit additional compiler output (e.g. `ast`, `bytecode`).
+    /// Emit additional compiler output (e.g. `ast`, `llvm-ir`).
     #[arg(long, value_enum)]
     emit: Vec<Emit>,
 
     /// Skip executing the compiled program.
     #[arg(long)]
     no_run: bool,
-
-    /// Select the execution backend (`bytecode` or `llvm`).
-    #[arg(long, value_enum, default_value_t = Backend::default())]
-    backend: Backend,
 
     /// Arguments forwarded to the tea script.
     #[arg(value_name = "ARG", trailing_var_arg = true, num_args = 0..)]
@@ -116,10 +90,6 @@ struct BuildCli {
     /// Destination for the produced binary (defaults to `bin/<name>`).
     #[arg(short, long, value_name = "PATH")]
     output: Option<PathBuf>,
-
-    /// Backend used for code generation (only `llvm` is supported).
-    #[arg(long, value_enum, default_value_t = Backend::build_default())]
-    backend: Backend,
 
     /// Emit additional compiler output alongside the executable.
     #[arg(long, value_enum)]
@@ -327,6 +297,9 @@ fn run_fmt(cli: &FmtCli) -> Result<()> {
 }
 
 fn run_test(cli: &TestCli) -> Result<()> {
+    // AOT-based test runner implementation
+    // Strategy: Compile test files with test harness, execute, and collect results
+
     let workspace_root = detect_workspace_root()?;
 
     let target_paths = if cli.inputs.is_empty() {
@@ -359,114 +332,48 @@ fn run_test(cli: &TestCli) -> Result<()> {
         return Ok(());
     }
 
-    let filter = cli.filter.as_ref().map(|f| f.to_ascii_lowercase());
-    let filter_ref = filter.as_deref();
-    let mut total = 0usize;
-    let mut failed = 0usize;
-    let mut found_any = false;
+    // For now, we just compile the test files to verify they parse/typecheck correctly
+    // Full test execution support is being implemented
+    println!("Checking {} test file(s)...", files.len());
 
-    let snapshots_root = workspace_root.join("tests/__snapshots__");
+    let mut total_checked = 0;
+    let mut failed_check = 0;
 
-    'files: for path in files {
+    for path in files {
         let contents = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
         let source = SourceFile::new(SourceId(0), path.clone(), contents);
         let line_cache: Vec<&str> = source.contents.lines().collect();
 
         let mut compiler = Compiler::new(CompileOptions::default());
-        let compilation = compiler
+        let _compilation = compiler
             .compile(&source)
             .with_context(|| format!("failed to compile {}", path.display()))?;
 
+        total_checked += 1;
+
         if !compiler.diagnostics().is_empty() {
+            failed_check += 1;
             eprintln!("Diagnostics for {}:", path.display());
             for diagnostic in compiler.diagnostics().entries() {
                 print_diagnostic(&source, &line_cache, diagnostic);
             }
-            bail!("compilation failed for {}", path.display());
-        }
-
-        let matching_tests: Vec<_> = compilation
-            .program
-            .tests
-            .iter()
-            .filter(|test| test_matches(&test.name, filter_ref))
-            .cloned()
-            .collect();
-
-        if matching_tests.is_empty() {
-            continue;
-        }
-
-        found_any = true;
-        let display_path = path
-            .strip_prefix(&workspace_root)
-            .unwrap_or(&path)
-            .display()
-            .to_string();
-        let relative_snapshot_path = relative_snapshot_path(&workspace_root, &path);
-        let run_options = TestRunOptions {
-            update_snapshots: cli.update_snapshots,
-            snapshot_root: snapshots_root.clone(),
-            relative_test_path: relative_snapshot_path,
-        };
-
-        if cli.list {
-            println!("{}", display_path);
-            for test in matching_tests {
-                println!("  {}", test.name);
-            }
-            continue;
-        }
-
-        let mut vm = Vm::new(&compilation.program);
-        let outcomes = vm.run_tests(filter_ref, Some(&run_options))?;
-        if outcomes.is_empty() {
-            continue;
-        }
-
-        println!("{}", display_path);
-        for outcome in outcomes {
-            total += 1;
-            match outcome.status {
-                tea_compiler::TestStatus::Passed => {
-                    println!("  PASS {}", outcome.name);
-                }
-                tea_compiler::TestStatus::Failed { message } => {
-                    failed += 1;
-                    println!("  FAIL {}", outcome.name);
-                    if !message.is_empty() {
-                        println!("       {message}");
-                    }
-                    if outcome.span.line > 0 {
-                        println!("       at {}:{}", display_path, outcome.span.line);
-                    }
-                    if cli.fail_fast {
-                        break 'files;
-                    }
-                }
-            }
+        } else {
+            let display_path = path
+                .strip_prefix(&workspace_root)
+                .unwrap_or(&path)
+                .display();
+            println!("  ✓ {}", display_path);
         }
     }
 
-    if cli.list {
-        if !found_any {
-            println!("no tests discovered");
-        }
-        return Ok(());
+    if failed_check > 0 {
+        bail!("{} test file(s) failed to compile", failed_check);
     }
 
-    if !found_any {
-        println!("no tests matched the current selection");
-        return Ok(());
-    }
-
-    let passed = total.saturating_sub(failed);
-    println!("\nSummary: {passed} passed, {failed} failed, {total} total");
-
-    if failed > 0 {
-        bail!("tests failed");
-    }
+    println!("\nAll {} test file(s) compiled successfully", total_checked);
+    println!("\nNote: Test execution via AOT is not yet fully implemented.");
+    println!("Currently only checking that test files compile correctly.");
 
     Ok(())
 }
@@ -517,13 +424,7 @@ fn detect_workspace_root() -> Result<PathBuf> {
     Ok(root.to_path_buf())
 }
 
-fn test_matches(name: &str, filter: Option<&str>) -> bool {
-    if let Some(needle) = filter {
-        name.to_ascii_lowercase().contains(needle)
-    } else {
-        true
-    }
-}
+// Removed: test_matches - was only used by VM test runner
 
 fn run_program(cli: RunCli) -> Result<()> {
     let contents = fs::read_to_string(&cli.input)
@@ -551,12 +452,6 @@ fn run_program(cli: RunCli) -> Result<()> {
 
     if cli.emit.contains(&Emit::Ast) {
         println!("{:#?}", compilation.module);
-    }
-
-    if cli.emit.contains(&Emit::Bytecode) {
-        for (index, instruction) in compilation.program.chunk.instructions.iter().enumerate() {
-            println!("{index:04}: {instruction}");
-        }
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
@@ -594,40 +489,10 @@ fn run_program(cli: RunCli) -> Result<()> {
         }
     }
 
-    let program_label = cli
-        .input
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(|stem| stem.to_string())
-        .unwrap_or_else(|| cli.input.display().to_string());
-
-    #[cfg(feature = "llvm-aot")]
-    {
-        match cli.backend {
-            Backend::Bytecode => {
-                if !cli.no_run {
-                    let mut vm = Vm::new(&compilation.program);
-                    vm.set_cli_context(program_label.clone(), cli.script_args.clone());
-                    vm.run().context("Runtime error")?;
-                }
-            }
-            Backend::Llvm => {
-                bail!("Executing via the LLVM backend is not supported yet; use `tea build` to produce a binary.");
-            }
-        }
-    }
-
-    #[cfg(not(feature = "llvm-aot"))]
-    {
-        match cli.backend {
-            Backend::Bytecode => {
-                if !cli.no_run {
-                    let mut vm = Vm::new(&compilation.program);
-                    vm.set_cli_context(program_label.clone(), cli.script_args.clone());
-                    vm.run().context("Runtime error")?;
-                }
-            }
-        }
+    // AOT compilation is not yet set up for direct execution
+    // Users should use `tea build` to create an executable
+    if !cli.no_run {
+        bail!("Direct execution is not yet supported. Use `tea build {}` to create an executable, or use `--no-run` to compile only.", cli.input.display());
     }
 
     Ok(())
@@ -659,12 +524,6 @@ fn run_build(cli: BuildCli) -> Result<()> {
         println!("{:#?}", compilation.module);
     }
 
-    if cli.emit.contains(&Emit::Bytecode) {
-        for (index, instruction) in compilation.program.chunk.instructions.iter().enumerate() {
-            println!("{index:04}: {instruction}");
-        }
-    }
-
     if !compiler.diagnostics().is_empty() {
         eprintln!("Diagnostics:");
         for diagnostic in compiler.diagnostics().entries() {
@@ -672,12 +531,7 @@ fn run_build(cli: BuildCli) -> Result<()> {
         }
     }
 
-    match cli.backend {
-        Backend::Bytecode => {
-            bail!("the bytecode backend cannot produce native executables; pass `--backend llvm`")
-        }
-        Backend::Llvm => build_with_llvm(&cli, &compilation),
-    }
+    build_with_llvm(&cli, &compilation)
 }
 
 #[cfg(feature = "llvm-aot")]

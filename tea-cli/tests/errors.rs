@@ -16,6 +16,7 @@ fn workspace_root() -> PathBuf {
 }
 
 #[test]
+#[cfg(feature = "llvm-aot")]
 fn run_script_handles_errors_as_values() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let script_path = tmp.path().join("errors.tea");
@@ -58,11 +59,23 @@ print(fallback)
 "#,
     )?;
 
-    let output = Command::new(tea_cli_binary())
+    // Build the script using AOT compilation
+    let binary_path = tmp.path().join("errors");
+    let build_output = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
+        .arg("build")
         .arg(&script_path)
+        .arg("-o")
+        .arg(&binary_path)
         .output()
-        .expect("run tea script with errors-as-values");
+        .expect("build tea script with errors-as-values");
+
+    assert!(build_output.status.success(), "build should succeed");
+
+    // Run the compiled binary
+    let output = Command::new(&binary_path)
+        .output()
+        .expect("run compiled binary");
 
     assert!(output.status.success(), "script should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);

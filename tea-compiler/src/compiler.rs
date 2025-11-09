@@ -12,7 +12,7 @@ use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
 use crate::parser::Parser;
 use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
-use crate::runtime::{CodeGenerator, Program, VmSemanticMetadata};
+// VM imports removed - using AOT only
 use crate::source::{SourceFile, SourceId};
 use crate::stdlib::{self, StdFunction, StdType};
 use crate::typechecker::TypeChecker;
@@ -58,7 +58,6 @@ fn describe_std_function(function: &StdFunction) -> String {
 
 pub struct Compilation {
     pub module: Module,
-    pub program: Program,
     pub module_aliases: HashMap<String, ModuleAliasBinding>,
     pub binding_types: HashMap<SourceSpan, String>,
     pub argument_types: HashMap<SourceSpan, String>,
@@ -141,7 +140,7 @@ impl Compiler {
         resolver.resolve_module(&expanded_module);
         let ResolverOutput {
             diagnostics: resolve_diagnostics,
-            lambda_captures,
+            lambda_captures: _lambda_captures,
             module_aliases,
         } = resolver.into_parts();
         let resolve_errors = resolve_diagnostics.has_errors();
@@ -152,9 +151,9 @@ impl Compiler {
 
         let mut type_checker = TypeChecker::new();
         type_checker.check_module(&expanded_module);
-        let function_instances = type_checker.function_instances().clone();
-        let function_call_metadata = type_checker.function_call_metadata().clone();
-        let struct_call_metadata = type_checker.struct_call_metadata().clone();
+        let _function_instances = type_checker.function_instances().clone();
+        let _function_call_metadata = type_checker.function_call_metadata().clone();
+        let _struct_call_metadata = type_checker.struct_call_metadata().clone();
         let binding_types = type_checker
             .binding_types()
             .iter()
@@ -172,11 +171,11 @@ impl Compiler {
             .map(|(name, ty)| (name, ty.describe()))
             .collect::<HashMap<_, _>>();
         let struct_definitions = type_checker.struct_definitions();
-        let union_definitions = type_checker.union_definitions();
-        let type_test_metadata = type_checker.type_test_metadata().clone();
+        let _union_definitions = type_checker.union_definitions();
+        let _type_test_metadata = type_checker.type_test_metadata().clone();
         let enum_definitions = type_checker.enum_definitions();
-        let enum_variant_metadata = type_checker.enum_variant_metadata().clone();
-        let error_definitions = type_checker.error_definitions();
+        let _enum_variant_metadata = type_checker.enum_variant_metadata().clone();
+        let _error_definitions = type_checker.error_definitions();
         let mut type_diagnostics = type_checker.into_diagnostics();
         let type_errors = type_diagnostics.has_errors();
         if !alias_export_renames.is_empty() {
@@ -263,23 +262,9 @@ impl Compiler {
             }
         }
 
-        let metadata = VmSemanticMetadata {
-            function_instances,
-            function_call_metadata,
-            struct_call_metadata,
-            struct_definitions,
-            union_definitions,
-            enum_variant_metadata,
-            enum_definitions,
-            type_test_metadata,
-            error_definitions,
-        };
-        let generator = CodeGenerator::new(lambda_captures, metadata);
-        let program = generator.compile_module(&expanded_module)?;
-
+        // VM bytecode generation removed - using AOT compilation only
         Ok(Compilation {
             module: expanded_module,
-            program,
             module_aliases,
             binding_types,
             argument_types,

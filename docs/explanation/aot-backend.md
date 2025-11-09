@@ -22,7 +22,7 @@ cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/bas
 
 ## Current Capabilities
 
-- **Inputs**: The backend reuses the existing front-end pipeline (lexer → parser → resolver → type checker). It consumes the same expanded `Module` that the bytecode generator sees, so diagnostics stay consistent.
+- **Inputs**: The backend reuses the existing front-end pipeline (lexer → parser → resolver → type checker) and consumes the expanded `Module` produced by those stages, keeping diagnostics consistent.
 - **Supported constructs**:
   - Integer and float literals with arithmetic (`+`, `-`, `*`, `/`, `%`) and mixed-type promotion (Int → Float).
   - Integer comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`).
@@ -31,7 +31,7 @@ cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/bas
   - Assignment to existing locals (`x = x + 1`, reassigning strings/lists/structs).
   - `while` / `until` loops in functions and at module top-level.
   - Function definitions, recursion, and explicit `return`.
-  - List literals/indexing and dictionary literals/member access (lowered via runtime helpers for consistent semantics with the VM).
+  - List literals/indexing and dictionary literals/member access (lowered via runtime helpers so semantics match the reference runtime).
   - Struct definitions, constructors (positional and named arguments), member access, equality, and `print` support (forwarded to the runtime).
   - Builtin `print` for `Int`, `Float`, `Bool`, `String`, `List`, `Dict`, and Struct through the `tea-runtime` crate.
   - Generic functions and structs. The type checker emits the concrete instantiations it sees (including those defined in `use`-able modules), and the backend monomorphises each specialisation into a distinct LLVM function/struct template.
@@ -41,18 +41,18 @@ cargo run -p tea-cli -- --emit llvm-ir --emit obj --no-run examples/language/bas
 
 ## Limitations (for now)
 
-- Lambda literals lower with captured environments, but nested generic closures are still routed through the VM until we add specialisation support there.
+- Lambda literals lower with captured environments, but nested generic closures still require additional specialisation work and currently fail compilation.
 - Cross-compilation is not wired up. The linker assumes a host build and relies on `rustc` locating the Rust standard library.
 - LLVM-specific failures still surface coarse errors (e.g., missing toolchains), but front-end diagnostics now include spans and import hints.
-- `for` loops will remain VM-only until iterator semantics settle.
+- `for` loops are not yet lowered; iterator semantics will land before we add IR support.
 - `std.json.decode` / `std.yaml.decode` currently materialise dictionaries/lists with unspecified value types; richer typing for mixed JSON data is planned.
-- `support.cli.capture` still routes through the VM path; only `args` and `parse` lower through LLVM today.
+- `support.cli.capture` has not been ported yet; only `args` and `parse` lower through LLVM today.
 
 ## Next Steps
 
 - Lower remaining language features (dictionaries, member access, `for` loops once iterables land).
 - Add cross-compilation hooks (`--target`, custom linker flags) so `tea build` can produce artefacts for other platforms.
-- Add Criterion benchmarks to compare interpreter vs LLVM output once execution is wired up.
+- Add Criterion benchmarks to track LLVM output performance across releases.
 - Improve diagnostics (include spans/labels) and surface linker hints for missing runtime symbols/toolchains.
 
 Track detailed milestones in [docs/rfcs/aot-llvm-plan.md](../rfcs/aot-llvm-plan.md); this document will evolve as the backend matures.

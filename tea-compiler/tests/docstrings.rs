@@ -54,7 +54,7 @@ end
         source_text.to_string(),
     );
     let mut compiler = Compiler::new(CompileOptions::default());
-    let _compilation = compiler.compile(&source)?;
+    compiler.compile(&source)?;
 
     assert!(
         !compiler.diagnostics().has_errors(),

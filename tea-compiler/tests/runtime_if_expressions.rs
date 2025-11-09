@@ -15,9 +15,8 @@ print(y)
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -42,9 +41,8 @@ print(greeting)
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -69,9 +67,8 @@ print(x)
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -97,9 +94,8 @@ print(x)
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -128,9 +124,8 @@ print(result)
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),

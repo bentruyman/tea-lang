@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
-// Note: This test was converted from VM-based execution to AOT compilation-only
 // Full test execution support via AOT is planned for the future
 #[test]
 fn const_bindings_are_immutable_and_accessible() -> anyhow::Result<()> {
@@ -28,7 +27,7 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let _compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",

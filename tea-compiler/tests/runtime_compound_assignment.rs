@@ -6,13 +6,12 @@ fn run_code(code: &str) -> anyhow::Result<()> {
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), code.to_string());
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
 
     if !compiler.diagnostics().is_empty() {
         anyhow::bail!("compilation failed: {:?}", compiler.diagnostics());
     }
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),

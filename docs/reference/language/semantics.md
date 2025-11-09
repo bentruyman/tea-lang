@@ -20,7 +20,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - Compound: `List[T]`, `Dict[K, V]`, `Struct`, `Func`.
 - `Nil` represents optional absence and is a first-class value; `Void` marks functions that do not return data. Both `nil` and `void` evaluate as falsy alongside `false`.
 - Type annotations use postfix colon: `var count: Int = 0`. Omitted annotations trigger inference. Containers use brackets (`List[Int]`, `Dict[String, Int]`) and function types use `Func(Int) -> Int`.
-- **Generics:** functions and structs can be parameterised with square-bracket type parameters (e.g. `def identity[T](value: T) -> T`). Call sites may pass explicit type arguments (`identity[Int](42)`), and both the VM and LLVM backends monomorphise the concrete instantiations that the type checker discovers—even when the generic is defined in a separate module that is pulled in via `use`.
+- **Generics:** functions and structs can be parameterised with square-bracket type parameters (e.g. `def identity[T](value: T) -> T`). Call sites may pass explicit type arguments (`identity[Int](42)`), and the LLVM-based backend monomorphises the concrete instantiations that the type checker discovers—even when the generic is defined in a separate module that is pulled in via `use`.
 - Structs introduce nominal record types:
   ```
   struct User {
@@ -100,7 +100,7 @@ This document captures the first working cut of tea-lang. It is the contract for
 - `var` creates mutable binding in the current scope. `const` creates an immutable binding; any assignment to that name after initialization raises a resolver/type-checker diagnostic.
 - Closures capture by reference. Mutation inside closures affects outer binding.
 - Shadowing is disallowed; redeclarations across scopes produce resolver diagnostics.
-- The resolver rejects duplicate declarations in the same scope and flags attempts to shadow existing bindings or reference undefined names before bytecode is emitted.
+- The resolver rejects duplicate declarations in the same scope and flags attempts to shadow existing bindings or reference undefined names before LLVM IR is emitted.
 - The resolver also reports unused local variables and parameters so you can prune dead bindings early.
 
 ## Functions & Modules
@@ -136,7 +136,7 @@ end
 
 - Programs execute top-to-bottom. Each file compiles to a module containing a top-level block invoked when loaded.
 - Running the CLI executes the main file's module block, leaving exported bindings in the module namespace.
-- Arithmetic honours numeric types: operations on two `Int`s remain integral, but if either operand is a `Float` the VM promotes the result to `Float`; division or modulo by zero raises a runtime error.
+- Arithmetic honours numeric types: operations on two `Int`s remain integral, but if either operand is a `Float` the runtime promotes the result to `Float`; division or modulo by zero raises a runtime error.
 - Standard library provides `print`, math helpers, HTTP stub (future). For prototype, embed minimal host functions (`print`, `len`).
 
 ## Errors & Diagnostics
@@ -165,7 +165,7 @@ end
 3. Parser builds AST honoring newline-delimited statements.
 4. Resolver builds symbol table, resolves identifiers and modules.
 5. Type checker annotates nodes, accumulates diagnostics.
-6. Lowering produces bytecode instructions.
-7. VM executes instructions, calling host functions for built-ins.
+6. Lowering produces LLVM IR, which links against `tea-runtime` to form an executable.
+7. The compiled binary executes directly, invoking runtime helpers for built-ins.
 
 Document revisions should align with implementation milestones so tooling and docs stay truthful.

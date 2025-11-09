@@ -12,7 +12,6 @@ use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, LexerError, TokenKind};
 use crate::parser::Parser;
 use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
-// VM imports removed - using AOT only
 use crate::source::{SourceFile, SourceId};
 use crate::stdlib::{self, StdFunction, StdType};
 use crate::typechecker::TypeChecker;
@@ -174,7 +173,6 @@ impl Compiler {
         let _union_definitions = type_checker.union_definitions();
         let _type_test_metadata = type_checker.type_test_metadata().clone();
         let enum_definitions = type_checker.enum_definitions();
-        let _enum_variant_metadata = type_checker.enum_variant_metadata().clone();
         let _error_definitions = type_checker.error_definitions();
         let mut type_diagnostics = type_checker.into_diagnostics();
         let type_errors = type_diagnostics.has_errors();
@@ -262,7 +260,6 @@ impl Compiler {
             }
         }
 
-        // VM bytecode generation removed - using AOT compilation only
         Ok(Compilation {
             module: expanded_module,
             module_aliases,

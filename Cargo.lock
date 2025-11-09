@@ -1068,8 +1068,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dirs-next",
  "flate2",
  "hmac",
+ "pathdiff",
  "serde_json",
  "sha2",
  "tar",
@@ -1092,7 +1094,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tea-intrinsics",
- "tea-runtime",
  "tea-support",
  "tempfile",
  "thiserror",

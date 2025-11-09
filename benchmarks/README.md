@@ -1,6 +1,6 @@
 # Tea Language Benchmarks
 
-This directory contains benchmarks for measuring and comparing the performance of the Tea AOT compiler against equivalent Rust and JavaScript programs.
+This directory contains benchmarks for measuring and comparing the performance of the Tea compiler against equivalent Rust and JavaScript programs.
 
 ## Directory Structure
 
@@ -64,7 +64,7 @@ cargo install hyperfine
 
 ### Run All Benchmarks
 
-By default, compares **Tea AOT** vs **Rust** only:
+By default, compares **Tea** vs **Rust** only:
 
 ```bash
 ./scripts/bench.sh all
@@ -76,26 +76,12 @@ To include JavaScript (Bun):
 ./scripts/bench.sh --include-js all
 ```
 
-To include the Tea VM (bytecode interpreter):
-
-```bash
-./scripts/bench.sh --include-vm all
-```
-
-To include everything:
-
-```bash
-./scripts/bench.sh --include-js --include-vm all
-```
-
 ### Run Specific Benchmark
 
 ```bash
 ./scripts/bench.sh loops
 ./scripts/bench.sh fib 5 20  # 5 warmup runs, 20 measured runs
 ./scripts/bench.sh --include-js loops  # Include JS comparison
-./scripts/bench.sh --include-vm loops  # Include VM comparison
-./scripts/bench.sh --include-js --include-vm fib  # Include both
 ```
 
 ### Clean Artifacts
@@ -112,7 +98,7 @@ To include everything:
 
 ## Compilation Settings
 
-### Tea AOT
+### Tea
 
 `tea build` uses **O3 + auto-detected CPU** by default for maximum performance:
 
@@ -150,21 +136,13 @@ Benchmark results are saved to `benchmark_results/`:
 
 **Default mode** (no flags):
 
-- Tea AOT vs Rust
+- Tea vs Rust
 
 **With `--include-js` flag**:
 
-- Tea AOT vs Rust vs JavaScript (Bun)
+- Tea vs Rust vs JavaScript (Bun)
 
-**With `--include-vm` flag**:
-
-- Tea AOT vs Rust vs Tea VM (bytecode)
-
-**With both flags**:
-
-- Tea AOT vs Rust vs JavaScript (Bun) vs Tea VM (bytecode)
-
-The VM and JS are excluded by default to focus on the Tea AOT vs Rust comparison. The VM is primarily used for development/debugging, while JS (Bun) provides an interesting reference point for dynamic language performance.
+JavaScript benchmarks are excluded by default to keep the focus on Tea vs Rust. JS (Bun) provides an optional reference point for dynamic language performance.
 
 ## Metrics
 
@@ -178,7 +156,7 @@ For each benchmark, hyperfine measures:
 
 These benchmarks help us:
 
-1. Track Tea AOT compiler performance over time
+1. Track Tea compiler performance over time
 2. Compare Tea against equivalent Rust programs
 3. Identify optimization opportunities
 4. Validate that Tea can match or approach Rust performance

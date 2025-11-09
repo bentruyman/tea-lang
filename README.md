@@ -1,6 +1,6 @@
 # Tea Language
 
-A strongly typed scripting language with Ruby-inspired syntax that compiles to native code or runs on a VM.
+A strongly typed scripting language with Ruby-inspired syntax that compiles to native code.
 
 ```tea
 def greet(name: String) -> String
@@ -19,7 +19,7 @@ end
 - **Static typing with inference** – catch errors before runtime while keeping code concise
 - **Familiar syntax** – indentation-based, inspired by Ruby and Python
 - **Generics** – write once, use anywhere with automatic specialization
-- **Dual backends** – fast iteration with VM or native binaries via LLVM
+- **Native compilation** – compiles to fast, standalone native binaries
 - **Rich standard library** – filesystem, processes, JSON/YAML, and CLI helpers built-in
 
 ## Quick Start
@@ -72,7 +72,7 @@ add(5, true)  # Error: expected Int, found Bool
 
 ### Compile to Native
 
-Build a standalone binary with the LLVM backend:
+Build a standalone binary:
 
 ```bash
 cargo run -p tea-cli -- build hello.tea
@@ -93,7 +93,7 @@ Explore more in the [`examples/`](examples/) directory:
 - **[Getting Started Guide](docs/)** – comprehensive language reference
 - **[Language Semantics](docs/reference/language/semantics.md)** – types, scoping, modules
 - **[Standard Library](docs/roadmap/cli-stdlib.md)** – available modules and roadmap
-- **[AOT Backend](docs/explanation/aot-backend.md)** – LLVM compilation details
+- **[Compiler Architecture](docs/explanation/aot-backend.md)** – LLVM compilation details
 - **[LSP Setup](docs/how-to/lsp-setup.md)** – editor integration
 
 ## Development
@@ -110,7 +110,7 @@ make test     # Run test suite
 
 - `tea-cli/` – Command-line interface
 - `tea-compiler/` – Lexer, parser, typechecker, and codegen
-- `tea-runtime/` – VM and runtime support for compiled binaries
+- `tea-runtime/` – Runtime support library for compiled binaries (FFI helpers, stdlib hooks)
 - `tea-lsp/` – Language server for editor integration
 - `spec/` – Language specification (grammar, AST, tokens)
 - `examples/` – Sample Tea programs

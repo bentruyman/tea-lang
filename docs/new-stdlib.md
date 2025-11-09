@@ -12,13 +12,31 @@
 
 ## Built-ins
 
+### Debug
+
 - `@print(value: Unknown)` - Prints the string representation of a value to stderr
 - `@println(value: Unknown)` - Prints the string representation of a value to stderr, followed by a newline
-
 - `@to_string(value: Unknown)` - Converts any value to its string representation
+- `@type_of(value: Unknown)` - Returns a string representation of the type of a value
+
+### Error Handling
+
+- `@panic(message: String)` - Panics with a message
+
+### Math
+
+- `@floor(value: Float) -> Int` - Rounds a float down to the nearest integer
+- `@ceil(value: Float) -> Int` - Rounds a float up to the nearest integer
+- `@round(value: Float) -> Int` - Rounds a float to the nearest integer
+- `@abs(value: Float) -> Float` - Get the absolute value of a float
+- `@sqrt(value: Float) -> Float` - Get the square root of a float
+- `@min(a: Float, b: Float) -> Float` - Get the minimum of two floats
+- `@max(a: Float, b: Float) -> Float` - Get the maximum of two floats
+- ``
+
+### Utility
 
 - `@len(value: Dict | List | String)` - Gets the number of items in a `List`, characters in a `String`, or keys in a `Dict`
-- ``
 
 ## Standard Library
 
@@ -42,12 +60,16 @@
 - `read_file(path: String) -> String` - Read the contents of a file
 - `remove(path: String) -> Void` - Remove a file or directory
 - `rename(source: String, target: String) -> Void` - Rename a file or directory
+- `stat(path: String) -> FileInfo` - Get information about a file or directory
 - `write_file(path: String, contents: String) -> Void` - Write the contents of a file
 
 ### json
 
 ### path
 
+- `basename(path: String) -> String` - Get the filename part of a path
+- `dirname(path: String) -> String` - Get the directory part of a path
+- `extension(path: String) -> String` - Get the extension of a path
 - `join(parts: List[String]) -> String` - Join a list of path parts into a single path
 - `split(path: String) -> List[String]` - Split a path into its parts
 
@@ -55,6 +77,9 @@
 
 - `starts_with(text: String, prefix: String) -> Bool` - Check if a string starts with a given prefix
 - `ends_with(text: String, suffix: String) -> Bool` - Check if a string ends with a given suffix
+- `replace(text: String, pattern: String, replacement: String) -> String` - Replace all occurrences of a pattern in a string with a replacement
+- `to_lower(text: String) -> String` - Convert a string to lowercase
+- `to_upper(text: String) -> String` - Convert a string to uppercase
 - `trim_start(text: String) -> String` - Trim whitespace from the start of a string
 - `trim_end(text: String) -> String` - Trim whitespace from the end of a string
 - `trim(text: String) -> String` - Trim whitespace from both ends of a string

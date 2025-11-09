@@ -6,10 +6,6 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-[features]
-default = []
-llvm-aot = ["inkwell", "tea-runtime"]
-
 [dependencies]
 anyhow.workspace = true
 thiserror.workspace = true
@@ -19,8 +15,7 @@ serde_yaml = "0.9"
 glob = "0.3"
 tempfile = "3"
 walkdir = "2"
-inkwell = { version = "0.5.0", optional = true, default-features = false, features = ["llvm17-0"] }
-tea-runtime = { path = "../tea-runtime", optional = true }
+inkwell = { version = "0.5.0", default-features = false, features = ["llvm17-0"] }
 tea-support = { path = "../tea-support" }
 tea-intrinsics = { path = "../tea-intrinsics" }
 path-clean = "1"

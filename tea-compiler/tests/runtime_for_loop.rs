@@ -26,14 +26,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -71,14 +70,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -116,14 +114,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -165,14 +162,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -213,14 +209,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -261,14 +256,13 @@ end
     );
 
     let mut compiler = Compiler::new(CompileOptions::default());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),

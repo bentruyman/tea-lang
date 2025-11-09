@@ -1,5 +1,4 @@
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,7 +15,7 @@ fn unique_temp_dir() -> PathBuf {
 }
 
 #[test]
-fn fs_roundtrip_through_vm() -> anyhow::Result<()> {
+fn fs_roundtrip_through_runtime() -> anyhow::Result<()> {
     let dir_path = unique_temp_dir();
     let file_path = dir_path.join("sample.txt");
     let backups_path = dir_path.join("backups");
@@ -74,14 +73,13 @@ fs.remove("{dir}")
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("fs.tea"), source);
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),
@@ -112,10 +110,9 @@ fs.read_text("{path}")
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("fs_missing.tea"), source);
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(compiler.diagnostics().is_empty(), "unexpected diagnostics");
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),

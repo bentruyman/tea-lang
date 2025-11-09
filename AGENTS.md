@@ -17,12 +17,12 @@
 - **Types**: Prefer explicit types on function signatures; rely on inference for local bindings; use `Type` enum from typechecker
 - **Error handling**: Propagate with `?`; use `bail!` for early returns with context; avoid `.unwrap()` except in tests
 - **Comments**: Document non-obvious design decisions; avoid stating what code does—explain _why_
-- **Tests**: Place integration tests in `tea-compiler/tests/feature_name.rs`; use snapshot testing for diagnostics; validate bytecode instructions by name
+- **Tests**: Place integration tests in `tea-compiler/tests/feature_name.rs`; use snapshot testing for diagnostics; validate AOT lowering via emitted LLVM IR when necessary
 - **Tea language**: 2-space indent, `snake_case` names, terminate blocks with `end`, no semicolons, backticks for string interpolation
 
 ## Repository Structure
 
 - `tea-cli/`: CLI binary (`src/main.rs`)
 - `tea-compiler/`: Pipeline stages (`lexer/`, `parser/`, `runtime/`, `aot/`)
-- `tea-runtime/`: VM and runtime helpers
+- `tea-runtime/`: Runtime helpers used by compiled binaries
 - `examples/`: Executable `.tea` samples grouped by topic

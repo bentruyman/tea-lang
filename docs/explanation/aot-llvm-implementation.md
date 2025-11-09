@@ -1,13 +1,13 @@
 # LLVM AOT Backend Implementation
 
-Tea-lang programs compile Ahead-Of-Time to native binaries with performance comparable to Rust/Go, while preserving the current compiler pipeline for diagnostics and interpreter fallback. This document describes the implementation architecture and current status.
+Tea-lang programs compile Ahead-Of-Time to native binaries with performance comparable to Rust/Go, while preserving the current compiler pipeline for diagnostics and consistent semantics. This document describes the implementation architecture and current status.
 
 ## Current Pipeline Snapshot
 
 - **Front-end** – `Lexer` → `Parser` → AST (`tea-compiler/src/parser/mod.rs`).
-- **Semantic passes** – `Resolver` (scope rules) and `TypeChecker` (inferred/annotated types). The type checker already produces precise types for expressions, which the bytecode generator ignores today.
-- **Code generation** – `CodeGenerator` lowers AST to stack-based bytecode (`Program`) executed by `Vm`. The LLVM backend sits alongside it in `tea-compiler::aot`.
-- **CLI** – defaults to the VM backend for `tea run`, while `tea build` lowers to IR/object/executable via LLVM. `--emit {llvm-ir,obj}` work for both inspection and build pipelines.
+- **Semantic passes** – `Resolver` (scope rules) and `TypeChecker` (inferred/annotated types). The type checker already produces precise types for expressions, which LLVM lowering now consumes directly.
+- **Code generation** – `tea-compiler::aot` lowers the expanded AST directly to LLVM IR before linking via `tea-runtime`.
+- **CLI** – executes everything through the LLVM backend (`tea run` builds and runs in-place; `tea build` emits IR/object/executable). `--emit {llvm-ir,obj}` work for inspection or to keep intermediates.
 
 The AOT backend will hook in after type checking, using the same expanded `Module` and diagnostics infrastructure.
 
@@ -29,7 +29,7 @@ The AOT backend will hook in after type checking, using the same expanded `Modul
 - ✅ Lambda literals now lower to closure structs with capture handling and callable function pointers.
 - 🚧 Pending: dictionaries/member access on dictionaries and `for` loops once iterable semantics settle.
   - ✅ Diagnostics bubble up through the same error tracker; unsupported constructs still report early.
-  - ✅ `support.cli`'s `args`/`parse` helpers lower through LLVM (dispatching to the runtime); `capture` remains VM-only for now.
+  - ✅ `support.cli`'s `args`/`parse` helpers lower through LLVM (dispatching to the runtime); `capture` still needs an LLVM implementation.
 
 4. **Runtime Alignment**
    - Decide on memory model for compound types:
@@ -43,7 +43,7 @@ The AOT backend will hook in after type checking, using the same expanded `Modul
    - 🚧 Cross-compilation, linker flag overrides, and nicer diagnostics for missing toolchains/linkers.
 
 6. **Testing & Benchmarks**
-   - Create criterion benchmarks (`fib`, numeric loops) to compare interpreter vs LLVM AOT.
+   - Create criterion benchmarks (`fib`, numeric loops) to track LLVM AOT performance.
    - Add integration tests ensuring emitted binaries run expected outputs.
 
 ## Immediate Tasks
@@ -52,7 +52,7 @@ The AOT backend will hook in after type checking, using the same expanded `Modul
 2. Add CLI options for cross-compiling (`--target`, linker override) and document the `rustc` dependency for final linking.
 3. Introduce regression coverage for `tea build` (e.g. smoke tests that run the produced binary) and document manual testing steps for unsupported platforms.
 4. Improve diagnostics surfaced from LLVM verification/linking (linker not found, missing runtime artefacts).
-5. Run performance experiments (Criterion micro-benchmarks) comparing VM vs LLVM output to validate the payoff.
+5. Run performance experiments (Criterion micro-benchmarks) to track LLVM output gains over time.
 
 ## Open Questions
 

@@ -1,11 +1,9 @@
 mod cli;
 
 use crate::cli::{CliParseOutcome, CliScopeOutcome, RuntimeValue};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use dirs_next::{config_dir, home_dir};
 use glob::glob;
-use path_clean::PathClean;
-use pathdiff::diff_paths;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::cell::Cell;
@@ -23,7 +21,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 use tea_support::{cli_error, env_error, fs_error, io_error, process_error};
 use tempfile::NamedTempFile;
-use walkdir::WalkDir;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -427,46 +424,6 @@ fn compute_basename(input: &str) -> String {
         Some(Component::RootDir) => std::path::MAIN_SEPARATOR.to_string(),
         Some(Component::Prefix(prefix)) => prefix.as_os_str().to_string_lossy().into_owned(),
         None => input.to_string(),
-    }
-}
-
-fn compute_absolute(target: &str, base: Option<String>) -> Result<String> {
-    let target_path = PathBuf::from(target);
-    if target_path.is_absolute() {
-        return Ok(path_to_string(target_path.clean().as_path()));
-    }
-
-    let mut base_path = if let Some(base) = base {
-        PathBuf::from(base)
-    } else {
-        env::current_dir().context("failed to resolve current directory")?
-    };
-
-    if !base_path.is_absolute() {
-        let cwd = env::current_dir().context("failed to resolve current directory")?;
-        base_path = cwd.join(base_path);
-    }
-
-    let combined = base_path.join(target_path);
-    Ok(path_to_string(combined.clean().as_path()))
-}
-
-fn compute_relative(target: &str, base: &str) -> Result<String> {
-    let target_path = Path::new(target).clean();
-    let base_path = Path::new(base).clean();
-    match diff_paths(&target_path, &base_path) {
-        Some(diff) => {
-            if diff.as_os_str().is_empty() {
-                Ok(".".to_string())
-            } else {
-                Ok(path_to_string(diff.as_path()))
-            }
-        }
-        None => anyhow::bail!(
-            "unable to compute relative path from '{}' to '{}'",
-            base,
-            target
-        ),
     }
 }
 

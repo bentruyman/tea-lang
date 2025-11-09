@@ -16,7 +16,6 @@ fn workspace_root() -> PathBuf {
 }
 
 #[test]
-#[cfg(feature = "llvm-aot")]
 fn run_script_handles_errors_as_values() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let script_path = tmp.path().join("errors.tea");

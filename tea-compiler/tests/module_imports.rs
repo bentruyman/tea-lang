@@ -39,7 +39,7 @@ box.value + helper.SCALE
 
     let source_file = SourceFile::new(SourceId(0), main_path.clone(), main_source.to_string());
     let mut compiler = Compiler::new(CompileOptions::default());
-    let _compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",

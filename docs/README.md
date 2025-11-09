@@ -31,8 +31,8 @@ Technical specifications and API documentation.
 
 Architecture decisions, design rationale, and deep dives.
 
-- [AOT Backend Architecture](explanation/aot-backend.md)
-- [LLVM AOT Implementation](explanation/aot-llvm-implementation.md)
+- [Compiler Architecture](explanation/aot-backend.md)
+- [LLVM Implementation](explanation/aot-llvm-implementation.md)
 - [Compiler Code Generation](explanation/compiler-codegen.md)
 
 ## Contributing to Documentation

@@ -110,7 +110,6 @@ pub(crate) struct EnumType {
     pub name: String,
 }
 
-#[cfg_attr(not(feature = "llvm-aot"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct FunctionInstance {
     pub type_arguments: Vec<Type>,
@@ -118,7 +117,6 @@ pub struct FunctionInstance {
     pub return_type: Type,
 }
 
-#[cfg_attr(not(feature = "llvm-aot"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct StructInstance {
     pub type_arguments: Vec<Type>,
@@ -152,21 +150,17 @@ pub(crate) struct EnumDefinition {
 #[derive(Debug, Clone)]
 pub(crate) struct ErrorDefinition {
     pub variants: HashMap<String, ErrorVariantDefinition>,
-    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ErrorVariantDefinition {
-    pub name: String,
     pub fields: Vec<ErrorFieldDefinition>,
-    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ErrorFieldDefinition {
     pub name: String,
     pub ty: Type,
-    pub span: SourceSpan,
 }
 
 impl EnumDefinition {
@@ -178,14 +172,6 @@ impl EnumDefinition {
 #[derive(Debug, Clone)]
 pub(crate) struct EnumVariantDefinition {
     pub name: String,
-    pub discriminant: usize,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct EnumVariantMetadata {
-    pub enum_name: String,
-    pub variant_name: String,
-    pub discriminant: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -318,7 +304,6 @@ pub struct TypeChecker {
     module_aliases: HashMap<String, ModuleBinding>,
     contexts: Vec<FunctionContext>,
     diagnostics: Diagnostics,
-    #[cfg(feature = "llvm-aot")]
     lambda_types: HashMap<usize, Type>,
     function_instances: HashMap<String, Vec<FunctionInstance>>,
     struct_instances: HashMap<String, Vec<StructInstance>>,
@@ -326,7 +311,6 @@ pub struct TypeChecker {
     struct_call_metadata: HashMap<SourceSpan, (String, StructInstance)>,
     binding_types: HashMap<SourceSpan, Type>,
     argument_expected_types: HashMap<SourceSpan, Type>,
-    enum_variant_metadata: HashMap<SourceSpan, EnumVariantMetadata>,
     match_exhaustiveness: HashMap<SourceSpan, Vec<String>>,
     type_test_metadata: HashMap<SourceSpan, Type>,
     suppress_list_element_errors: bool,
@@ -351,7 +335,6 @@ impl TypeChecker {
             module_aliases: HashMap::new(),
             contexts: Vec::new(),
             diagnostics: Diagnostics::new(),
-            #[cfg(feature = "llvm-aot")]
             lambda_types: HashMap::new(),
             function_instances: HashMap::new(),
             struct_instances: HashMap::new(),
@@ -359,7 +342,6 @@ impl TypeChecker {
             struct_call_metadata: HashMap::new(),
             binding_types: HashMap::new(),
             argument_expected_types: HashMap::new(),
-            enum_variant_metadata: HashMap::new(),
             match_exhaustiveness: HashMap::new(),
             type_test_metadata: HashMap::new(),
             suppress_list_element_errors: false,
@@ -383,7 +365,6 @@ impl TypeChecker {
         self.diagnostics
     }
 
-    #[cfg(feature = "llvm-aot")]
     pub(crate) fn lambda_types(&self) -> &HashMap<usize, Type> {
         &self.lambda_types
     }
@@ -392,7 +373,6 @@ impl TypeChecker {
         &self.function_instances
     }
 
-    #[cfg_attr(not(feature = "llvm-aot"), allow(dead_code))]
     pub(crate) fn struct_instances(&self) -> &HashMap<String, Vec<StructInstance>> {
         &self.struct_instances
     }
@@ -429,10 +409,6 @@ impl TypeChecker {
 
     pub(crate) fn error_definitions(&self) -> HashMap<String, ErrorDefinition> {
         self.errors.clone()
-    }
-
-    pub(crate) fn enum_variant_metadata(&self) -> &HashMap<SourceSpan, EnumVariantMetadata> {
-        &self.enum_variant_metadata
     }
 
     pub(crate) fn match_exhaustiveness(&self) -> &HashMap<SourceSpan, Vec<String>> {
@@ -603,7 +579,7 @@ impl TypeChecker {
 
                 let mut seen = HashSet::new();
                 let mut variants = Vec::new();
-                for (index, variant) in enum_stmt.variants.iter().enumerate() {
+                for variant in &enum_stmt.variants {
                     if !seen.insert(variant.name.clone()) {
                         self.report_error(
                             format!(
@@ -616,7 +592,6 @@ impl TypeChecker {
                     }
                     variants.push(EnumVariantDefinition {
                         name: variant.name.clone(),
-                        discriminant: index,
                     });
                 }
 
@@ -664,11 +639,7 @@ impl TypeChecker {
 
                     variants.insert(
                         variant.name.clone(),
-                        ErrorVariantDefinition {
-                            name: variant.name.clone(),
-                            fields: Vec::new(),
-                            span: variant.span,
-                        },
+                        ErrorVariantDefinition { fields: Vec::new() },
                     );
 
                     let field_sources = variant
@@ -683,13 +654,8 @@ impl TypeChecker {
                     sources.insert(variant.name.clone(), field_sources);
                 }
 
-                self.errors.insert(
-                    error_stmt.name.clone(),
-                    ErrorDefinition {
-                        variants,
-                        span: error_stmt.span,
-                    },
-                );
+                self.errors
+                    .insert(error_stmt.name.clone(), ErrorDefinition { variants });
                 self.error_variant_sources
                     .insert(error_stmt.name.clone(), sources);
             }
@@ -928,7 +894,6 @@ impl TypeChecker {
                     fields.push(ErrorFieldDefinition {
                         name: field.name,
                         ty: field_type,
-                        span: field.span,
                     });
                 }
 
@@ -1591,29 +1556,22 @@ impl TypeChecker {
                                 }
                             }
                             (Type::Enum(enum_type), _) => {
-                                let variant_name = if let Some(metadata) =
-                                    self.enum_variant_metadata.get(&pattern_expr.span)
-                                {
-                                    if metadata.enum_name == enum_type.name {
-                                        Some(metadata.variant_name.clone())
-                                    } else {
-                                        None
-                                    }
-                                } else if let ExpressionKind::Member(member) = &pattern_expr.kind {
-                                    if let ExpressionKind::Identifier(identifier) =
-                                        &member.object.kind
-                                    {
-                                        if identifier.name == enum_type.name {
-                                            Some(member.property.clone())
+                                let variant_name =
+                                    if let ExpressionKind::Member(member) = &pattern_expr.kind {
+                                        if let ExpressionKind::Identifier(identifier) =
+                                            &member.object.kind
+                                        {
+                                            if identifier.name == enum_type.name {
+                                                Some(member.property.clone())
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             None
                                         }
                                     } else {
                                         None
-                                    }
-                                } else {
-                                    None
-                                };
+                                    };
 
                                 if let Some(variant) = variant_name {
                                     if !matched_enum_variants.insert(variant.clone()) {
@@ -3078,29 +3036,22 @@ impl TypeChecker {
                                 }
                             }
                             (Type::Enum(enum_type), _) => {
-                                let variant_name = if let Some(metadata) =
-                                    self.enum_variant_metadata.get(&pattern_expr.span)
-                                {
-                                    if metadata.enum_name == enum_type.name {
-                                        Some(metadata.variant_name.clone())
-                                    } else {
-                                        None
-                                    }
-                                } else if let ExpressionKind::Member(member) = &pattern_expr.kind {
-                                    if let ExpressionKind::Identifier(identifier) =
-                                        &member.object.kind
-                                    {
-                                        if identifier.name == enum_type.name {
-                                            Some(member.property.clone())
+                                let variant_name =
+                                    if let ExpressionKind::Member(member) = &pattern_expr.kind {
+                                        if let ExpressionKind::Identifier(identifier) =
+                                            &member.object.kind
+                                        {
+                                            if identifier.name == enum_type.name {
+                                                Some(member.property.clone())
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             None
                                         }
                                     } else {
                                         None
-                                    }
-                                } else {
-                                    None
-                                };
+                                    };
 
                                 if let Some(variant) = variant_name {
                                     if !matched_enum_variants.insert(variant.clone()) {
@@ -3540,15 +3491,7 @@ impl TypeChecker {
                 if let ExpressionKind::Identifier(identifier) = &member.object.kind {
                     if identifier.name == enum_type.name {
                         if let Some(definition) = self.enums.get(&enum_type.name) {
-                            if let Some(variant) = definition.variant(&member.property) {
-                                self.enum_variant_metadata.insert(
-                                    member_span,
-                                    EnumVariantMetadata {
-                                        enum_name: enum_type.name.clone(),
-                                        variant_name: variant.name.clone(),
-                                        discriminant: variant.discriminant,
-                                    },
-                                );
+                            if let Some(_variant) = definition.variant(&member.property) {
                                 return Type::Enum(enum_type.clone());
                             } else {
                                 self.report_error(
@@ -4751,10 +4694,7 @@ impl TypeChecker {
 
         self.pop_scope();
         let function_type = Type::Function(param_types.clone(), Box::new(return_type.clone()));
-        #[cfg(feature = "llvm-aot")]
-        {
-            self.lambda_types.insert(lambda.id, function_type.clone());
-        }
+        self.lambda_types.insert(lambda.id, function_type.clone());
         function_type
     }
 

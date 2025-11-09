@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Benchmark harness for Tea AOT compiler performance
+# Benchmark harness for Tea compiler performance
 # Requires: hyperfine (install via: cargo install hyperfine)
 
 set -euo pipefail
@@ -20,8 +20,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default: don't include VM benchmarks or JS
-INCLUDE_VM=false
+# Default: run Tea vs Rust only; JS is opt-in
 INCLUDE_JS=false
 
 # Ensure hyperfine is installed
@@ -49,8 +48,8 @@ fi
 mkdir -p "${BIN_DIR}"
 mkdir -p "${RESULTS_DIR}"
 
-echo -e "${BLUE}Tea Language AOT Compiler Benchmark Suite${NC}"
-echo "=========================================="
+echo -e "${BLUE}Tea Language Compiler Benchmark Suite${NC}"
+echo "======================================"
 echo ""
 
 # Discover benchmarks: find triples that exist in tea/, rust/, and optionally js/
@@ -74,14 +73,14 @@ discover_benchmarks() {
 build_tea() {
     local name="$1"
     local input="${TEA_BENCHMARKS_DIR}/${name}.tea"
-    local output="${BIN_DIR}/${name}_aot"
+    local output="${BIN_DIR}/${name}_tea"
     
     if [ ! -f "${input}" ]; then
         echo -e "${RED}Tea file not found: ${input}${NC}" >&2
         return 1
     fi
     
-    echo -e "${YELLOW}Building ${name}.tea with AOT compiler...${NC}" >&2
+    echo -e "${YELLOW}Building ${name}.tea...${NC}" >&2
     
     cargo run -p tea-cli --quiet --release -- build \
         --output "${output}" \
@@ -143,10 +142,10 @@ benchmark_program() {
         return 1
     fi
     
-    # Build AOT binary
-    local aot_binary
-    if ! aot_binary=$(build_tea "${name}"); then
-        echo -e "${RED}Failed to build AOT binary for ${name}${NC}"
+    # Build Tea binary
+    local tea_binary
+    if ! tea_binary=$(build_tea "${name}"); then
+        echo -e "${RED}Failed to build Tea binary for ${name}${NC}"
         return 1
     fi
     
@@ -165,8 +164,8 @@ benchmark_program() {
     hyperfine_cmd+=" --export-markdown ${RESULTS_DIR}/${name}.md"
     hyperfine_cmd+=" --export-json ${RESULTS_DIR}/${name}.json"
     
-    # Add Tea AOT binary
-    hyperfine_cmd+=" --command-name 'Tea AOT' '${aot_binary}'"
+    # Add Tea binary
+    hyperfine_cmd+=" --command-name 'Tea' '${tea_binary}'"
     
     # Add Rust binary
     hyperfine_cmd+=" --command-name 'Rust' '${rust_binary}'"
@@ -177,11 +176,6 @@ benchmark_program() {
         if [ -f "${js_file}" ]; then
             hyperfine_cmd+=" --command-name 'JavaScript (Bun)' 'bun ${js_file}'"
         fi
-    fi
-    
-    # Optionally add VM benchmark
-    if [ "${INCLUDE_VM}" = true ]; then
-        hyperfine_cmd+=" --command-name 'Tea VM (bytecode)' 'cargo run -p tea-cli --quiet --release -- ${tea_file}'"
     fi
     
     # Run benchmark
@@ -195,16 +189,10 @@ run_all() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local summary_file="${RESULTS_DIR}/summary_${timestamp}.md"
     
-    echo "# Tea AOT Benchmark Results" > "${summary_file}"
+    echo "# Tea Benchmark Results" > "${summary_file}"
     echo "" >> "${summary_file}"
     echo "Generated: $(date)" >> "${summary_file}"
     echo "" >> "${summary_file}"
-    
-    if [ "${INCLUDE_VM}" = true ]; then
-        echo "VM benchmarks: included" >> "${summary_file}"
-    else
-        echo "VM benchmarks: excluded (use --include-vm to enable)" >> "${summary_file}"
-    fi
     
     if [ "${INCLUDE_JS}" = true ] && [ "${HAS_BUN}" = true ]; then
         echo "JavaScript benchmarks: included (Bun)" >> "${summary_file}"
@@ -231,14 +219,14 @@ run_all() {
                 echo "## ${bench}" >> "${summary_file}"
                 echo "" >> "${summary_file}"
 
-                # Add a short relative summary (Ratios vs Tea AOT)
+                # Add a short relative summary (Ratios vs Tea)
                 json_file="${RESULTS_DIR}/${bench}.json"
                 if [ -f "${json_file}" ]; then
                     tea_mean=$(jq -r '.results[0].mean' "${json_file}")
                     results_len=$(jq -r '.results | length' "${json_file}")
 
                     if [ -n "${tea_mean}" ] && [ "${tea_mean}" != "null" ]; then
-                        echo "Relative to Tea AOT:" >> "${summary_file}"
+                        echo "Relative to Tea:" >> "${summary_file}"
 
                         # Rust is always the second entry
                         if [ "${results_len}" -ge 2 ]; then
@@ -255,22 +243,6 @@ run_all() {
                             if [ -n "${js_mean}" ] && [ "${js_mean}" != "null" ]; then
                                 js_ratio=$(awk "BEGIN { printf \"%.2f\", ${js_mean}/${tea_mean} }")
                                 echo "- JavaScript (Bun): ${js_ratio}x" >> "${summary_file}"
-                            fi
-                        fi
-
-                        # VM may be present as 3rd (when JS excluded) or 4th (when JS included)
-                        if [ "${INCLUDE_VM}" = true ]; then
-                            if [ "${INCLUDE_JS}" = true ] && [ "${HAS_BUN}" = true ]; then
-                                vm_index=3
-                            else
-                                vm_index=2
-                            fi
-                            if [ "${results_len}" -ge $((vm_index+1)) ]; then
-                                vm_mean=$(jq -r ".results[${vm_index}].mean" "${json_file}")
-                                if [ -n "${vm_mean}" ] && [ "${vm_mean}" != "null" ]; then
-                                    vm_ratio=$(awk "BEGIN { printf \"%.2f\", ${vm_mean}/${tea_mean} }")
-                                    echo "- Tea VM (bytecode): ${vm_ratio}x" >> "${summary_file}"
-                                fi
                             fi
                         fi
 
@@ -292,7 +264,7 @@ run_all() {
 # Function to clean build artifacts
 clean() {
     echo "Cleaning benchmark artifacts..."
-    rm -f "${BIN_DIR}"/*_aot
+    rm -f "${BIN_DIR}"/*_tea
     rm -f "${BIN_DIR}"/*_rust
     echo "Done."
 }
@@ -307,15 +279,12 @@ usage() {
     echo "  <name>           Run specific benchmark"
     echo ""
     echo "Options:"
-    echo "  --include-vm     Include Tea VM (bytecode) in benchmarks"
     echo "  --include-js     Include JavaScript (Bun) in benchmarks"
     echo "  --help           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0 all                       # Run all benchmarks (AOT vs Rust only)"
-    echo "  $0 --include-vm all          # Run all benchmarks including VM"
+    echo "  $0 all                       # Run all benchmarks (Tea vs Rust only)"
     echo "  $0 --include-js all          # Run all benchmarks including JS/Bun"
-    echo "  $0 --include-js --include-vm all  # Include both VM and JS"
     echo "  $0 loops                     # Run loops benchmark"
     echo "  $0 --include-js fib 5 20     # Run fib with JS, 5 warmup, 20 runs"
 }
@@ -323,10 +292,6 @@ usage() {
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --include-vm)
-            INCLUDE_VM=true
-            shift
-            ;;
         --include-js)
             INCLUDE_JS=true
             if [ "${HAS_BUN}" = false ]; then

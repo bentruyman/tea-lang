@@ -1,6 +1,6 @@
 # Type System
 
-Goal: make type annotations meaningful and catch obvious mismatches before bytecode generation.
+Goal: make type annotations meaningful and catch obvious mismatches before LLVM lowering.
 
 ## Scope
 

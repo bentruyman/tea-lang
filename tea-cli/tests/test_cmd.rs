@@ -118,7 +118,6 @@ end
     );
 }
 
-#[cfg(feature = "llvm-aot")]
 #[test]
 fn build_creates_bundle_and_checksum() {
     let tmp = tempdir().expect("tempdir");
@@ -166,7 +165,6 @@ main()
     assert!(checksum_path.exists(), "checksum should exist");
 }
 
-#[cfg(feature = "llvm-aot")]
 #[test]
 fn build_errors_script_runs_successfully() {
     let tmp = tempdir().expect("tempdir");

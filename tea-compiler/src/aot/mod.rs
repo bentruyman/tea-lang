@@ -1,5 +1,3 @@
-#![cfg(feature = "llvm-aot")]
-
 use std::collections::HashMap;
 use std::iter::Peekable;
 use std::str::Chars;

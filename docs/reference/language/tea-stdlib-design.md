@@ -30,7 +30,7 @@ The Tea standard library is being migrated from Rust implementations to Tea code
                   │ calls intrinsic
                   ▼
 ┌─────────────────────────────────────────┐
-│ VM Intrinsic Handler (Rust)             │
+│ Runtime Intrinsic Handler (Rust)        │
 │   Intrinsic::IsString => {              │
 │     // existing type check impl         │
 │   }                                     │
@@ -64,9 +64,9 @@ Tea code that wraps intrinsics and provides ergonomic APIs:
 - `stdlib/json/mod.tea` - JSON codec
 - `stdlib/yaml/mod.tea` - YAML codec
 
-### 3. Snapshot Format (`tea-compiler/src/stdlib_snapshot.rs`)
+### 3. Snapshot Format (planned)
 
-Compiled stdlib packaged for embedding:
+Compiled stdlib packaged for embedding directly in the CLI binary:
 
 ```rust
 pub struct Snapshot {
@@ -76,7 +76,7 @@ pub struct Snapshot {
 
 pub struct SnapshotModule {
     pub path: String,           // "std.util"
-    pub bytecode: Vec<u8>,      // compiled Tea code
+    pub artifact: Vec<u8>,      // serialized Tea module (LLVM bitcode/object)
     pub exports: Vec<Export>,   // function signatures
 }
 
@@ -90,7 +90,7 @@ pub struct Export {
 
 ### 4. Build Process (`tea-compiler/build.rs`)
 
-1. Compile each `stdlib/*/mod.tea` to bytecode
+1. Compile each `stdlib/*/mod.tea` to LLVM bitcode (or another serialized IR format)
 2. Extract exported function signatures
 3. Serialize to JSON snapshot
 4. Generate `src/embedded_stdlib.rs`:
@@ -118,7 +118,7 @@ fn len(value)        # Exports: len/1
 
 Typechecker reads exports from snapshot → knows `is_string` takes 1 arg.
 
-## Migration Path
+## Implementation Phases
 
 ### Phase 1: Foundation ✅
 
@@ -135,7 +135,7 @@ Typechecker reads exports from snapshot → knows `is_string` takes 1 arg.
 
 ### Phase 3: Runtime Integration
 
-- [ ] Wire intrinsics to VM
+- [ ] Wire intrinsics to runtime
 - [ ] Update resolver for snapshot loading
 - [ ] Feature flag: `tea-stdlib` vs `rust-stdlib`
 
@@ -156,22 +156,22 @@ Typechecker reads exports from snapshot → knows `is_string` takes 1 arg.
 ### Why Intrinsics Instead of FFI?
 
 - **Simpler**: No ABI, marshaling, or dynamic loading
-- **Faster**: Direct VM dispatch, no overhead
+- **Faster**: Direct runtime dispatch, no overhead
 - **Type-safe**: Intrinsics validated at compile-time
 - **Familiar**: Similar to Lua/Ruby/Python built-ins
 
-### Why Snapshot Instead of JIT Compilation?
+### Why Snapshot Instead of Interpreting at Runtime?
 
-- **Fast startup**: No parsing/compilation at runtime
-- **Deterministic**: Same bytecode across platforms
-- **Small size**: Bytecode smaller than source
-- **Secure**: No runtime code generation
+- **Fast startup**: No parsing/compilation work when programs run
+- **Deterministic**: Same embedded module across platforms
+- **Small size**: Compiled artifacts compress better than source
+- **Secure**: No runtime code generation or eval
 
 ### Why JSON for Snapshot Format?
 
 - **Initial simplicity**: Easy debugging and inspection
 - **Human-readable**: Can inspect snapshot contents
-- **Future migration**: Can switch to bincode/CBOR/MessagePack later
+- **Future flexibility**: Can switch to bincode/CBOR/MessagePack later
 - **Good enough**: ~100KB uncompressed for full stdlib
 
 ### Why Embed Instead of Install?
@@ -202,7 +202,7 @@ end
 ```json
 {
   "path": "std.util",
-  "bytecode": [0x12, 0x34, ...],
+  "artifact": [0x12, 0x34, ...],
   "exports": [
     {"name": "len", "arity": 1, "variadic": false, "doc": "Returns the length..."},
     {"name": "is_string", "arity": 1, "variadic": false, "doc": "Returns true..."}
@@ -225,7 +225,7 @@ end
 
 1. Resolver sees `"std.util"` → loads from embedded snapshot
 2. Compiler generates call to `util.is_string`
-3. VM executes stdlib bytecode → calls `__intrinsic_is_string`
+3. Runtime executes the embedded stdlib module → calls `__intrinsic_is_string`
 4. Intrinsic handler executes Rust type check
 5. Result returned to caller
 
@@ -260,13 +260,13 @@ $ cargo test --features tea-stdlib
 ### Cold Path (Startup)
 
 - Snapshot deserialization: ~1ms
-- Bytecode loading: ~500μs per module
+- Module loading: ~500μs per module
 - **Total overhead**: <5ms for full stdlib
 
 ### Hot Path (Runtime)
 
 - Intrinsic calls: same overhead as current stdlib calls
-- Tea wrapper functions: ~10 bytecode instructions
+- Tea wrapper functions: ~10 LLVM IR instructions
 - **No measurable difference** vs current Rust stdlib
 
 ### Binary Size
@@ -295,4 +295,4 @@ $ cargo test --features tea-stdlib
 - **Backward compatible**: Existing programs continue to work
 - **Forward compatible**: Snapshot format versioned, can evolve
 - **Cross-platform**: Intrinsics abstract platform differences
-- **No breaking changes**: Migrations feature-flagged
+- **No breaking changes**: Feature gates control rollouts

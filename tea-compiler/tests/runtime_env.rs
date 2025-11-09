@@ -1,10 +1,9 @@
-use std::env;
 use std::path::PathBuf;
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
 #[test]
-fn env_helpers_operate_via_vm() -> anyhow::Result<()> {
+fn env_helpers_operate_through_runtime() -> anyhow::Result<()> {
     let source = r#"
 use assert = "std.assert"
 use env = "std.env"
@@ -28,14 +27,13 @@ assert.assert(cwd != "")
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(SourceId(0), PathBuf::from("env.tea"), source.to_string());
-    let compilation = compiler.compile(&source_file)?;
+    compiler.compile(&source_file)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "unexpected diagnostics: {:?}",
         compiler.diagnostics()
     );
 
-    // Note: This test was converted from VM-based execution to AOT compilation-only
     // Full test execution support via AOT is planned for the future
     assert!(
         compiler.diagnostics().is_empty(),

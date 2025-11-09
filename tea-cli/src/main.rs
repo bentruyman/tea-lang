@@ -4,32 +4,26 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
-#[cfg(feature = "llvm-aot")]
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{ArgAction, Parser, ValueEnum};
+use dirs_next::home_dir;
+use pathdiff::diff_paths;
 use tea_compiler::{
     format_source, CompileOptions, Compiler, Diagnostic, DiagnosticLevel, SourceFile, SourceId,
 };
 
-#[cfg(feature = "llvm-aot")]
 use tea_compiler::aot::{self, ObjectCompileOptions};
 
-#[cfg(feature = "llvm-aot")]
 use flate2::{write::GzEncoder, Compression};
-#[cfg(feature = "llvm-aot")]
 use hmac::{Hmac, Mac};
-#[cfg(feature = "llvm-aot")]
 use serde_json::json;
-#[cfg(feature = "llvm-aot")]
 use sha2::{Digest, Sha256};
-#[cfg(feature = "llvm-aot")]
 use tar::{Builder, Header, HeaderMode};
-#[cfg(feature = "llvm-aot")]
+use tempfile::tempdir;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-#[cfg(feature = "llvm-aot")]
 type HmacSha256 = Hmac<Sha256>;
 
 const RUN_AFTER_HELP: &str = "\
@@ -44,7 +38,6 @@ See `tea <subcommand> --help` for command-specific options.";
 enum Emit {
     Ast,
     LlvmIr,
-    #[cfg(feature = "llvm-aot")]
     Obj,
 }
 
@@ -95,69 +88,47 @@ struct BuildCli {
     #[arg(long, value_enum)]
     emit: Vec<Emit>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "TRIPLE")]
     target: Option<String>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "CPU")]
     cpu: Option<String>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "FEATURES")]
     features: Option<String>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "LEVEL")]
     opt_level: Option<String>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, action = ArgAction::SetTrue)]
     lto: bool,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, action = ArgAction::SetTrue)]
     bundle: bool,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH", requires = "bundle")]
     bundle_output: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, action = ArgAction::SetTrue)]
     checksum: bool,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH", requires = "checksum")]
     checksum_output: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH")]
     signature_key: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH", requires = "signature_key")]
     signature_output: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH")]
     rustc: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long, value_name = "PATH")]
     linker: Option<PathBuf>,
 
-    #[cfg(feature = "llvm-aot")]
     #[arg(long = "linker-arg", value_name = "ARG")]
     linker_args: Vec<String>,
-
-    #[cfg(not(feature = "llvm-aot"))]
-    #[arg(long, hide = true)]
-    _target: Option<String>,
-
-    #[cfg(not(feature = "llvm-aot"))]
-    #[arg(long, hide = true)]
-    _unused: Option<String>,
 }
 
 #[derive(Parser)]
@@ -205,7 +176,7 @@ struct TestCli {
 }
 
 fn main() -> Result<()> {
-    let raw: Vec<OsString> = std::env::args_os().collect();
+    let mut raw: Vec<OsString> = std::env::args_os().collect();
     if raw.get(1).map(|arg| arg == "build").unwrap_or(false) {
         return handle_build(raw);
     }
@@ -214,6 +185,9 @@ fn main() -> Result<()> {
     }
     if raw.get(1).map(|arg| arg == "test").unwrap_or(false) {
         return handle_test(raw);
+    }
+    if raw.get(1).map(|arg| arg == "run").unwrap_or(false) {
+        raw.remove(1);
     }
 
     let run_cli = RunCli::parse_from(raw);
@@ -226,17 +200,8 @@ fn handle_build(raw: Vec<OsString>) -> Result<()> {
         args.remove(1); // drop the literal "build"
     }
 
-    #[cfg(feature = "llvm-aot")]
-    {
-        let build_cli = BuildCli::parse_from(args);
-        run_build(build_cli)
-    }
-
-    #[cfg(not(feature = "llvm-aot"))]
-    {
-        let _ = BuildCli::parse_from(args);
-        bail!("LLVM backend not enabled; rebuild with `--features tea-cli/llvm-aot`");
-    }
+    let build_cli = BuildCli::parse_from(args);
+    run_build(build_cli)
 }
 
 fn handle_fmt(raw: Vec<OsString>) -> Result<()> {
@@ -378,19 +343,6 @@ fn run_test(cli: &TestCli) -> Result<()> {
     Ok(())
 }
 
-fn relative_snapshot_path(workspace_root: &Path, test_path: &Path) -> PathBuf {
-    let relative = test_path.strip_prefix(workspace_root).unwrap_or(test_path);
-    if let Ok(stripped) = relative.strip_prefix(Path::new("tests")) {
-        if stripped.as_os_str().is_empty() {
-            relative.to_path_buf()
-        } else {
-            stripped.to_path_buf()
-        }
-    } else {
-        relative.to_path_buf()
-    }
-}
-
 fn collect_tea_files(path: &PathBuf, targets: &mut BTreeSet<PathBuf>) -> Result<()> {
     let metadata = fs::metadata(path).with_context(|| format!("Failed to access {:?}", path))?;
 
@@ -424,8 +376,6 @@ fn detect_workspace_root() -> Result<PathBuf> {
     Ok(root.to_path_buf())
 }
 
-// Removed: test_matches - was only used by VM test runner
-
 fn run_program(cli: RunCli) -> Result<()> {
     let contents = fs::read_to_string(&cli.input)
         .with_context(|| format!("Failed to read {:?}", cli.input))?;
@@ -455,18 +405,10 @@ fn run_program(cli: RunCli) -> Result<()> {
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        #[cfg(feature = "llvm-aot")]
-        {
-            let ir = aot::compile_module_to_llvm_ir(&compilation.module)?;
-            println!("{ir}");
-        }
-        #[cfg(not(feature = "llvm-aot"))]
-        {
-            bail!("LLVM backend not enabled; rebuild with `--features tea-cli/llvm-aot`");
-        }
+        let ir = aot::compile_module_to_llvm_ir(&compilation.module)?;
+        println!("{ir}");
     }
 
-    #[cfg(feature = "llvm-aot")]
     if cli.emit.contains(&Emit::Obj) {
         let object_path = object_output_for_source(&cli.input);
         if let Some(parent) = object_path.parent() {
@@ -489,19 +431,75 @@ fn run_program(cli: RunCli) -> Result<()> {
         }
     }
 
-    // AOT compilation is not yet set up for direct execution
-    // Users should use `tea build` to create an executable
-    if !cli.no_run {
-        bail!("Direct execution is not yet supported. Use `tea build {}` to create an executable, or use `--no-run` to compile only.", cli.input.display());
+    if cli.no_run {
+        return Ok(());
+    }
+
+    let rustc_path = std::env::var_os("RUSTC")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("rustc"));
+    let temp_dir = tempdir().context("failed to create temporary directory for execution")?;
+    let mut temp_output = temp_dir.path().join(
+        cli.input
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("program"),
+    );
+    if cfg!(windows) && temp_output.extension().is_none() {
+        temp_output.set_extension("exe");
+    }
+
+    build_temporary_executable(&compilation, &temp_output, &rustc_path)?;
+
+    let status = Command::new(&temp_output)
+        .args(&cli.script_args)
+        .status()
+        .with_context(|| format!("failed to execute {}", cli.input.display()))?;
+    if !status.success() {
+        bail!("program exited with status {}", status);
     }
 
     Ok(())
 }
 
-#[cfg(feature = "llvm-aot")]
 fn run_build(cli: BuildCli) -> Result<()> {
     let contents = fs::read_to_string(&cli.input)
         .with_context(|| format!("Failed to read {:?}", cli.input))?;
+
+    let mut output = cli
+        .output
+        .clone()
+        .unwrap_or_else(|| default_binary_path(&cli.input));
+    if cfg!(windows) && output.extension().is_none() {
+        output.set_extension("exe");
+    }
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+
+    let rustc_path = cli
+        .rustc
+        .clone()
+        .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("rustc"));
+    let rustc_info = detect_rustc_info(&rustc_path);
+
+    let cache_entry = if cli.emit.is_empty() {
+        build_cache_entry(&cli, &contents, &rustc_info)?
+    } else {
+        None
+    };
+
+    if let Some(entry) = &cache_entry {
+        if entry.path.exists() {
+            match reuse_cached_binary(entry, &output, &cli, &rustc_info) {
+                Ok(()) => return Ok(()),
+                Err(err) => eprintln!("warning: failed to reuse cached binary: {err}"),
+            }
+        }
+    }
 
     let source = SourceFile::new(SourceId(0), cli.input.clone(), contents);
     let line_cache: Vec<&str> = source.contents.lines().collect();
@@ -531,10 +529,17 @@ fn run_build(cli: BuildCli) -> Result<()> {
         }
     }
 
-    build_with_llvm(&cli, &compilation)
+    build_with_llvm(&cli, &compilation, &output, &rustc_path, &rustc_info)?;
+
+    if let Some(entry) = cache_entry {
+        if let Err(err) = store_binary_in_cache(&entry.path, &output) {
+            eprintln!("warning: failed to write cache entry: {err}");
+        }
+    }
+
+    Ok(())
 }
 
-#[cfg(feature = "llvm-aot")]
 fn detect_native_cpu() -> Option<&'static str> {
     // Detect the native CPU for optimal performance
     #[cfg(target_arch = "aarch64")]
@@ -574,42 +579,16 @@ fn detect_native_cpu() -> Option<&'static str> {
     }
 }
 
-#[cfg(feature = "llvm-aot")]
-fn build_with_llvm(cli: &BuildCli, compilation: &tea_compiler::Compilation) -> Result<()> {
-    let mut output = match &cli.output {
-        Some(path) => path.clone(),
-        None => default_binary_path(&cli.input),
-    };
-    if cfg!(windows) && output.extension().is_none() {
-        output.set_extension("exe");
-    }
-    if let Some(parent) = output.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
-    }
+fn build_with_llvm(
+    cli: &BuildCli,
+    compilation: &tea_compiler::Compilation,
+    output: &Path,
+    rustc_path: &Path,
+    rustc_info: &RustcInfo,
+) -> Result<()> {
+    let object_options = object_options_from_cli(cli)?;
 
-    let mut object_options = ObjectCompileOptions::default();
-    object_options.entry_symbol = Some("tea_main");
-    object_options.triple = cli.target.as_deref();
-
-    // Auto-detect CPU if not specified for maximum performance
-    if let Some(cpu) = cli.cpu.as_deref() {
-        object_options.cpu = Some(cpu);
-    } else if let Some(detected_cpu) = detect_native_cpu() {
-        object_options.cpu = Some(detected_cpu);
-    }
-
-    if let Some(features) = cli.features.as_deref() {
-        object_options.features = Some(features);
-    }
-    if let Some(level) = cli.opt_level.as_deref() {
-        object_options.opt_level = parse_opt_level(level)?;
-    }
-
-    object_options.lto = cli.lto;
-
-    let object_path = object_path_for_output(&output);
+    let object_path = object_path_for_output(output);
     if let Err(err) =
         aot::compile_module_to_object(&compilation.module, &object_path, &object_options)
     {
@@ -642,19 +621,13 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
     fs::write(&stub_path, STUB_SOURCE)?;
 
     let runtime_rlib = locate_runtime_rlib(current_profile())?;
-    let rustc_path = cli
-        .rustc
-        .clone()
-        .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("rustc"));
-    let rustc_info = detect_rustc_info(&rustc_path);
 
     link_with_rustc(
-        &rustc_path,
+        rustc_path,
         &stub_path,
         &object_path,
         &runtime_rlib,
-        &output,
+        output,
         cli.target.as_deref(),
         cli.linker.as_deref(),
         &cli.linker_args,
@@ -666,15 +639,77 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
     }
     let _ = fs::remove_file(&stub_path);
 
+    finalize_build_outputs(cli, output, &object_options, rustc_info)?;
+    println!("Built {}", output.display());
+    Ok(())
+}
+
+fn build_temporary_executable(
+    compilation: &tea_compiler::Compilation,
+    output: &Path,
+    rustc_path: &Path,
+) -> Result<()> {
+    let mut object_options = ObjectCompileOptions::default();
+    object_options.entry_symbol = Some("tea_main");
+    object_options.triple = None;
+    object_options.cpu = detect_native_cpu();
+
+    let mut object_path = output.to_path_buf();
+    object_path.set_extension(object_extension());
+    aot::compile_module_to_object(&compilation.module, &object_path, &object_options)?;
+
+    let stub_path = object_path.with_extension("stub.rs");
+    fs::write(&stub_path, STUB_SOURCE)?;
+    let runtime_rlib = locate_runtime_rlib(current_profile())?;
+
+    link_with_rustc(
+        rustc_path,
+        &stub_path,
+        &object_path,
+        &runtime_rlib,
+        output,
+        None,
+        None,
+        &[],
+        object_options.lto,
+    )?;
+
+    let _ = fs::remove_file(&object_path);
+    let _ = fs::remove_file(&stub_path);
+    Ok(())
+}
+
+fn object_options_from_cli<'a>(cli: &'a BuildCli) -> Result<ObjectCompileOptions<'a>> {
+    let mut options = ObjectCompileOptions::default();
+    options.entry_symbol = Some("tea_main");
+    options.triple = cli.target.as_deref();
+    options.cpu = match cli.cpu.as_deref() {
+        Some(cpu) => Some(cpu),
+        None => detect_native_cpu(),
+    };
+    options.features = cli.features.as_deref();
+    if let Some(level) = cli.opt_level.as_deref() {
+        options.opt_level = parse_opt_level(level)?;
+    }
+    options.lto = cli.lto;
+    Ok(options)
+}
+
+fn finalize_build_outputs(
+    cli: &BuildCli,
+    output: &Path,
+    object_options: &ObjectCompileOptions<'_>,
+    rustc_info: &RustcInfo,
+) -> Result<()> {
     let build_time = build_timestamp()?;
-    let sha256 = compute_sha256(&output)?;
+    let sha256 = compute_sha256(output)?;
 
     if cli.checksum {
         let checksum_path = cli
             .checksum_output
             .clone()
-            .unwrap_or_else(|| checksum_path_for(&output));
-        write_checksum_file(&checksum_path, &output, &sha256)?;
+            .unwrap_or_else(|| checksum_path_for(output));
+        write_checksum_file(&checksum_path, output, &sha256)?;
         println!("Checksum written to {}", checksum_path.display());
     }
 
@@ -684,8 +719,8 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         let signature_path = cli
             .signature_output
             .clone()
-            .unwrap_or_else(|| signature_path_for(&output));
-        write_signature_file(&signature_path, &output, &key_bytes)?;
+            .unwrap_or_else(|| signature_path_for(output));
+        write_signature_file(&signature_path, output, &key_bytes)?;
         println!("Signature written to {}", signature_path.display());
     }
 
@@ -704,9 +739,9 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         let bundle_path = cli
             .bundle_output
             .clone()
-            .unwrap_or_else(|| default_bundle_path(&output));
+            .unwrap_or_else(|| default_bundle_path(output));
         let metadata_json = build_metadata_json(
-            &output,
+            output,
             &cli.input,
             &target_label,
             cli.cpu.as_deref(),
@@ -717,7 +752,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
             rustc_info.version.as_deref(),
         )?;
         bundle_artifacts(
-            &output,
+            output,
             &bundle_path,
             &metadata_json,
             &sha256,
@@ -726,7 +761,6 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         println!("Bundle written to {}", bundle_path.display());
     }
 
-    println!("Built {}", output.display());
     Ok(())
 }
 
@@ -775,7 +809,6 @@ fn print_diagnostic(source: &SourceFile, lines: &[&str], diagnostic: &Diagnostic
     }
 }
 
-#[cfg(feature = "llvm-aot")]
 fn default_binary_path(input: &Path) -> PathBuf {
     let mut dir = PathBuf::from("bin");
     let stem = input
@@ -786,7 +819,152 @@ fn default_binary_path(input: &Path) -> PathBuf {
     dir
 }
 
-#[cfg(feature = "llvm-aot")]
+struct CacheEntry {
+    path: PathBuf,
+}
+
+fn build_cache_entry(
+    cli: &BuildCli,
+    contents: &str,
+    rustc_info: &RustcInfo,
+) -> Result<Option<CacheEntry>> {
+    let cache_root = match cache_root_dir() {
+        Some(dir) => dir,
+        None => return Ok(None),
+    };
+
+    let project_root = cli
+        .input
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let canonical_project = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.clone());
+    let workspace_dir = cache_root.join(workspace_slug(&canonical_project));
+
+    let relative_input = diff_paths(&cli.input, &canonical_project).unwrap_or_else(|| {
+        cli.input
+            .file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("input.tea"))
+    });
+    let sanitized_relative = sanitize_relative_path(&relative_input);
+
+    let mut cache_dir = workspace_dir;
+    if let Some(parent) = sanitized_relative.parent() {
+        if !parent.as_os_str().is_empty() {
+            cache_dir = cache_dir.join(parent);
+        }
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
+    hasher.update(contents.as_bytes());
+    hasher.update(cli.target.as_deref().unwrap_or("host").as_bytes());
+    hasher.update(cli.cpu.as_deref().unwrap_or("native").as_bytes());
+    hasher.update(cli.features.as_deref().unwrap_or("").as_bytes());
+    hasher.update(cli.opt_level.as_deref().unwrap_or("").as_bytes());
+    let lto_flag = if cli.lto { "lto" } else { "no-lto" };
+    hasher.update(lto_flag.as_bytes());
+    if let Some(version) = rustc_info.version.as_deref() {
+        hasher.update(version.as_bytes());
+    }
+    if let Some(host) = rustc_info.host.as_deref() {
+        hasher.update(host.as_bytes());
+    }
+    let key_hex = format!("{:x}", hasher.finalize());
+    let hash_prefix = &key_hex[..16];
+
+    let stem = sanitized_relative
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("program");
+    let cache_file = cache_dir.join(format!("{stem}-{hash_prefix}.bin"));
+
+    Ok(Some(CacheEntry { path: cache_file }))
+}
+
+fn reuse_cached_binary(
+    entry: &CacheEntry,
+    output: &Path,
+    cli: &BuildCli,
+    rustc_info: &RustcInfo,
+) -> Result<()> {
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    fs::copy(&entry.path, output)
+        .with_context(|| format!("failed to copy cached binary from {}", entry.path.display()))?;
+    let object_options = object_options_from_cli(cli)?;
+    finalize_build_outputs(cli, output, &object_options, rustc_info)?;
+    println!("Built {} (from cache)", output.display());
+    Ok(())
+}
+
+fn store_binary_in_cache(cache_path: &Path, output: &Path) -> Result<()> {
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(output, cache_path)
+        .with_context(|| format!("failed to write cached binary to {}", cache_path.display()))?;
+    Ok(())
+}
+
+fn cache_root_dir() -> Option<PathBuf> {
+    if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME") {
+        return Some(PathBuf::from(xdg_state).join("tea").join("cache"));
+    }
+    home_dir().map(|mut dir| {
+        dir.push(".local");
+        dir.push("state");
+        dir.join("tea").join("cache")
+    })
+}
+
+fn workspace_slug(path: &Path) -> String {
+    let canonical = path.to_string_lossy();
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let label = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("workspace");
+    let sanitized: String = label
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let trimmed = sanitized.trim_matches('_');
+    let final_label = if trimmed.is_empty() {
+        "workspace"
+    } else {
+        trimmed
+    };
+    format!("{}-{}", final_label, &hash[..12])
+}
+
+fn sanitize_relative_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut result = PathBuf::new();
+    for component in path.components() {
+        if let Component::Normal(part) = component {
+            result.push(part);
+        }
+    }
+    if result.as_os_str().is_empty() {
+        if let Some(name) = path.file_name() {
+            result.push(name);
+        }
+    }
+    if result.as_os_str().is_empty() {
+        result.push("input.tea");
+    }
+    result
+}
+
 fn object_extension() -> &'static str {
     if cfg!(windows) {
         "obj"
@@ -795,21 +973,18 @@ fn object_extension() -> &'static str {
     }
 }
 
-#[cfg(feature = "llvm-aot")]
 fn object_path_for_output(output: &Path) -> PathBuf {
     let mut path = output.to_owned();
     path.set_extension(object_extension());
     path
 }
 
-#[cfg(feature = "llvm-aot")]
 fn object_output_for_source(source: &Path) -> PathBuf {
     let mut path = source.to_owned();
     path.set_extension(object_extension());
     path
 }
 
-#[cfg(feature = "llvm-aot")]
 fn current_profile() -> &'static str {
     if cfg!(debug_assertions) {
         "debug"
@@ -818,7 +993,6 @@ fn current_profile() -> &'static str {
     }
 }
 
-#[cfg(feature = "llvm-aot")]
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -826,7 +1000,6 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-#[cfg(feature = "llvm-aot")]
 fn runtime_target_dir() -> PathBuf {
     std::env::var("TEA_TARGET_DIR")
         .map(PathBuf::from)
@@ -896,7 +1069,6 @@ fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     );
 }
 
-#[cfg(feature = "llvm-aot")]
 fn link_with_rustc(
     rustc: &Path,
     stub_path: &Path,
@@ -1001,7 +1173,6 @@ fn link_with_rustc(
     Ok(())
 }
 
-#[cfg(feature = "llvm-aot")]
 const STUB_SOURCE: &str = r#"extern crate tea_runtime;
 
 extern "C" {
@@ -1012,20 +1183,17 @@ fn main() {
     std::process::exit(unsafe { tea_main() });
 }
 "#;
-#[cfg(feature = "llvm-aot")]
 #[derive(Default)]
 struct RustcInfo {
     version: Option<String>,
     host: Option<String>,
 }
 
-#[cfg(feature = "llvm-aot")]
 struct BuildTimestamp {
     iso: String,
     epoch: u64,
 }
 
-#[cfg(feature = "llvm-aot")]
 fn parse_opt_level(level: &str) -> Result<tea_compiler::aot::OptimizationLevel> {
     use tea_compiler::aot::OptimizationLevel;
     match level {
@@ -1038,7 +1206,6 @@ fn parse_opt_level(level: &str) -> Result<tea_compiler::aot::OptimizationLevel> 
     }
 }
 
-#[cfg(feature = "llvm-aot")]
 fn opt_level_to_string(level: tea_compiler::aot::OptimizationLevel) -> String {
     use tea_compiler::aot::OptimizationLevel;
     match level {
@@ -1050,7 +1217,6 @@ fn opt_level_to_string(level: tea_compiler::aot::OptimizationLevel) -> String {
     .to_string()
 }
 
-#[cfg(feature = "llvm-aot")]
 fn build_timestamp() -> Result<BuildTimestamp> {
     let epoch = match std::env::var("SOURCE_DATE_EPOCH") {
         Ok(value) => value
@@ -1070,7 +1236,6 @@ fn build_timestamp() -> Result<BuildTimestamp> {
     })
 }
 
-#[cfg(feature = "llvm-aot")]
 fn compute_sha256(path: &Path) -> Result<String> {
     let mut file = File::open(path)
         .with_context(|| format!("failed to open {} for hashing", path.display()))?;
@@ -1087,28 +1252,24 @@ fn compute_sha256(path: &Path) -> Result<String> {
     Ok(digest.iter().map(|byte| format!("{:02x}", byte)).collect())
 }
 
-#[cfg(feature = "llvm-aot")]
 fn checksum_path_for(binary: &Path) -> PathBuf {
     let mut path = binary.to_owned();
     path.set_extension("sha256");
     path
 }
 
-#[cfg(feature = "llvm-aot")]
 fn signature_path_for(binary: &Path) -> PathBuf {
     let mut path = binary.to_owned();
     path.set_extension("sig");
     path
 }
 
-#[cfg(feature = "llvm-aot")]
 fn default_bundle_path(binary: &Path) -> PathBuf {
     let mut path = binary.to_owned();
     path.set_extension("tar.gz");
     path
 }
 
-#[cfg(feature = "llvm-aot")]
 fn write_checksum_file(path: &Path, artifact: &Path, hash: &str) -> Result<()> {
     let name = artifact
         .file_name()
@@ -1119,7 +1280,6 @@ fn write_checksum_file(path: &Path, artifact: &Path, hash: &str) -> Result<()> {
         .with_context(|| format!("failed to write checksum to {}", path.display()))
 }
 
-#[cfg(feature = "llvm-aot")]
 fn write_signature_file(path: &Path, artifact: &Path, key: &[u8]) -> Result<()> {
     if key.is_empty() {
         bail!("signature key is empty");
@@ -1146,7 +1306,6 @@ fn write_signature_file(path: &Path, artifact: &Path, key: &[u8]) -> Result<()> 
         .with_context(|| format!("failed to write signature to {}", path.display()))
 }
 
-#[cfg(feature = "llvm-aot")]
 fn bundle_artifacts(
     binary: &Path,
     bundle_path: &Path,
@@ -1213,7 +1372,6 @@ fn bundle_artifacts(
     Ok(())
 }
 
-#[cfg(feature = "llvm-aot")]
 fn build_metadata_json(
     binary: &Path,
     source: &Path,
@@ -1243,7 +1401,6 @@ fn build_metadata_json(
     serde_json::to_string_pretty(&metadata).map_err(Into::into)
 }
 
-#[cfg(feature = "llvm-aot")]
 fn detect_rustc_info(rustc: &Path) -> RustcInfo {
     let mut info = RustcInfo::default();
     if let Ok(output) = Command::new(rustc).arg("--version").output() {

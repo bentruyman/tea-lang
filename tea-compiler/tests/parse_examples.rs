@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
-// Note: Converted from VM execution to compilation-only validation
 fn compile_example(relative_path: &str) -> anyhow::Result<()> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.parent().expect("workspace root");
@@ -12,7 +11,7 @@ fn compile_example(relative_path: &str) -> anyhow::Result<()> {
 
     let mut compiler = Compiler::new(CompileOptions::default());
     let source = SourceFile::new(SourceId(0), example_path, contents);
-    let _compilation = compiler.compile(&source)?;
+    compiler.compile(&source)?;
     assert!(
         compiler.diagnostics().is_empty(),
         "expected no diagnostics, found {:?}",

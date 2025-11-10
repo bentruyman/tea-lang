@@ -100,7 +100,7 @@ test "for loop can access dict keys"
   var key_count = 0
   
   for key, value of scores
-    key_count = key_count + length(key)
+    key_count = key_count + @len(key)
   end
   
   # "alice" = 5, "bob" = 3, total = 8

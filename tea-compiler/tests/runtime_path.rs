@@ -60,7 +60,7 @@ var joined = path.join(["foo", "bar", "baz"])
 assert.eq(joined, "{joined}")
 
 var parts = path.components(joined)
-assert.eq(length(parts), {component_count})
+assert.eq(@len(parts), {component_count})
 assert.eq(parts[0], "{part0}")
 assert.eq(parts[1], "{part1}")
 assert.eq(parts[2], "{part2}")

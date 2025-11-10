@@ -13,6 +13,7 @@ pub use builtins::BUILTINS;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StdFunctionKind {
     Print,
+    Println,
     Length,
     Exit,
     Delete,
@@ -25,6 +26,8 @@ pub enum StdFunctionKind {
     AssertNe,
     AssertFail,
     UtilToString,
+    ToString,
+    TypeOf,
     StringIndexOf,
     StringSplit,
     StringContains,

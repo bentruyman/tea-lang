@@ -199,13 +199,13 @@ def describe(path: String) -> String
 end
 
 var from_cases = describe("missing")
-print(from_cases)
+@println(from_cases)
 
 var passthrough = read("notes.txt") catch "fallback"
-print(passthrough)
+@println(passthrough)
 
 var fallback = try read("secret") catch "handled"
-print(fallback)
+@println(fallback)
 "#,
     )
     .expect("write errors script");

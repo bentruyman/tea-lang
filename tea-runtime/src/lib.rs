@@ -237,32 +237,32 @@ pub struct TeaValue {
 
 #[no_mangle]
 pub extern "C" fn tea_print_int(value: c_longlong) {
-    println!("{value}");
+    print!("{value}");
 }
 
 #[no_mangle]
 pub extern "C" fn tea_print_float(value: c_double) {
-    println!("{value}");
+    print!("{value}");
 }
 
 #[no_mangle]
 pub extern "C" fn tea_print_bool(value: c_int) {
-    println!("{}", value != 0);
+    print!("{}", value != 0);
 }
 
 #[no_mangle]
 pub extern "C" fn tea_print_string(value: *const TeaString) {
     unsafe {
         if value.is_null() {
-            println!("(null)");
+            print!("(null)");
             return;
         }
         let string_ref = &*value;
         let bytes =
             std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
         match std::str::from_utf8(bytes) {
-            Ok(text) => println!("{text}"),
-            Err(_) => println!("<invalid utf8>"),
+            Ok(text) => print!("{text}"),
+            Err(_) => print!("<invalid utf8>"),
         }
     }
 }
@@ -284,7 +284,7 @@ pub extern "C" fn tea_string_concat(
 pub extern "C" fn tea_print_list(list: *const TeaList) {
     unsafe {
         if list.is_null() {
-            println!("[]");
+            print!("[]");
             return;
         }
         let list_ref = &*list;
@@ -296,7 +296,7 @@ pub extern "C" fn tea_print_list(list: *const TeaList) {
             let value = *list_ref.items.add(i as usize);
             print_value(value);
         }
-        println!("]");
+        print!("]");
     }
 }
 
@@ -321,7 +321,7 @@ fn print_value(value: TeaValue) {
 pub extern "C" fn tea_print_dict(dict: *const TeaDict) {
     unsafe {
         if dict.is_null() {
-            println!("{{}}");
+            print!("{{}}");
             return;
         }
         let dict_ref = &*dict;
@@ -335,7 +335,7 @@ pub extern "C" fn tea_print_dict(dict: *const TeaDict) {
             print!("{key}: ");
             print_value(*value);
         }
-        println!("}}");
+        print!("}}");
     }
 }
 
@@ -1169,12 +1169,12 @@ pub extern "C" fn tea_error_equal(
 pub extern "C" fn tea_print_error(instance: *const TeaErrorInstance) {
     unsafe {
         if instance.is_null() {
-            println!("<error nil>");
+            print!("<error nil>");
             return;
         }
         let instance_ref = &*instance;
         if instance_ref.template.is_null() {
-            println!("<error nil>");
+            print!("<error nil>");
             return;
         }
         let template = &*instance_ref.template;
@@ -1198,12 +1198,137 @@ pub extern "C" fn tea_print_error(instance: *const TeaErrorInstance) {
             let field_value = *instance_ref.fields.add(index);
             print!("{field_name}: {}", tea_value_to_string(field_value));
         }
-        println!(")");
+        print!(")");
     }
 }
 
 #[no_mangle]
 pub extern "C" fn tea_print_struct(instance: *const TeaStructInstance) {
+    unsafe {
+        if instance.is_null() {
+            print!("<struct nil>");
+            return;
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            print!("<struct ?>");
+            return;
+        }
+        let template_ref = &*instance_ref.template;
+        let struct_name = if template_ref.name.is_null() {
+            "<anonymous>"
+        } else {
+            CStr::from_ptr(template_ref.name)
+                .to_str()
+                .unwrap_or("<invalid utf8>")
+        };
+
+        print!("{struct_name}(");
+        for i in 0..template_ref.field_count {
+            if i > 0 {
+                print!(", ");
+            }
+            let field_name_ptr = tea_struct_template_field_name(instance_ref.template, i);
+            let field_name = if field_name_ptr.is_null() {
+                "<field>"
+            } else {
+                CStr::from_ptr(field_name_ptr)
+                    .to_str()
+                    .unwrap_or("<invalid utf8>")
+            };
+            print!("{field_name}: ");
+            let value = *instance_ref.fields.add(i as usize);
+            print_value(value);
+        }
+        print!(")");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_print_closure(closure: *const TeaClosure) {
+    if closure.is_null() {
+        print!("<closure nil>");
+    } else {
+        print!("<closure>");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_int(value: c_longlong) {
+    println!("{value}");
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_float(value: c_double) {
+    println!("{value}");
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_bool(value: c_int) {
+    println!("{}", value != 0);
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_string(value: *const TeaString) {
+    unsafe {
+        if value.is_null() {
+            println!("(null)");
+            return;
+        }
+        let string_ref = &*value;
+        let bytes =
+            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        match std::str::from_utf8(bytes) {
+            Ok(text) => println!("{text}"),
+            Err(_) => println!("<invalid utf8>"),
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_list(list: *const TeaList) {
+    unsafe {
+        if list.is_null() {
+            println!("[]");
+            return;
+        }
+        let list_ref = &*list;
+        print!("[");
+        for i in 0..list_ref.len {
+            if i > 0 {
+                print!(", ");
+            }
+            let value = *list_ref.items.add(i as usize);
+            print_value(value);
+        }
+        println!("]");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_dict(dict: *const TeaDict) {
+    unsafe {
+        if dict.is_null() {
+            println!("{{}}");
+            return;
+        }
+        let dict_ref = &*dict;
+        print!("{{");
+        let mut first = true;
+        for (key, value) in dict_ref.entries.iter() {
+            if !first {
+                print!(", ");
+            }
+            first = false;
+            print!("{key}: ");
+            print_value(*value);
+        }
+        println!("}}");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_struct(instance: *const TeaStructInstance) {
     unsafe {
         if instance.is_null() {
             println!("<struct nil>");
@@ -1245,12 +1370,66 @@ pub extern "C" fn tea_print_struct(instance: *const TeaStructInstance) {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_print_closure(closure: *const TeaClosure) {
+pub extern "C" fn tea_println_error(instance: *const TeaErrorInstance) {
+    unsafe {
+        if instance.is_null() {
+            println!("<error nil>");
+            return;
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            println!("<error nil>");
+            return;
+        }
+        let template = &*instance_ref.template;
+        let error_name =
+            tea_cstr_to_rust(template.error_name).unwrap_or_else(|| "Error".to_string());
+        let variant_name =
+            tea_cstr_to_rust(template.variant_name).unwrap_or_else(|| "Variant".to_string());
+        print!("{}.{}(", error_name, variant_name);
+        let count = template.field_count.max(0) as usize;
+        for index in 0..count {
+            if index > 0 {
+                print!(", ");
+            }
+            let field_name_ptr = if template.field_names.is_null() {
+                std::ptr::null()
+            } else {
+                *template.field_names.add(index)
+            };
+            let field_name =
+                tea_cstr_to_rust(field_name_ptr).unwrap_or_else(|| format!("field{index}"));
+            let field_value = *instance_ref.fields.add(index);
+            print!("{field_name}: {}", tea_value_to_string(field_value));
+        }
+        println!(")");
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_println_closure(closure: *const TeaClosure) {
     if closure.is_null() {
         println!("<closure nil>");
     } else {
         println!("<closure>");
     }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_type_of(value: TeaValue) -> *mut TeaString {
+    let type_name = match value.tag {
+        TeaValueTag::Int => "Int",
+        TeaValueTag::Float => "Float",
+        TeaValueTag::Bool => "Bool",
+        TeaValueTag::String => "String",
+        TeaValueTag::List => "List",
+        TeaValueTag::Dict => "Dict",
+        TeaValueTag::Struct => "Struct",
+        TeaValueTag::Error => "Error",
+        TeaValueTag::Closure => "Closure",
+        TeaValueTag::Nil => "Nil",
+    };
+    alloc_tea_string(type_name)
 }
 
 #[no_mangle]

@@ -100,7 +100,7 @@ test "for loop with string list"
   var words = ["Hello", "World", "!"]
   
   for word of words
-    count = count + length(word)
+    count = count + @len(word)
   end
   
   assert.eq(count, 11)

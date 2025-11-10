@@ -3,6 +3,11 @@ use super::StdFunctionKind;
 pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
     match kind {
         StdFunctionKind::Print => "Write the string representation of a value to stderr.",
+        StdFunctionKind::Println => {
+            "Write the string representation of a value to stderr with a newline."
+        }
+        StdFunctionKind::ToString => "Convert any value to its string representation.",
+        StdFunctionKind::TypeOf => "Return the runtime type name of a value as a string.",
         StdFunctionKind::Length => "Return the number of elements in a String, List, or Dict.",
         StdFunctionKind::Exit => "Exit the program with the given exit code.",
         StdFunctionKind::Delete => "Remove an entry from a Dict and return the modified Dict.",

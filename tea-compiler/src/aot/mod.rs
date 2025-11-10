@@ -723,6 +723,16 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_print_closure: Option<FunctionValue<'ctx>>,
     builtin_print_struct: Option<FunctionValue<'ctx>>,
     builtin_print_error: Option<FunctionValue<'ctx>>,
+    builtin_println_int: Option<FunctionValue<'ctx>>,
+    builtin_println_float: Option<FunctionValue<'ctx>>,
+    builtin_println_bool: Option<FunctionValue<'ctx>>,
+    builtin_println_string: Option<FunctionValue<'ctx>>,
+    builtin_println_list: Option<FunctionValue<'ctx>>,
+    builtin_println_dict: Option<FunctionValue<'ctx>>,
+    builtin_println_closure: Option<FunctionValue<'ctx>>,
+    builtin_println_struct: Option<FunctionValue<'ctx>>,
+    builtin_println_error: Option<FunctionValue<'ctx>>,
+    builtin_type_of_fn: Option<FunctionValue<'ctx>>,
     builtin_exit_fn: Option<FunctionValue<'ctx>>,
     builtin_dict_delete_fn: Option<FunctionValue<'ctx>>,
     builtin_dict_clear_fn: Option<FunctionValue<'ctx>>,
@@ -964,6 +974,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_print_closure: None,
             builtin_print_struct: None,
             builtin_print_error: None,
+            builtin_println_int: None,
+            builtin_println_float: None,
+            builtin_println_bool: None,
+            builtin_println_string: None,
+            builtin_println_list: None,
+            builtin_println_dict: None,
+            builtin_println_closure: None,
+            builtin_println_struct: None,
+            builtin_println_error: None,
+            builtin_type_of_fn: None,
             builtin_exit_fn: None,
             builtin_dict_delete_fn: None,
             builtin_dict_clear_fn: None,
@@ -4996,6 +5016,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     ) -> Result<ExprValue<'ctx>> {
         match kind {
             StdFunctionKind::Print => self.compile_print_call(&call.arguments, function, locals),
+            StdFunctionKind::Println => {
+                self.compile_println_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ToString => {
+                self.compile_to_string_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::TypeOf => self.compile_type_of_call(&call.arguments, function, locals),
             StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
             StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
             StdFunctionKind::Delete => self.compile_delete_call(&call.arguments, function, locals),
@@ -7649,6 +7676,115 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::Void)
     }
 
+    fn compile_println_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Same as print but calls println functions instead
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported by the LLVM backend yet");
+            }
+            let value = self.compile_expression(&argument.expression, function, locals)?;
+            match value {
+                ExprValue::Int(v) => {
+                    let func = self.ensure_println_int();
+                    self.call_function(func, &[v.into()], "println_int")?;
+                }
+                ExprValue::Float(v) => {
+                    let func = self.ensure_println_float();
+                    self.call_function(func, &[v.into()], "println_float")?;
+                }
+                ExprValue::Bool(v) => {
+                    let cast = self.bool_to_i32(v, "println_bool")?;
+                    let func = self.ensure_println_bool();
+                    self.call_function(func, &[cast.into()], "println_bool")?;
+                }
+                ExprValue::String(ptr) => {
+                    let func = self.ensure_println_string();
+                    self.call_function(func, &[ptr.into()], "println_string")?;
+                }
+                ExprValue::List { pointer, .. } => {
+                    let func = self.ensure_println_list();
+                    self.call_function(func, &[pointer.into()], "println_list")?;
+                }
+                ExprValue::Dict { pointer, .. } => {
+                    let func = self.ensure_println_dict();
+                    self.call_function(func, &[pointer.into()], "println_dict")?;
+                }
+                ExprValue::Struct { pointer, .. } => {
+                    let func = self.ensure_println_struct();
+                    self.call_function(func, &[pointer.into()], "println_struct")?;
+                }
+                ExprValue::Error { pointer, .. } => {
+                    let func = self.ensure_println_error();
+                    self.call_function(func, &[pointer.into()], "println_error")?;
+                }
+                ExprValue::Closure { pointer, .. } => {
+                    let func = self.ensure_println_closure();
+                    self.call_function(func, &[pointer.into()], "println_closure")?;
+                }
+                ExprValue::Optional { value, .. } => {
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[value.into()], "optional_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_println_string();
+                    self.call_function(func, &[string_ptr.into()], "println_optional")?;
+                }
+                ExprValue::Void => {
+                    let nil_string = self.compile_string_literal("nil")?;
+                    if let ExprValue::String(ptr) = nil_string {
+                        let func = self.ensure_println_string();
+                        self.call_function(func, &[ptr.into()], "println_nil")?;
+                    } else {
+                        bail!("expected string literal for nil printing");
+                    }
+                }
+            }
+        }
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_to_string_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Same as UtilToString
+        self.compile_util_to_string_call(arguments, function, locals)
+    }
+
+    fn compile_type_of_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("type_of expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for type_of");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let tea_value = self.expr_to_tea_value(value_expr)?;
+        let func = self.ensure_type_of_fn();
+        let pointer = self
+            .call_function(func, &[tea_value.into()], "tea_type_of")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_type_of returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
     fn compile_length_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -9613,6 +9749,156 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_print_closure", fn_type, Some(Linkage::External));
         self.builtin_print_closure = Some(func);
+        func
+    }
+
+    fn ensure_println_int(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_int {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.int_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_int", fn_type, Some(Linkage::External));
+        self.builtin_println_int = Some(func);
+        func
+    }
+
+    fn ensure_println_float(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_float {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.float_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_float", fn_type, Some(Linkage::External));
+        self.builtin_println_float = Some(func);
+        func
+    }
+
+    fn ensure_println_bool(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_bool {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.context.i32_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_bool", fn_type, Some(Linkage::External));
+        self.builtin_println_bool = Some(func);
+        func
+    }
+
+    fn ensure_println_string(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_string {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_string", fn_type, Some(Linkage::External));
+        self.builtin_println_string = Some(func);
+        func
+    }
+
+    fn ensure_println_list(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_list {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.list_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_list", fn_type, Some(Linkage::External));
+        self.builtin_println_list = Some(func);
+        func
+    }
+
+    fn ensure_println_dict(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_dict {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_dict", fn_type, Some(Linkage::External));
+        self.builtin_println_dict = Some(func);
+        func
+    }
+
+    fn ensure_println_struct(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_struct {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.struct_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_struct", fn_type, Some(Linkage::External));
+        self.builtin_println_struct = Some(func);
+        func
+    }
+
+    fn ensure_println_error(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_error {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.error_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_println_error", fn_type, Some(Linkage::External));
+        self.builtin_println_error = Some(func);
+        func
+    }
+
+    fn ensure_println_closure(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_println_closure {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.closure_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_println_closure", fn_type, Some(Linkage::External));
+        self.builtin_println_closure = Some(func);
+        func
+    }
+
+    fn ensure_type_of_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_type_of_fn {
+            return func;
+        }
+        let tea_value_type = self.value_type();
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[tea_value_type.into()], false);
+        let func = self
+            .module
+            .add_function("tea_type_of", fn_type, Some(Linkage::External));
+        self.builtin_type_of_fn = Some(func);
         func
     }
 

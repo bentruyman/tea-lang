@@ -114,7 +114,8 @@ fn rejects_assignment_to_const() {
 
 #[test]
 fn suggests_import_for_std_function() {
-    let source = "to_string(42)\n";
+    // Use a function that's in std.intrinsics but NOT a built-in
+    let source = "string_index_of(\"hello\", \"l\")\n";
     let mut compiler = Compiler::new(CompileOptions::default());
     let source_file = SourceFile::new(
         SourceId(0),

@@ -34,7 +34,7 @@ use fs = "std.fs"
 fs.ensure_dir("{dir}")
 
 var before = fs.list_dir("{dir}")
-assert.eq(length(before), 0)
+assert.eq(@len(before), 0)
 
 fs.write_text("{file}", "hello fs")
 assert.assert(fs.exists("{file}"))
@@ -43,11 +43,11 @@ var original = fs.read_text("{file}")
 assert.eq(original, "hello fs")
 
 var after_write = fs.list_dir("{dir}")
-assert.eq(length(after_write), 1)
+assert.eq(@len(after_write), 1)
 assert.eq(after_write[0], "{file}")
 
 var visit_before = fs.walk("{dir}")
-assert.eq(length(visit_before), 1)
+assert.eq(@len(visit_before), 1)
 assert.eq(visit_before[0], "{file}")
 
 fs.ensure_dir("{backups}")
@@ -55,10 +55,10 @@ fs.write_text("{copy}", "hello fs")
 assert.assert(fs.exists("{copy}"))
 
 var after_copy = fs.list_dir("{dir}")
-assert.eq(length(after_copy), 2)
+assert.eq(@len(after_copy), 2)
 
 var visit_after = fs.walk("{dir}")
-assert.eq(length(visit_after), 3)
+assert.eq(@len(visit_after), 3)
 
 fs.remove("{copy}")
 fs.remove("{backups}")

@@ -80,27 +80,6 @@ pub const BUILTINS: &[StdFunction] = &[
         StdType::Float,
     ),
     std_function(
-        "exit",
-        StdFunctionKind::Exit,
-        StdArity::Exact(1),
-        &[StdType::Int],
-        StdType::Void,
-    ),
-    std_function(
-        "delete",
-        StdFunctionKind::Delete,
-        StdArity::Exact(2),
-        &[StdType::Dict, StdType::String],
-        StdType::Dict,
-    ),
-    std_function(
-        "clear",
-        StdFunctionKind::Clear,
-        StdArity::Exact(1),
-        &[StdType::Dict],
-        StdType::Dict,
-    ),
-    std_function(
         "max",
         StdFunctionKind::MathMax,
         StdArity::Exact(2),
@@ -113,12 +92,5 @@ pub const BUILTINS: &[StdFunction] = &[
         StdArity::Exact(2),
         &[StdType::Float, StdType::Float],
         StdType::Float,
-    ),
-    std_function(
-        "append",
-        StdFunctionKind::Append,
-        StdArity::Exact(2),
-        &[StdType::List, StdType::Any],
-        StdType::List,
     ),
 ];

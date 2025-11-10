@@ -10,12 +10,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::TypeOf => "Return the runtime type name of a value as a string.",
         StdFunctionKind::Panic => "Terminate the program immediately with an error message.",
         StdFunctionKind::Length => "Return the number of elements in a String, List, or Dict.",
-        StdFunctionKind::Exit => "Exit the program with the given exit code.",
-        StdFunctionKind::Delete => "Remove an entry from a Dict and return the modified Dict.",
-        StdFunctionKind::Clear => "Remove all entries from a Dict and return the empty Dict.",
-        StdFunctionKind::Max => "Return the maximum of two Int or Float values.",
-        StdFunctionKind::Min => "Return the minimum of two Int or Float values.",
-        StdFunctionKind::Append => "Add a value to the end of a List and return the modified List.",
         StdFunctionKind::Assert => {
             "Assert that a condition holds; optionally provide a failure message."
         }

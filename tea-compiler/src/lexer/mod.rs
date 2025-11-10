@@ -78,6 +78,8 @@ pub enum TokenKind {
     AmpersandAmpersand,
     Question,
     QuestionQuestion,
+    At,              // @
+    BuiltinIdentifier, // @identifier for built-in functions
     Eof,
 }
 
@@ -324,6 +326,10 @@ impl<'a> Lexer<'a> {
                 }
                 '?' => {
                     let token = self.lex_question_variants();
+                    tokens.push(token);
+                }
+                '@' => {
+                    let token = self.lex_builtin_identifier()?;
                     tokens.push(token);
                 }
                 other => {
@@ -813,6 +819,46 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn lex_builtin_identifier(&mut self) -> Result<Token> {
+        let start = self.position;
+        let start_line = self.line;
+        let start_column = self.column;
+        self.advance_char(); // consume '@'
+
+        // Check if next character starts an identifier
+        match self.peek_char() {
+            Some(ch) if ch.is_ascii_alphabetic() || ch == '_' => {
+                self.advance_char();
+            }
+            _ => {
+                // Just '@' by itself - return At token
+                return Ok(Token::new(
+                    TokenKind::At,
+                    self.slice(start, self.position).to_string(),
+                    start_line,
+                    start_column,
+                ));
+            }
+        }
+
+        // Continue reading identifier
+        while let Some(ch) = self.peek_char() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                self.advance_char();
+            } else {
+                break;
+            }
+        }
+
+        let lexeme = self.slice(start, self.position).to_string();
+        Ok(Token::new(
+            TokenKind::BuiltinIdentifier,
+            lexeme,
+            start_line,
+            start_column,
+        ))
+    }
+
     fn lex_dot_variants(&mut self) -> Token {
         let start_line = self.line;
         let start_column = self.column;
@@ -1194,5 +1240,79 @@ fn keyword_from_lexeme(lexeme: &str) -> Option<Keyword> {
         "is" => Some(Keyword::Is),
         "nil" => Some(Keyword::Nil),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::SourceId;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_builtin_identifier_lexing() {
+        let source = SourceFile::new(
+            SourceId(0),
+            PathBuf::from("test.tea"),
+            "@print(\"hello\")\n@len([1, 2, 3])\n@panic(\"error\")".to_string(),
+        );
+        let mut lexer = Lexer::new(&source).unwrap();
+        let tokens = lexer.tokenize().unwrap();
+
+        // Find all BuiltinIdentifier tokens
+        let builtin_tokens: Vec<&Token> = tokens
+            .iter()
+            .filter(|t| matches!(t.kind, TokenKind::BuiltinIdentifier))
+            .collect();
+
+        assert_eq!(builtin_tokens.len(), 3, "Should have 3 built-in identifiers");
+        assert_eq!(builtin_tokens[0].lexeme, "@print");
+        assert_eq!(builtin_tokens[1].lexeme, "@len");
+        assert_eq!(builtin_tokens[2].lexeme, "@panic");
+    }
+
+    #[test]
+    fn test_at_symbol_alone() {
+        let source = SourceFile::new(
+            SourceId(0),
+            PathBuf::from("test.tea"),
+            "@ @".to_string(),
+        );
+        let mut lexer = Lexer::new(&source).unwrap();
+        let tokens = lexer.tokenize().unwrap();
+
+        let at_tokens: Vec<&Token> = tokens
+            .iter()
+            .filter(|t| matches!(t.kind, TokenKind::At))
+            .collect();
+
+        assert_eq!(at_tokens.len(), 2, "Should have 2 At tokens");
+    }
+
+    #[test]
+    fn test_mixed_identifiers() {
+        let source = SourceFile::new(
+            SourceId(0),
+            PathBuf::from("test.tea"),
+            "print @print foo @foo".to_string(),
+        );
+        let mut lexer = Lexer::new(&source).unwrap();
+        let tokens = lexer.tokenize().unwrap();
+
+        let regular_ids: Vec<&Token> = tokens
+            .iter()
+            .filter(|t| matches!(t.kind, TokenKind::Identifier))
+            .collect();
+        let builtin_ids: Vec<&Token> = tokens
+            .iter()
+            .filter(|t| matches!(t.kind, TokenKind::BuiltinIdentifier))
+            .collect();
+
+        assert_eq!(regular_ids.len(), 2, "Should have 2 regular identifiers");
+        assert_eq!(builtin_ids.len(), 2, "Should have 2 built-in identifiers");
+        assert_eq!(regular_ids[0].lexeme, "print");
+        assert_eq!(builtin_ids[0].lexeme, "@print");
+        assert_eq!(regular_ids[1].lexeme, "foo");
+        assert_eq!(builtin_ids[1].lexeme, "@foo");
     }
 }

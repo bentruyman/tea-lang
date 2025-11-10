@@ -1464,6 +1464,18 @@ impl<'a> Parser<'a> {
                     span: token_span,
                 }),
             )),
+            TokenKind::BuiltinIdentifier => {
+                // Built-in identifier like @print, @len, @panic
+                // Strip the @ prefix for the identifier name
+                let name = token.lexeme.strip_prefix('@').unwrap_or(&token.lexeme).to_string();
+                Ok(Self::make_expression(
+                    token_span,
+                    ExpressionKind::Identifier(Identifier {
+                        name,
+                        span: token_span,
+                    }),
+                ))
+            }
             TokenKind::IntegerLiteral(value) => Ok(Self::make_expression(
                 token_span,
                 ExpressionKind::Literal(Literal::Integer(value)),

@@ -55,10 +55,6 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::PathDirname => "Return the directory portion of a path.",
         StdFunctionKind::PathBasename => "Return the final component of a path.",
         StdFunctionKind::PathExtension => "Return the extension of a path if present.",
-        StdFunctionKind::PathNormalize => "Normalize a path by removing redundant segments.",
-        StdFunctionKind::PathAbsolute => "Convert a path to an absolute path.",
-        StdFunctionKind::PathRelative => "Compute a relative path between two paths.",
-        StdFunctionKind::PathSeparator => "Return the platform path separator.",
         StdFunctionKind::AssertSnapshot => {
             "Compare actual text against a stored snapshot, with optional hint."
         }

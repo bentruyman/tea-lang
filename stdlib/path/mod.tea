@@ -65,11 +65,11 @@ end
 # Split a path into its components.
 #
 # Examples:
-#   var parts = path.components("/usr/local/bin")  # => ["usr", "local", "bin"]
-#   var parts = path.components("usr/local/")  # => ["usr", "local"]
+#   var parts = path.split("/usr/local/bin")  # => ["usr", "local", "bin"]
+#   var parts = path.split("usr/local/")  # => ["usr", "local"]
 #
 # Pure Tea implementation - splits by separator and filters empty strings.
-pub def components(file_path: String) -> List[String]
+pub def split(file_path: String) -> List[String]
   if @len(file_path) == 0
     return[]
   end
@@ -235,95 +235,5 @@ pub def extension(file_path: String) -> String
 
   # Return everything after the last dot
   base[pos + 1...@len(base)]
-end
-
-# Normalize a path (remove . and .. components).
-#
-# Examples:
-#   var norm = path.normalize("./foo/../bar")  # => "bar"
-#   var norm = path.normalize("/usr/./local/../bin")  # => "/usr/bin"
-#   var norm = path.normalize("a/b/c/../../d")  # => "a/d"
-#
-# Pure Tea implementation - splits path, processes . and .., then rejoins.
-pub def normalize(file_path: String) -> String
-  if @len(file_path) == 0
-    return "."
-  end
-
-  var sep = intrinsics.path_separator()
-  # Check if path is absolute by looking at first character
-  var is_abs = @len(file_path) > 0 && file_path[0] == sep
-  var parts = components(file_path)
-  var stack = []
-  var i = 0
-
-  while i < @len(parts)
-    var part = parts[i]
-
-    if part == ".."
-      # Go up one directory if possible
-      if @len(stack) > 0
-        var last = stack[@len(stack) - 1]
-        # Don't pop if the last element is also ..
-        if last != ".."
-          stack = stack[0..@len(stack) - 1]
-        else
-          stack = stack +[".."]
-        end
-      else
-
-        # No parent to go up to
-        if ! is_abs
-          stack = stack +[".."]
-        end
-      end
-    else
-
-      if part != "."
-        stack = stack +[part]
-      end
-    end
-
-    i = i + 1
-  end
-
-  # Build result
-  var result = join(stack)
-
-  if is_abs
-    result = sep + result
-  end
-
-  if @len(result) == 0
-    return "."
-  end
-
-  result
-end
-
-# Convert a path to absolute form.
-#
-# Examples:
-#   var abs = path.absolute("file.txt")  # => "/current/dir/file.txt"
-# Note: Two-argument form path.absolute(path, base) is not supported in Tea wrapper.
-# Use path_absolute directly from intrinsics if needed.
-pub def absolute(file_path: String) -> String
-  intrinsics.path_absolute(file_path)
-end
-
-# Get the relative path from one path to another.
-#
-# Examples:
-#   var rel = path.relative("/usr/local", "/usr/local/bin")  # => "bin"
-pub def relative(from: String, to: String) -> String
-  intrinsics.path_relative(from, to)
-end
-
-# Get the system path separator ("/" or "\").
-#
-# Examples:
-#   var sep = path.separator()  # => "/" on Unix
-pub def separator() -> String
-  intrinsics.path_separator()
 end
 

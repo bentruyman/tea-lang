@@ -5102,16 +5102,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::PathExtension => {
                 self.compile_path_extension_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::PathNormalize => {
-                self.compile_path_normalize_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::PathAbsolute => {
-                self.compile_path_absolute_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::PathRelative => {
-                self.compile_path_relative_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::PathSeparator => self.compile_path_separator_call(&call.arguments),
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
             }
@@ -5214,24 +5204,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             Intrinsic::PathExtension => {
                 self.compile_path_extension_call(&call.arguments, function, locals)
-            }
-
-            Intrinsic::PathNormalize => {
-                self.compile_path_normalize_call(&call.arguments, function, locals)
-            }
-            Intrinsic::PathAbsolute => {
-                self.compile_path_absolute_call(&call.arguments, function, locals)
-            }
-            Intrinsic::PathRelative => {
-                self.compile_path_relative_call(&call.arguments, function, locals)
-            }
-
-            Intrinsic::PathSeparator => self.compile_path_separator_call(&call.arguments),
-            // Process
-
-            // Codecs (removed - now handled by runtime)
-
-            // CLI
+            } // Process
+              // Codecs (removed - now handled by runtime)
+              // CLI
         }
     }
 

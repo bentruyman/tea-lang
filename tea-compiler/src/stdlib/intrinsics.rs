@@ -240,34 +240,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::String],
         StdType::String,
     ),
-    std_function(
-        "path_normalize",
-        StdFunctionKind::PathNormalize,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::String,
-    ),
-    std_function(
-        "path_absolute",
-        StdFunctionKind::PathAbsolute,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::String,
-    ),
-    std_function(
-        "path_relative",
-        StdFunctionKind::PathRelative,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::String,
-    ),
-    std_function(
-        "path_separator",
-        StdFunctionKind::PathSeparator,
-        StdArity::Exact(0),
-        &[],
-        StdType::String,
-    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

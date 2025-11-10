@@ -28,10 +28,6 @@ pub enum Intrinsic {
     PathDirname,
     PathBasename,
     PathExtension,
-    PathNormalize,
-    PathAbsolute,
-    PathRelative,
-    PathSeparator,
 }
 
 impl Intrinsic {
@@ -63,10 +59,6 @@ impl Intrinsic {
             "path_dirname" => Self::PathDirname,
             "path_basename" => Self::PathBasename,
             "path_extension" => Self::PathExtension,
-            "path_normalize" => Self::PathNormalize,
-            "path_absolute" => Self::PathAbsolute,
-            "path_relative" => Self::PathRelative,
-            "path_separator" => Self::PathSeparator,
             _ => return None,
         })
     }

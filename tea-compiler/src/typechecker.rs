@@ -2627,7 +2627,7 @@ impl TypeChecker {
             StdFunctionKind::PathComponents => {
                 return_type = Type::List(Box::new(Type::String));
             }
-            StdFunctionKind::FsListDir | StdFunctionKind::FsWalk => {
+            StdFunctionKind::FsListDir => {
                 return_type = Type::List(Box::new(Type::String));
             }
             StdFunctionKind::EnvVars => {

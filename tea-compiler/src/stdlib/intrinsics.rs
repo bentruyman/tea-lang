@@ -170,22 +170,8 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "fs_exists",
-        StdFunctionKind::FsExists,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "fs_list_dir",
         StdFunctionKind::FsListDir,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::List,
-    ),
-    std_function(
-        "fs_walk",
-        StdFunctionKind::FsWalk,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,

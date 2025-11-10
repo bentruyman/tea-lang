@@ -8,16 +8,16 @@ use path = "std.path"
 # Read a text file.
 #
 # Examples:
-#   var content = fs.read_text("file.txt")
-pub def read_text(file_path: String) -> String
+#   var content = fs.read_file("file.txt")
+pub def read_file(file_path: String) -> String
   intrinsics.fs_read_text(file_path)
 end
 
 # Write text to a file.
 #
 # Examples:
-#   fs.write_text("file.txt", "Hello, world!")
-pub def write_text(file_path: String, content: String) -> Void
+#   fs.write_file("file.txt", "Hello, world!")
+pub def write_file(file_path: String, content: String) -> Void
   intrinsics.fs_write_text(file_path, content)
 end
 
@@ -29,24 +29,6 @@ pub def create_dir(dir_path: String) -> Void
   intrinsics.fs_create_dir(dir_path)
 end
 
-# Ensure a directory exists, creating it and all parents if needed.
-#
-# Examples:
-#   fs.ensure_dir("path/to/nested/dir")
-pub def ensure_dir(dir_path: String) -> Void
-  if intrinsics.fs_exists(dir_path)
-    return
-  end
-
-  var parent = path.dirname(dir_path)
-
-  if parent != dir_path && parent != ""
-    ensure_dir(parent)
-  end
-
-  intrinsics.fs_create_dir(dir_path)
-end
-
 # Remove a file or directory.
 #
 # Examples:
@@ -55,29 +37,19 @@ pub def remove(file_path: String) -> Void
   intrinsics.fs_remove(file_path)
 end
 
-# Check if a file or directory exists.
-#
-# Examples:
-#   if fs.exists("file.txt")
-#     @print("File exists")
-#   end
-pub def exists(file_path: String) -> Bool
-  intrinsics.fs_exists(file_path)
-end
-
 # List all entries in a directory.
 #
 # Examples:
-#   var entries = fs.list_dir(".")
-pub def list_dir(dir_path: String) -> List[String]
+#   var entries = fs.read_dir(".")
+pub def read_dir(dir_path: String) -> List[String]
   intrinsics.fs_list_dir(dir_path)
 end
 
-# Walk a directory tree recursively.
+# Rename or move a file or directory.
 #
 # Examples:
-#   var all_files = fs.walk("src")
-pub def walk(dir_path: String) -> List[String]
-  intrinsics.fs_walk(dir_path)
+#   fs.rename("old.txt", "new.txt")
+pub def rename(source: String, target: String) -> Void
+  intrinsics.fs_rename(source, target)
 end
 

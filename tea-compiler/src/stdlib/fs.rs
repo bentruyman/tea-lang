@@ -2,14 +2,14 @@ use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, St
 
 const FS_FUNCTIONS: &[StdFunction] = &[
     std_function(
-        "read_text",
+        "read_file",
         StdFunctionKind::FsReadText,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::String,
     ),
     std_function(
-        "write_text",
+        "write_file",
         StdFunctionKind::FsWriteText,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
@@ -26,13 +26,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "ensure_dir",
-        StdFunctionKind::FsEnsureDir,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
         "remove",
         StdFunctionKind::FsRemove,
         StdArity::Exact(1),
@@ -40,25 +33,18 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "exists",
-        StdFunctionKind::FsExists,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
-        "list_dir",
+        "read_dir",
         StdFunctionKind::FsListDir,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
     ),
     std_function(
-        "walk",
-        StdFunctionKind::FsWalk,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::List,
+        "rename",
+        StdFunctionKind::FsRename,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Void,
     ),
 ];
 

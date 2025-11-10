@@ -5111,19 +5111,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::FsEnsureDir => {
-                self.compile_fs_ensure_dir_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::FsRemove => {
                 self.compile_fs_remove_call(&call.arguments, function, locals)
-            }
-            StdFunctionKind::FsExists => {
-                self.compile_fs_exists_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
-            StdFunctionKind::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
             StdFunctionKind::FsRename => {
                 self.compile_fs_rename_call(&call.arguments, function, locals)
             }
@@ -5184,13 +5177,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
             Intrinsic::FsRemove => self.compile_fs_remove_call(&call.arguments, function, locals),
-            Intrinsic::FsExists => self.compile_fs_exists_call(&call.arguments, function, locals),
-
             Intrinsic::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
-            Intrinsic::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
-
             // Path
             Intrinsic::PathJoin => self.compile_path_join_call(&call.arguments, function, locals),
             Intrinsic::PathComponents => {

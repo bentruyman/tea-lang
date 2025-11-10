@@ -31,34 +31,25 @@ fn fs_roundtrip_through_runtime() -> anyhow::Result<()> {
 use assert = "std.assert"
 use fs = "std.fs"
 
-fs.ensure_dir("{dir}")
+fs.create_dir("{dir}")
 
-var before = fs.list_dir("{dir}")
+var before = fs.read_dir("{dir}")
 assert.eq(@len(before), 0)
 
-fs.write_text("{file}", "hello fs")
-assert.ok(fs.exists("{file}"))
+fs.write_file("{file}", "hello fs")
 
-var original = fs.read_text("{file}")
+var original = fs.read_file("{file}")
 assert.eq(original, "hello fs")
 
-var after_write = fs.list_dir("{dir}")
+var after_write = fs.read_dir("{dir}")
 assert.eq(@len(after_write), 1)
 assert.eq(after_write[0], "{file}")
 
-var visit_before = fs.walk("{dir}")
-assert.eq(@len(visit_before), 1)
-assert.eq(visit_before[0], "{file}")
+fs.create_dir("{backups}")
+fs.write_file("{copy}", "hello fs")
 
-fs.ensure_dir("{backups}")
-fs.write_text("{copy}", "hello fs")
-assert.ok(fs.exists("{copy}"))
-
-var after_copy = fs.list_dir("{dir}")
+var after_copy = fs.read_dir("{dir}")
 assert.eq(@len(after_copy), 2)
-
-var visit_after = fs.walk("{dir}")
-assert.eq(@len(visit_after), 3)
 
 fs.remove("{copy}")
 fs.remove("{backups}")
@@ -103,7 +94,7 @@ fn fs_read_text_reports_consistent_error() -> anyhow::Result<()> {
         r#"
 use fs = "std.fs"
 
-fs.read_text("{path}")
+fs.read_file("{path}")
 "#,
         path = missing_str
     );

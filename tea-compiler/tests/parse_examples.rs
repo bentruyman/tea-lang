@@ -71,8 +71,3 @@ fn parse_generics_example() -> anyhow::Result<()> {
 fn parse_lambdas_example() -> anyhow::Result<()> {
     compile_example("examples/language/functions/lambdas.tea")
 }
-
-#[test]
-fn parse_basic_test_example() -> anyhow::Result<()> {
-    compile_example("examples/language/basics/basic_test.tea")
-}

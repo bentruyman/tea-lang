@@ -5,7 +5,7 @@ def basic_iteration() -> Void
   var numbers = [1, 2, 3]
 
   for num of numbers
-    print(num)
+    @print(num)
   end
 end
 
@@ -14,7 +14,7 @@ def empty_list() -> Void
   var empty = []
 
   for item of empty
-    print("should not print")
+    @print("should not print")
   end
 end
 
@@ -24,11 +24,11 @@ def with_break() -> Void
 
   for num of numbers
     if num == 30
-      print("Breaking at 3")
+      @print("Breaking at 3")
       break
     end
 
-    print(num)
+    @print(num)
   end
 end
 
@@ -38,11 +38,11 @@ def with_continue() -> Void
 
   for num of numbers
     if num == 3
-      print("Skipping 3")
+      @print("Skipping 3")
       continue
     end
 
-    print(num)
+    @print(num)
   end
 end
 
@@ -54,7 +54,7 @@ def nested_loops() -> Void
   for i of outer
     for j of inner
       var product = i * j
-      print(product)
+      @print(product)
     end
   end
 end

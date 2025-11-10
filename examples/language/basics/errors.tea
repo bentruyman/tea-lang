@@ -53,20 +53,20 @@ def safe_text(path: String) -> String
   open(path) catch "Unavailable"
 end
 
-def safe_length(path: String) -> Int
+def safe_@len(path: String) -> Int
   var text = open(path) catch ""
-  return length(text)
+  return @len(text)
 end
 
-print(shout("tea"))
-print(shout("error") catch "Invalid input")
+@print(shout("tea"))
+@print(shout("error") catch "Invalid input")
 
-print(file_text("notes.txt"))
-print(file_text("missing.txt"))
-print(file_text("secret.txt"))
+@print(file_text("notes.txt"))
+@print(file_text("missing.txt"))
+@print(file_text("secret.txt"))
 
-print(safe_text("notes.txt"))
-print(safe_text("missing.txt"))
+@print(safe_text("notes.txt"))
+@print(safe_text("missing.txt"))
 
-print(safe_length("notes.txt"))
-print(safe_length("missing.txt"))
+@print(safe_@len("notes.txt"))
+@print(safe_@len("missing.txt"))

@@ -6,5 +6,5 @@ use another = "./another"
 # 4
 # Attempting to call the private `scale` helper would fail at compile time.
 
-print(helpers.triple(2))
-print(another.triple(2))
+@print(helpers.triple(2))
+@print(another.triple(2))

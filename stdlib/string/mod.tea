@@ -12,13 +12,13 @@ use intrinsics = "std.intrinsics"
 #   string.starts_with("hello world", "hello")  # => true
 #   string.starts_with("hello world", "world")  # => false
 pub def starts_with(text: String, prefix: String) -> Bool
-  var prefix_len = length(prefix)
+  var prefix_len = @len(prefix)
 
   if prefix_len == 0
     return true
   end
 
-  if prefix_len > length(text)
+  if prefix_len > @len(text)
     return false
   end
 
@@ -32,13 +32,13 @@ end
 #   string.ends_with("hello world", "world")  # => true
 #   string.ends_with("hello world", "hello")  # => false
 pub def ends_with(text: String, suffix: String) -> Bool
-  var suffix_len = length(suffix)
+  var suffix_len = @len(suffix)
 
   if suffix_len == 0
     return true
   end
 
-  var text_len = length(text)
+  var text_len = @len(text)
 
   if suffix_len > text_len
     return false
@@ -55,7 +55,7 @@ end
 #   string.trim_start("  hello  ")  # => "hello  "
 #   string.trim_start("\t\nhello")  # => "hello"
 pub def trim_start(text: String) -> String
-  var len = length(text)
+  var len = @len(text)
   var start = 0
 
   while start < len
@@ -78,7 +78,7 @@ end
 #   string.trim_end("  hello  ")  # => "  hello"
 #   string.trim_end("hello\n\t")  # => "hello"
 pub def trim_end(text: String) -> String
-  var len = length(text)
+  var len = @len(text)
   var end_pos = len
 
   while end_pos > 0
@@ -110,7 +110,7 @@ end
 #   string.reverse("hello")  # => "olleh"
 #   string.reverse("ab")  # => "ba"
 pub def reverse(text: String) -> String
-  var len = length(text)
+  var len = @len(text)
   var result = ""
   var i = len - 1
 

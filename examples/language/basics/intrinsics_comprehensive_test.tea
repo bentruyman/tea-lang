@@ -4,55 +4,55 @@
 use intrinsics = "std.intrinsics"
 
 pub def test_conversions() -> Void
-  print("=== Conversions ===")
+  @print("=== Conversions ===")
 
   var num = 12345
   var str = intrinsics.to_string(num)
-  print(str)
+  @print(str)
 end
 
 pub def test_environment() -> Void
-  print("=== Environment ===")
+  @print("=== Environment ===")
 
   var cwd = intrinsics.env_cwd()
-  print(cwd)
+  @print(cwd)
 
   var has_path = intrinsics.env_has("PATH")
 
   if has_path
-    print("✓ PATH variable exists")
+    @print("✓ PATH variable exists")
   end
 end
 
 pub def test_path_operations() -> Void
-  print("=== Path Operations ===")
+  @print("=== Path Operations ===")
 
   var parts = ["usr", "local", "bin"]
   var joined = intrinsics.path_join(parts)
-  print(joined)
+  @print(joined)
 
   var basename = intrinsics.path_basename("/usr/local/bin/tea")
-  print(basename)
+  @print(basename)
 
   var dirname = intrinsics.path_dirname("/usr/local/bin/tea")
-  print(dirname)
+  @print(dirname)
 
   var ext = intrinsics.path_extension("script.tea")
-  print(ext)
+  @print(ext)
 
   var sep = intrinsics.path_separator()
-  print(sep)
+  @print(sep)
 end
 
 pub def test_filesystem() -> Void
-  print("=== Filesystem ===")
+  @print("=== Filesystem ===")
 
   # Test if current directory exists
   var cwd = intrinsics.env_cwd()
   var exists = intrinsics.fs_exists(cwd)
 
   if exists
-    print("✓ Current directory exists")
+    @print("✓ Current directory exists")
   end
 end
 
@@ -62,4 +62,4 @@ test_environment()
 test_path_operations()
 test_filesystem()
 
-print("=== All Tests Complete ===")
+@print("=== All Tests Complete ===")

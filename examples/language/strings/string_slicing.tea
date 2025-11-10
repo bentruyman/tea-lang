@@ -3,31 +3,31 @@
 # Exclusive range (0..3 means indices 0, 1, 2)
 const text1 = "hello"
 const result1 = text1[1..4]
-print(result1)  # Should print "ell"
+@print(result1)  # Should print "ell"
 
 # Inclusive range (0...2 means indices 0, 1, 2)
 const text2 = "world"
 const result2 = text2[0...2]
-print(result2)  # Should print "wor"
+@print(result2)  # Should print "wor"
 
 # Empty slice
 const text3 = "test"
 const result3 = text3[2..2]
-print(result3)  # Should print ""
+@print(result3)  # Should print ""
 
 # Full string
 const text4 = "full"
 const result4 = text4[0..4]
-print(result4)  # Should print "full"
+@print(result4)  # Should print "full"
 
 # Single character via slice
 const text5 = "single"
 const result5 = text5[3..4]
-print(result5)  # Should print "g"
+@print(result5)  # Should print "g"
 
 # Unicode handling
 const text6 = "café"
 const result6 = text6[0..3]
-print(result6)  # Should print "caf"
+@print(result6)  # Should print "caf"
 
-print("All string slicing tests passed!")
+@print("All string slicing tests passed!")

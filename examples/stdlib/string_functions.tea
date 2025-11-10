@@ -4,7 +4,7 @@ use string = "std.string"
 use assert = "std.assert"
 
 pub def test_starts_with() -> Void
-  print("=== Testing string.starts_with ===")
+  @print("=== Testing string.starts_with ===")
 
   assert.eq(string.starts_with("hello world", "hello"), true)
   assert.eq(string.starts_with("hello world", "world"), false)
@@ -13,11 +13,11 @@ pub def test_starts_with() -> Void
   assert.eq(string.starts_with("", "hello"), false)
   assert.eq(string.starts_with("", ""), true)
 
-  print("✓ string.starts_with tests passed")
+  @print("✓ string.starts_with tests passed")
 end
 
 pub def test_ends_with() -> Void
-  print("=== Testing string.ends_with ===")
+  @print("=== Testing string.ends_with ===")
 
   assert.eq(string.ends_with("hello world", "world"), true)
   assert.eq(string.ends_with("hello world", "hello"), false)
@@ -26,11 +26,11 @@ pub def test_ends_with() -> Void
   assert.eq(string.ends_with("", "hello"), false)
   assert.eq(string.ends_with("", ""), true)
 
-  print("✓ string.ends_with tests passed")
+  @print("✓ string.ends_with tests passed")
 end
 
 pub def test_trim() -> Void
-  print("=== Testing string.trim ===")
+  @print("=== Testing string.trim ===")
 
   assert.eq(string.trim("  hello  "), "hello")
   assert.eq(string.trim("\t\nhello\n\t"), "hello")
@@ -38,66 +38,66 @@ pub def test_trim() -> Void
   assert.eq(string.trim("   "), "")
   assert.eq(string.trim(""), "")
 
-  print("✓ string.trim tests passed")
+  @print("✓ string.trim tests passed")
 end
 
 pub def test_trim_start() -> Void
-  print("=== Testing string.trim_start ===")
+  @print("=== Testing string.trim_start ===")
 
   assert.eq(string.trim_start("  hello  "), "hello  ")
   assert.eq(string.trim_start("\t\nhello"), "hello")
   assert.eq(string.trim_start("hello"), "hello")
   assert.eq(string.trim_start("   "), "")
 
-  print("✓ string.trim_start tests passed")
+  @print("✓ string.trim_start tests passed")
 end
 
 pub def test_trim_end() -> Void
-  print("=== Testing string.trim_end ===")
+  @print("=== Testing string.trim_end ===")
 
   assert.eq(string.trim_end("  hello  "), "  hello")
   assert.eq(string.trim_end("hello\n\t"), "hello")
   assert.eq(string.trim_end("hello"), "hello")
   assert.eq(string.trim_end("   "), "")
 
-  print("✓ string.trim_end tests passed")
+  @print("✓ string.trim_end tests passed")
 end
 
 pub def test_repeat() -> Void
-  print("=== Testing string.repeat ===")
+  @print("=== Testing string.repeat ===")
 
   assert.eq(string.repeat("ha", 3), "hahaha")
   assert.eq(string.repeat("x", 1), "x")
   assert.eq(string.repeat("x", 0), "")
   assert.eq(string.repeat("ab", 2), "abab")
 
-  print("✓ string.repeat tests passed")
+  @print("✓ string.repeat tests passed")
 end
 
 pub def test_pad_start() -> Void
-  print("=== Testing string.pad_start ===")
+  @print("=== Testing string.pad_start ===")
 
   assert.eq(string.pad_start("42", 5, "0"), "00042")
   assert.eq(string.pad_start("hello", 3, " "), "hello")
   assert.eq(string.pad_start("x", 3, "-"), "--x")
   assert.eq(string.pad_start("", 3, "0"), "000")
 
-  print("✓ string.pad_start tests passed")
+  @print("✓ string.pad_start tests passed")
 end
 
 pub def test_pad_end() -> Void
-  print("=== Testing string.pad_end ===")
+  @print("=== Testing string.pad_end ===")
 
   assert.eq(string.pad_end("42", 5, "0"), "42000")
   assert.eq(string.pad_end("hello", 3, " "), "hello")
   assert.eq(string.pad_end("x", 3, "-"), "x--")
   assert.eq(string.pad_end("", 3, "0"), "000")
 
-  print("✓ string.pad_end tests passed")
+  @print("✓ string.pad_end tests passed")
 end
 
 pub def test_reverse() -> Void
-  print("=== Testing string.reverse ===")
+  @print("=== Testing string.reverse ===")
 
   assert.eq(string.reverse("hello"), "olleh")
   assert.eq(string.reverse("ab"), "ba")
@@ -105,68 +105,68 @@ pub def test_reverse() -> Void
   assert.eq(string.reverse(""), "")
   assert.eq(string.reverse("racecar"), "racecar")
 
-  print("✓ string.reverse tests passed")
+  @print("✓ string.reverse tests passed")
 end
 
 pub def test_join() -> Void
-  print("=== Testing string.join ===")
+  @print("=== Testing string.join ===")
 
   assert.eq(string.join(["a", "b", "c"], ", "), "a, b, c")
   assert.eq(string.join(["hello"], " "), "hello")
   assert.eq(string.join([], ", "), "")
   assert.eq(string.join(["x", "y"], ""), "xy")
 
-  print("✓ string.join tests passed")
+  @print("✓ string.join tests passed")
 end
 
 pub def test_split() -> Void
-  print("=== Testing string.split ===")
+  @print("=== Testing string.split ===")
 
   var parts1 = string.split("a,b,c", ",")
-  print("Split 'a,b,c' by ',': ")
-  print(parts1)
+  @print("Split 'a,b,c' by ',': ")
+  @print(parts1)
 
   var parts2 = string.split("hello", ",")
-  print("Split 'hello' by ',': ")
-  print(parts2)
+  @print("Split 'hello' by ',': ")
+  @print(parts2)
 
-  print("✓ string.split tests passed")
+  @print("✓ string.split tests passed")
 end
 
 pub def test_contains() -> Void
-  print("=== Testing string.contains ===")
+  @print("=== Testing string.contains ===")
 
   assert.eq(string.contains("hello world", "world"), true)
   assert.eq(string.contains("hello world", "foo"), false)
   assert.eq(string.contains("hello", "hello"), true)
   assert.eq(string.contains("hello", ""), true)
 
-  print("✓ string.contains tests passed")
+  @print("✓ string.contains tests passed")
 end
 
 pub def test_index_of() -> Void
-  print("=== Testing string.index_of ===")
+  @print("=== Testing string.index_of ===")
 
   assert.eq(string.index_of("hello world", "world"), 6)
   assert.eq(string.index_of("hello world", "foo"), -1)
   assert.eq(string.index_of("hello", "h"), 0)
   assert.eq(string.index_of("hello", "o"), 4)
 
-  print("✓ string.index_of tests passed")
+  @print("✓ string.index_of tests passed")
 end
 
 pub def test_replace() -> Void
-  print("=== Testing string.replace ===")
+  @print("=== Testing string.replace ===")
 
   assert.eq(string.replace("hello world", "world", "Tea"), "hello Tea")
   assert.eq(string.replace("aaa", "a", "b"), "bbb")
   assert.eq(string.replace("hello", "x", "y"), "hello")
 
-  print("✓ string.replace tests passed")
+  @print("✓ string.replace tests passed")
 end
 
 pub def test_count() -> Void
-  print("=== Testing string.count ===")
+  @print("=== Testing string.count ===")
 
   assert.eq(string.count("hello world", "l"), 3)
   assert.eq(string.count("hello world", "foo"), 0)
@@ -174,38 +174,38 @@ pub def test_count() -> Void
   assert.eq(string.count("aaa", "aa"), 1)
   assert.eq(string.count("hello", ""), 0)
 
-  print("✓ string.count tests passed")
+  @print("✓ string.count tests passed")
 end
 
 pub def test_is_empty() -> Void
-  print("=== Testing string.is_empty ===")
+  @print("=== Testing string.is_empty ===")
 
   assert.eq(string.is_empty(""), true)
   assert.eq(string.is_empty(" "), false)
   assert.eq(string.is_empty("hello"), false)
 
-  print("✓ string.is_empty tests passed")
+  @print("✓ string.is_empty tests passed")
 end
 
 pub def test_substring() -> Void
-  print("=== Testing string.substring ===")
+  @print("=== Testing string.substring ===")
 
   assert.eq(string.substring("hello", 1, 4), "ell")
   assert.eq(string.substring("hello", 0, 5), "hello")
   assert.eq(string.substring("hello", 0, 0), "")
   assert.eq(string.substring("hello", 2, 2), "")
 
-  print("✓ string.substring tests passed")
+  @print("✓ string.substring tests passed")
 end
 
 pub def test_char_at() -> Void
-  print("=== Testing string.char_at ===")
+  @print("=== Testing string.char_at ===")
 
   assert.eq(string.char_at("hello", 0), "h")
   assert.eq(string.char_at("hello", 4), "o")
   assert.eq(string.char_at("hello", 2), "l")
 
-  print("✓ string.char_at tests passed")
+  @print("✓ string.char_at tests passed")
 end
 
 # Run all tests
@@ -228,4 +228,4 @@ test_is_empty()
 test_substring()
 test_char_at()
 
-print("\n=== All String Function Tests Complete ===")
+@print("\n=== All String Function Tests Complete ===")

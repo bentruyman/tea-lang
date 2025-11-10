@@ -5,7 +5,7 @@ def basic_dict_iteration() -> Void
   var point = { x: 3, y: 4 }
 
   for key, value of point
-    print(`${key}: ${value}`)
+    @print(`${key}: ${value}`)
   end
 end
 
@@ -14,7 +14,7 @@ def empty_dict() -> Void
   var empty = {}
 
   for key, value of empty
-    print("should not print")
+    @print("should not print")
   end
 end
 
@@ -23,7 +23,7 @@ def scores_iteration() -> Void
   var scores = { "alice": 10, "bob": 8, "charlie": 15 }
 
   for name, score of scores
-    print(`${name}: ${score}`)
+    @print(`${name}: ${score}`)
   end
 end
 

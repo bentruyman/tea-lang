@@ -18,19 +18,19 @@ const teams = [
   Team(name: "Linus", wins: 5, losses: 5)
 ]
 
-print("Team scoreboard")
+@print("Team scoreboard")
 
 var index = 0
 
-while index < length(teams)
-  print(format_team(teams[index]))
+while index < @len(teams)
+  @print(format_team(teams[index]))
   index = index + 1
 end
 
 var champion = teams[0]
 var next_index = 1
 
-while next_index < length(teams)
+while next_index < @len(teams)
   var contender = teams[next_index]
 
   if contender.wins > champion.wins
@@ -40,7 +40,7 @@ while next_index < length(teams)
   next_index = next_index + 1
 end
 
-print(`Top team: ${champion.name}`)
+@print(`Top team: ${champion.name}`)
 
 def describe_margin(team: Team) -> String
   var diff = team.wins - team.losses
@@ -56,12 +56,12 @@ def describe_margin(team: Team) -> String
   `${team.name} is dominating the league`
 end
 
-print(describe_margin(champion))
+@print(describe_margin(champion))
 
 def find_team(name: String) -> Team ! TeamError.NotFound
   var idx = 0
 
-  while idx < length(teams)
+  while idx < @len(teams)
     var candidate = teams[idx]
 
     if candidate.name == name
@@ -85,5 +85,5 @@ end
 `Fan favorite: ${format_team(team)}`
 end
 
-print(announce_favorite("Grace"))
-print(announce_favorite("Unknown"))
+@print(announce_favorite("Grace"))
+@print(announce_favorite("Unknown"))

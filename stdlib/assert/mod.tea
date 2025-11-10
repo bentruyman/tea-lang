@@ -63,7 +63,7 @@ end
 # Examples:
 #   empty("")
 pub def empty(value)
-  if length(value) != 0
+  if @len(value) != 0
     fail("assertion failed: expected empty string, got `{value}`")
   end
 end

@@ -2,9 +2,9 @@ use assert = "std.assert"
 
 var words = ["tea", "lang"]
 
-assert.assert(length(words) == 2, "expected two elements")
+assert.assert(@len(words) == 2, "expected two elements")
 assert.eq(true, true)
 assert.ne(1, 2)
 
-print("len of 'tea':")
-print(length("tea"))
+@print("len of 'tea':")
+@print(@len("tea"))

@@ -4,7 +4,7 @@ use env = "std.env"
 use assert = "std.assert"
 
 pub def test_require_all() -> Void
-  print("=== Testing env.require_all ===")
+  @print("=== Testing env.require_all ===")
 
   # Set test variables
   env.set("TEST_VAR1", "value1")
@@ -19,11 +19,11 @@ pub def test_require_all() -> Void
   env.unset("TEST_VAR2")
   env.unset("TEST_VAR3")
 
-  print("✓ env.require_all tests passed")
+  @print("✓ env.require_all tests passed")
 end
 
 pub def test_has_any() -> Void
-  print("=== Testing env.has_any ===")
+  @print("=== Testing env.has_any ===")
 
   env.set("TEST_EXISTS", "value")
 
@@ -32,11 +32,11 @@ pub def test_has_any() -> Void
 
   env.unset("TEST_EXISTS")
 
-  print("✓ env.has_any tests passed")
+  @print("✓ env.has_any tests passed")
 end
 
 pub def test_has_all() -> Void
-  print("=== Testing env.has_all ===")
+  @print("=== Testing env.has_all ===")
 
   env.set("TEST_VAR1", "value1")
   env.set("TEST_VAR2", "value2")
@@ -47,11 +47,11 @@ pub def test_has_all() -> Void
   env.unset("TEST_VAR1")
   env.unset("TEST_VAR2")
 
-  print("✓ env.has_all tests passed")
+  @print("✓ env.has_all tests passed")
 end
 
 pub def test_get_first() -> Void
-  print("=== Testing env.get_first ===")
+  @print("=== Testing env.get_first ===")
 
   env.set("EDITOR", "vim")
 
@@ -63,11 +63,11 @@ pub def test_get_first() -> Void
   var editor2 = env.get_first(["EDITOR", "VISUAL"], "nano")
   assert.eq(editor2, "nano")
 
-  print("✓ env.get_first tests passed")
+  @print("✓ env.get_first tests passed")
 end
 
 pub def test_is_true_false() -> Void
-  print("=== Testing env.is_true and env.is_false ===")
+  @print("=== Testing env.is_true and env.is_false ===")
 
   # Test truthy values
   env.set("DEBUG", "1")
@@ -98,7 +98,7 @@ pub def test_is_true_false() -> Void
   assert.eq(env.is_true("DEBUG"), false)
   assert.eq(env.is_false("DEBUG"), true)
 
-  print("✓ env.is_true and env.is_false tests passed")
+  @print("✓ env.is_true and env.is_false tests passed")
 end
 
 # Run all tests
@@ -108,4 +108,4 @@ test_has_all()
 test_get_first()
 test_is_true_false()
 
-print("\n=== All Env Helper Tests Complete ===")
+@print("\n=== All Env Helper Tests Complete ===")

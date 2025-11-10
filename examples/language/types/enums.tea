@@ -17,6 +17,6 @@ def advance(status: Status) -> Status
 end
 
 var current = Status.Pending
-print(`Current status: ${current}`)
+@print(`Current status: ${current}`)
 current = advance(current)
-print(`Next status: ${current}`)
+@print(`Next status: ${current}`)

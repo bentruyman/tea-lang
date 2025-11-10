@@ -7,7 +7,7 @@ var message = match code
   case _ => "fallback"
 end
 
-print(message)
+@print(message)
 
 var token = nil
 var status = match token
@@ -15,7 +15,7 @@ var status = match token
   case _ => "value"
 end
 
-print(status)
+@print(status)
 
 # Exhaustive matches are fine
 enum Color {
@@ -30,7 +30,7 @@ var output = match color
   case Color.Blue => "blue"
 end
 
-print(output)
+@print(output)
 
 # Bools are also fine
 var bool: Bool = true
@@ -39,15 +39,15 @@ output = match bool
   case false => "false"
 end
 
-print(output)
+@print(output)
 
 # `match` can also be used as a statement
 # If a case isn't followed by a `=>` then it is assumed what follows is a block of code to be executed
 match code
   case 200
-    print("ok")
+    @print("ok")
   case 301 | 302
-    print("redirect")
+    @print("redirect")
   case _
-    print("fallback")
+    @print("fallback")
 end

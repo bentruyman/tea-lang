@@ -6,56 +6,56 @@ use fs = "std.fs"
 use path = "std.path"
 
 pub def test_env() -> Void
-  print("=== Testing std.env ===")
+  @print("=== Testing std.env ===")
 
   # Test cwd
-  print(env.cwd())
+  @print(env.cwd())
 
   # Test has
   if env.has("PATH")
-    print("✓ PATH variable exists")
+    @print("✓ PATH variable exists")
   end
 
   # Test set/get/unset
   env.set("TEA_TEST_VAR", "test_value")
 
   if env.has("TEA_TEST_VAR")
-    print("✓ env.set works")
+    @print("✓ env.set works")
   end
 
   env.unset("TEA_TEST_VAR")
 
   if ! env.has("TEA_TEST_VAR")
-    print("✓ env.unset works")
+    @print("✓ env.unset works")
   end
 end
 
 pub def test_path() -> Void
-  print("=== Testing std.path ===")
+  @print("=== Testing std.path ===")
 
   # Test join
-  print(path.join(["usr", "local", "bin"]))
+  @print(path.join(["usr", "local", "bin"]))
 
   # Test basename and dirname
   var file_path = "/usr/local/bin/tea"
-  print(path.basename(file_path))
-  print(path.dirname(file_path))
+  @print(path.basename(file_path))
+  @print(path.dirname(file_path))
 
   # Test extension
-  print(path.extension("script.tea"))
+  @print(path.extension("script.tea"))
 
   # Test separator
-  print(path.separator())
+  @print(path.separator())
 end
 
 pub def test_fs() -> Void
-  print("=== Testing std.fs ===")
+  @print("=== Testing std.fs ===")
 
   # Test exists on current directory
   var cwd = env.cwd()
 
   if fs.exists(cwd)
-    print("✓ fs.exists works")
+    @print("✓ fs.exists works")
   end
 
   # Test ensure_dir
@@ -63,7 +63,7 @@ pub def test_fs() -> Void
   fs.ensure_dir(test_dir)
 
   if fs.exists(test_dir)
-    print("✓ fs.ensure_dir works")
+    @print("✓ fs.ensure_dir works")
     fs.remove(test_dir)
     fs.remove("/tmp/tea_test_dir")
   end
@@ -74,14 +74,14 @@ pub def test_fs() -> Void
   var content = fs.read_text(test_file)
 
   if content == "Hello from Tea!"
-    print("✓ fs.write_text and fs.read_text work")
+    @print("✓ fs.write_text and fs.read_text work")
   end
 
   # Clean up
   fs.remove(test_file)
 
   if ! fs.exists(test_file)
-    print("✓ fs.remove works")
+    @print("✓ fs.remove works")
   end
 end
 
@@ -90,4 +90,4 @@ test_env()
 test_path()
 test_fs()
 
-print("=== All Stdlib Tests Complete ===")
+@print("=== All Stdlib Tests Complete ===")

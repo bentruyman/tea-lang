@@ -5,13 +5,13 @@ use intrinsics = "std.intrinsics"
 pub def test_conversions() -> Void
   var num = 123
   var str = intrinsics.to_string(num)
-  print(str)
+  @print(str)
 end
 
 pub def test_env() -> Void
   var path = intrinsics.env_get("PATH")
-  print("PATH:")
-  print(path)
+  @print("PATH:")
+  @print(path)
 end
 
 test_conversions()

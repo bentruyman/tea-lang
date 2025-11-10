@@ -21,7 +21,7 @@ use intrinsics = "std.intrinsics"
 # Returns empty string if path is all separators.
 def trim_trailing_separators(file_path: String) -> String
   var sep = intrinsics.path_separator()
-  var len = length(file_path)
+  var len = @len(file_path)
   var end_pos = len
 
   while end_pos > 0
@@ -46,7 +46,7 @@ end
 #
 # Pure Tea implementation - builds path by concatenating components with separator.
 pub def join(parts: List[String]) -> String
-  if length(parts) == 0
+  if @len(parts) == 0
     return ""
   end
 
@@ -54,7 +54,7 @@ pub def join(parts: List[String]) -> String
   var sep = intrinsics.path_separator()
   var i = 1
 
-  while i < length(parts)
+  while i < @len(parts)
     result = result + sep + parts[i]
     i = i + 1
   end
@@ -70,7 +70,7 @@ end
 #
 # Pure Tea implementation - splits by separator and filters empty strings.
 pub def components(file_path: String) -> List[String]
-  if length(file_path) == 0
+  if @len(file_path) == 0
     return[]
   end
 
@@ -79,10 +79,10 @@ pub def components(file_path: String) -> List[String]
   var result = []
   var i = 0
 
-  while i < length(all_parts)
+  while i < @len(all_parts)
     var part = all_parts[i]
 
-    if length(part) > 0
+    if @len(part) > 0
       result = result +[part]
     end
 
@@ -102,7 +102,7 @@ end
 #
 # Pure Tea implementation - finds last separator and returns everything before it.
 pub def dirname(file_path: String) -> String
-  if length(file_path) == 0
+  if @len(file_path) == 0
     return ""
   end
 
@@ -110,7 +110,7 @@ pub def dirname(file_path: String) -> String
   var trimmed = trim_trailing_separators(file_path)
 
   # Handle root path
-  if length(trimmed) == 0
+  if @len(trimmed) == 0
     return sep
   end
 
@@ -119,14 +119,14 @@ pub def dirname(file_path: String) -> String
   var i = last_sep + 1
 
   # Find the last occurrence of separator
-  while i < length(trimmed)
-    var next_pos = intrinsics.string_index_of(trimmed[i...length(trimmed)], sep)
+  while i < @len(trimmed)
+    var next_pos = intrinsics.string_index_of(trimmed[i...@len(trimmed)], sep)
 
     if next_pos >= 0
       pos = i + next_pos
       i = pos + 1
     else
-      i = length(trimmed)
+      i = @len(trimmed)
     end
   end
 
@@ -153,7 +153,7 @@ end
 #
 # Pure Tea implementation - returns everything after the last separator.
 pub def basename(file_path: String) -> String
-  if length(file_path) == 0
+  if @len(file_path) == 0
     return ""
   end
 
@@ -161,7 +161,7 @@ pub def basename(file_path: String) -> String
   var trimmed = trim_trailing_separators(file_path)
 
   # Handle root path
-  if length(trimmed) == 0
+  if @len(trimmed) == 0
     return ""
   end
 
@@ -170,14 +170,14 @@ pub def basename(file_path: String) -> String
   var i = last_sep + 1
 
   # Find the last occurrence of separator
-  while i < length(trimmed)
-    var next_pos = intrinsics.string_index_of(trimmed[i...length(trimmed)], sep)
+  while i < @len(trimmed)
+    var next_pos = intrinsics.string_index_of(trimmed[i...@len(trimmed)], sep)
 
     if next_pos >= 0
       pos = i + next_pos
       i = pos + 1
     else
-      i = length(trimmed)
+      i = @len(trimmed)
     end
   end
 
@@ -187,7 +187,7 @@ pub def basename(file_path: String) -> String
   end
 
   # Everything after the last separator
-  trimmed[pos + 1...length(trimmed)]
+  trimmed[pos + 1...@len(trimmed)]
 end
 
 # Get the extension of a path.
@@ -203,7 +203,7 @@ end
 pub def extension(file_path: String) -> String
   var base = basename(file_path)
 
-  if length(base) == 0
+  if @len(base) == 0
     return ""
   end
 
@@ -217,14 +217,14 @@ pub def extension(file_path: String) -> String
   var i = last_dot + 1
 
   # Find the last occurrence of dot
-  while i < length(base)
-    var next_pos = intrinsics.string_index_of(base[i...length(base)], ".")
+  while i < @len(base)
+    var next_pos = intrinsics.string_index_of(base[i...@len(base)], ".")
 
     if next_pos >= 0
       pos = i + next_pos
       i = pos + 1
     else
-      i = length(base)
+      i = @len(base)
     end
   end
 
@@ -234,7 +234,7 @@ pub def extension(file_path: String) -> String
   end
 
   # Return everything after the last dot
-  base[pos + 1...length(base)]
+  base[pos + 1...@len(base)]
 end
 
 # Normalize a path (remove . and .. components).
@@ -246,27 +246,27 @@ end
 #
 # Pure Tea implementation - splits path, processes . and .., then rejoins.
 pub def normalize(file_path: String) -> String
-  if length(file_path) == 0
+  if @len(file_path) == 0
     return "."
   end
 
   var sep = intrinsics.path_separator()
   # Check if path is absolute by looking at first character
-  var is_abs = length(file_path) > 0 && file_path[0] == sep
+  var is_abs = @len(file_path) > 0 && file_path[0] == sep
   var parts = components(file_path)
   var stack = []
   var i = 0
 
-  while i < length(parts)
+  while i < @len(parts)
     var part = parts[i]
 
     if part == ".."
       # Go up one directory if possible
-      if length(stack) > 0
-        var last = stack[length(stack) - 1]
+      if @len(stack) > 0
+        var last = stack[@len(stack) - 1]
         # Don't pop if the last element is also ..
         if last != ".."
-          stack = stack[0..length(stack) - 1]
+          stack = stack[0..@len(stack) - 1]
         else
           stack = stack +[".."]
         end
@@ -294,7 +294,7 @@ pub def normalize(file_path: String) -> String
     result = sep + result
   end
 
-  if length(result) == 0
+  if @len(result) == 0
     return "."
   end
 

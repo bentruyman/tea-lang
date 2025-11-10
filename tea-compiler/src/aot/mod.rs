@@ -872,8 +872,6 @@ struct LlvmCodeGenerator<'ctx> {
     io_flush_fn: Option<FunctionValue<'ctx>>,
     json_encode_fn: Option<FunctionValue<'ctx>>,
     json_decode_fn: Option<FunctionValue<'ctx>>,
-    yaml_encode_fn: Option<FunctionValue<'ctx>>,
-    yaml_decode_fn: Option<FunctionValue<'ctx>>,
     error_mode_stack: Vec<ErrorHandlingMode>,
     function_return_stack: Vec<ValueType>,
     function_can_throw_stack: Vec<bool>,
@@ -1120,8 +1118,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             io_flush_fn: None,
             json_encode_fn: None,
             json_decode_fn: None,
-            yaml_encode_fn: None,
-            yaml_decode_fn: None,
             error_current_fn: None,
             error_set_current_fn: None,
             error_clear_current_fn: None,
@@ -11872,34 +11868,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_json_decode", fn_type, Some(Linkage::External));
         self.json_decode_fn = Some(func);
-        func
-    }
-
-    fn ensure_yaml_encode(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.yaml_encode_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_yaml_encode", fn_type, Some(Linkage::External));
-        self.yaml_encode_fn = Some(func);
-        func
-    }
-
-    fn ensure_yaml_decode(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.yaml_decode_fn {
-            return func;
-        }
-        let fn_type = self
-            .value_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_yaml_decode", fn_type, Some(Linkage::External));
-        self.yaml_decode_fn = Some(func);
         func
     }
 }

@@ -1467,7 +1467,11 @@ impl<'a> Parser<'a> {
             TokenKind::BuiltinIdentifier => {
                 // Built-in identifier like @print, @len, @panic
                 // Strip the @ prefix for the identifier name
-                let name = token.lexeme.strip_prefix('@').unwrap_or(&token.lexeme).to_string();
+                let name = token
+                    .lexeme
+                    .strip_prefix('@')
+                    .unwrap_or(&token.lexeme)
+                    .to_string();
                 Ok(Self::make_expression(
                     token_span,
                     ExpressionKind::Identifier(Identifier {

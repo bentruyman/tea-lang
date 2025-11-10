@@ -78,7 +78,7 @@ pub enum TokenKind {
     AmpersandAmpersand,
     Question,
     QuestionQuestion,
-    At,              // @
+    At,                // @
     BuiltinIdentifier, // @identifier for built-in functions
     Eof,
 }
@@ -1265,7 +1265,11 @@ mod tests {
             .filter(|t| matches!(t.kind, TokenKind::BuiltinIdentifier))
             .collect();
 
-        assert_eq!(builtin_tokens.len(), 3, "Should have 3 built-in identifiers");
+        assert_eq!(
+            builtin_tokens.len(),
+            3,
+            "Should have 3 built-in identifiers"
+        );
         assert_eq!(builtin_tokens[0].lexeme, "@print");
         assert_eq!(builtin_tokens[1].lexeme, "@len");
         assert_eq!(builtin_tokens[2].lexeme, "@panic");
@@ -1273,11 +1277,7 @@ mod tests {
 
     #[test]
     fn test_at_symbol_alone() {
-        let source = SourceFile::new(
-            SourceId(0),
-            PathBuf::from("test.tea"),
-            "@ @".to_string(),
-        );
+        let source = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), "@ @".to_string());
         let mut lexer = Lexer::new(&source).unwrap();
         let tokens = lexer.tokenize().unwrap();
 

@@ -52,6 +52,7 @@
 - `get(name: String) -> String` - Get the value of an environment variable
 - `set(name: String, value: String) -> Void` - Set an environment variable
 - `cwd() -> String` - Get the current working directory
+- `vars() -> Dict[String, String]` - Get all environment variables as a dictionary
 
 ### fs
 

@@ -5551,65 +5551,260 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn compile_math_floor_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_floor is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("floor expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for floor");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let float_val = match value_expr {
+            ExprValue::Float(v) => v,
+            _ => bail!("floor expects a Float argument"),
+        };
+
+        // Use LLVM's floor intrinsic
+        let floor_intrinsic = inkwell::intrinsics::Intrinsic::find("llvm.floor")
+            .ok_or_else(|| anyhow!("llvm.floor intrinsic not found"))?;
+        let intrinsic_fn = floor_intrinsic
+            .get_declaration(&self.module, &[self.float_type().into()])
+            .ok_or_else(|| anyhow!("failed to get llvm.floor declaration"))?;
+
+        let floor_result = self
+            .call_function(intrinsic_fn, &[float_val.into()], "floor_result")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("floor returned no value"))?
+            .into_float_value();
+
+        // Convert float to int
+        let int_result = map_builder_error(self.builder.build_float_to_signed_int(
+            floor_result,
+            self.int_type(),
+            "floor_to_int",
+        ))?;
+
+        Ok(ExprValue::Int(int_result))
     }
 
     fn compile_math_ceil_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_ceil is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("ceil expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for ceil");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let float_val = match value_expr {
+            ExprValue::Float(v) => v,
+            _ => bail!("ceil expects a Float argument"),
+        };
+
+        // Use LLVM's ceil intrinsic
+        let ceil_intrinsic = inkwell::intrinsics::Intrinsic::find("llvm.ceil")
+            .ok_or_else(|| anyhow!("llvm.ceil intrinsic not found"))?;
+        let intrinsic_fn = ceil_intrinsic
+            .get_declaration(&self.module, &[self.float_type().into()])
+            .ok_or_else(|| anyhow!("failed to get llvm.ceil declaration"))?;
+
+        let ceil_result = self
+            .call_function(intrinsic_fn, &[float_val.into()], "ceil_result")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("ceil returned no value"))?
+            .into_float_value();
+
+        // Convert float to int
+        let int_result = map_builder_error(self.builder.build_float_to_signed_int(
+            ceil_result,
+            self.int_type(),
+            "ceil_to_int",
+        ))?;
+
+        Ok(ExprValue::Int(int_result))
     }
 
     fn compile_math_round_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_round is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("round expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for round");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let float_val = match value_expr {
+            ExprValue::Float(v) => v,
+            _ => bail!("round expects a Float argument"),
+        };
+
+        // Use LLVM's round intrinsic (rounds to nearest even)
+        let round_intrinsic = inkwell::intrinsics::Intrinsic::find("llvm.round")
+            .ok_or_else(|| anyhow!("llvm.round intrinsic not found"))?;
+        let intrinsic_fn = round_intrinsic
+            .get_declaration(&self.module, &[self.float_type().into()])
+            .ok_or_else(|| anyhow!("failed to get llvm.round declaration"))?;
+
+        let round_result = self
+            .call_function(intrinsic_fn, &[float_val.into()], "round_result")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("round returned no value"))?
+            .into_float_value();
+
+        // Convert float to int
+        let int_result = map_builder_error(self.builder.build_float_to_signed_int(
+            round_result,
+            self.int_type(),
+            "round_to_int",
+        ))?;
+
+        Ok(ExprValue::Int(int_result))
     }
 
     fn compile_math_abs_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_abs is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("abs expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for abs");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let float_val = match value_expr {
+            ExprValue::Float(v) => v,
+            _ => bail!("abs expects a Float argument"),
+        };
+
+        // Use LLVM's fabs intrinsic
+        let abs_intrinsic = inkwell::intrinsics::Intrinsic::find("llvm.fabs")
+            .ok_or_else(|| anyhow!("llvm.fabs intrinsic not found"))?;
+        let intrinsic_fn = abs_intrinsic
+            .get_declaration(&self.module, &[self.float_type().into()])
+            .ok_or_else(|| anyhow!("failed to get llvm.fabs declaration"))?;
+
+        let abs_result = self
+            .call_function(intrinsic_fn, &[float_val.into()], "abs_result")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("abs returned no value"))?
+            .into_float_value();
+
+        Ok(ExprValue::Float(abs_result))
     }
 
     fn compile_math_sqrt_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_sqrt is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("sqrt expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for sqrt");
+        }
+        let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let float_val = match value_expr {
+            ExprValue::Float(v) => v,
+            _ => bail!("sqrt expects a Float argument"),
+        };
+
+        // Use LLVM's sqrt intrinsic
+        let sqrt_intrinsic = inkwell::intrinsics::Intrinsic::find("llvm.sqrt")
+            .ok_or_else(|| anyhow!("llvm.sqrt intrinsic not found"))?;
+        let intrinsic_fn = sqrt_intrinsic
+            .get_declaration(&self.module, &[self.float_type().into()])
+            .ok_or_else(|| anyhow!("failed to get llvm.sqrt declaration"))?;
+
+        let sqrt_result = self
+            .call_function(intrinsic_fn, &[float_val.into()], "sqrt_result")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("sqrt returned no value"))?
+            .into_float_value();
+
+        Ok(ExprValue::Float(sqrt_result))
     }
 
     fn compile_math_min_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_min is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("min expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for min");
+        }
+        let a_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let b_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        let (a_float, b_float) = match (a_expr, b_expr) {
+            (ExprValue::Float(a), ExprValue::Float(b)) => (a, b),
+            _ => bail!("min expects two Float arguments"),
+        };
+
+        let func = self.ensure_fmin_fn();
+        let result = self
+            .call_function(func, &[a_float.into(), b_float.into()], "fmin")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("fmin returned no value"))?
+            .into_float_value();
+
+        Ok(ExprValue::Float(result))
     }
 
     fn compile_math_max_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("math_max is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("max expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for max");
+        }
+        let a_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let b_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+
+        let (a_float, b_float) = match (a_expr, b_expr) {
+            (ExprValue::Float(a), ExprValue::Float(b)) => (a, b),
+            _ => bail!("max expects two Float arguments"),
+        };
+
+        let func = self.ensure_fmax_fn();
+        let result = self
+            .call_function(func, &[a_float.into(), b_float.into()], "fmax")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("fmax returned no value"))?
+            .into_float_value();
+
+        Ok(ExprValue::Float(result))
     }
 
     fn compile_env_get_call(

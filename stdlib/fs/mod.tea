@@ -45,11 +45,3 @@ pub def read_dir(dir_path: String) -> List[String]
   intrinsics.fs_list_dir(dir_path)
 end
 
-# Rename or move a file or directory.
-#
-# Examples:
-#   fs.rename("old.txt", "new.txt")
-pub def rename(source: String, target: String) -> Void
-  intrinsics.fs_rename(source, target)
-end
-

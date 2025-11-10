@@ -17,49 +17,12 @@
 
 use intrinsics = "std.intrinsics"
 
-# Internal helper to remove trailing separators from a path.
-# Returns empty string if path is all separators.
-def trim_trailing_separators(file_path: String) -> String
-  var sep = intrinsics.path_separator()
-  var len = @len(file_path)
-  var end_pos = len
-
-  while end_pos > 0
-    var char = file_path[end_pos - 1]
-
-    if char == sep
-      end_pos = end_pos - 1
-    else
-      # Found a non-separator, stop here
-      return file_path[0..end_pos]
-    end
-  end
-
-  # All separators
-  ""
-end
-
 # Join path components into a single path.
 #
 # Examples:
 #   var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
-#
-# Pure Tea implementation - builds path by concatenating components with separator.
 pub def join(parts: List[String]) -> String
-  if @len(parts) == 0
-    return ""
-  end
-
-  var result = parts[0]
-  var sep = intrinsics.path_separator()
-  var i = 1
-
-  while i < @len(parts)
-    result = result + sep + parts[i]
-    i = i + 1
-  end
-
-  result
+  intrinsics.path_join(parts)
 end
 
 # Split a path into its components.
@@ -70,26 +33,7 @@ end
 #
 # Pure Tea implementation - splits by separator and filters empty strings.
 pub def split(file_path: String) -> List[String]
-  if @len(file_path) == 0
-    return[]
-  end
-
-  var sep = intrinsics.path_separator()
-  var all_parts = intrinsics.string_split(file_path, sep)
-  var result = []
-  var i = 0
-
-  while i < @len(all_parts)
-    var part = all_parts[i]
-
-    if @len(part) > 0
-      result = result +[part]
-    end
-
-    i = i + 1
-  end
-
-  result
+  intrinsics.path_components(file_path)
 end
 
 # Get the directory part of a path.
@@ -99,48 +43,8 @@ end
 #   var dir = path.dirname("/usr/local/")  # => "/usr/local"
 #   var dir = path.dirname("file.txt")  # => ""
 #   var dir = path.dirname("/")  # => "/"
-#
-# Pure Tea implementation - finds last separator and returns everything before it.
 pub def dirname(file_path: String) -> String
-  if @len(file_path) == 0
-    return ""
-  end
-
-  var sep = intrinsics.path_separator()
-  var trimmed = trim_trailing_separators(file_path)
-
-  # Handle root path
-  if @len(trimmed) == 0
-    return sep
-  end
-
-  var last_sep = intrinsics.string_index_of(trimmed, sep)
-  var pos = last_sep
-  var i = last_sep + 1
-
-  # Find the last occurrence of separator
-  while i < @len(trimmed)
-    var next_pos = intrinsics.string_index_of(trimmed[i...@len(trimmed)], sep)
-
-    if next_pos >= 0
-      pos = i + next_pos
-      i = pos + 1
-    else
-      i = @len(trimmed)
-    end
-  end
-
-  # No separator found
-  if pos < 0
-    return ""
-  end
-
-  # Root path
-  if pos == 0
-    return sep
-  end
-
-  trimmed[0..pos]
+  intrinsics.path_dirname(file_path)
 end
 
 # Get the filename part of a path.
@@ -150,44 +54,8 @@ end
 #   var name = path.basename("/usr/local/")  # => "local"
 #   var name = path.basename("file.txt")  # => "file.txt"
 #   var name = path.basename("/")  # => ""
-#
-# Pure Tea implementation - returns everything after the last separator.
 pub def basename(file_path: String) -> String
-  if @len(file_path) == 0
-    return ""
-  end
-
-  var sep = intrinsics.path_separator()
-  var trimmed = trim_trailing_separators(file_path)
-
-  # Handle root path
-  if @len(trimmed) == 0
-    return ""
-  end
-
-  var last_sep = intrinsics.string_index_of(trimmed, sep)
-  var pos = last_sep
-  var i = last_sep + 1
-
-  # Find the last occurrence of separator
-  while i < @len(trimmed)
-    var next_pos = intrinsics.string_index_of(trimmed[i...@len(trimmed)], sep)
-
-    if next_pos >= 0
-      pos = i + next_pos
-      i = pos + 1
-    else
-      i = @len(trimmed)
-    end
-  end
-
-  # No separator found - the whole path is the basename
-  if pos < 0
-    return trimmed
-  end
-
-  # Everything after the last separator
-  trimmed[pos + 1...@len(trimmed)]
+  intrinsics.path_basename(file_path)
 end
 
 # Get the extension of a path.
@@ -197,43 +65,7 @@ end
 #   var ext = path.extension("file.tar.gz")  # => "gz"
 #   var ext = path.extension(".env")  # => ""
 #   var ext = path.extension("file")  # => ""
-#
-# Pure Tea implementation - returns everything after the last dot in the basename.
-# Hidden files (starting with .) have no extension.
 pub def extension(file_path: String) -> String
-  var base = basename(file_path)
-
-  if @len(base) == 0
-    return ""
-  end
-
-  # Hidden files starting with . have no extension
-  if base[0] == "."
-    return ""
-  end
-
-  var last_dot = intrinsics.string_index_of(base, ".")
-  var pos = last_dot
-  var i = last_dot + 1
-
-  # Find the last occurrence of dot
-  while i < @len(base)
-    var next_pos = intrinsics.string_index_of(base[i...@len(base)], ".")
-
-    if next_pos >= 0
-      pos = i + next_pos
-      i = pos + 1
-    else
-      i = @len(base)
-    end
-  end
-
-  # No dot found
-  if pos < 0
-    return ""
-  end
-
-  # Return everything after the last dot
-  base[pos + 1...@len(base)]
+  intrinsics.path_extension(file_path)
 end
 

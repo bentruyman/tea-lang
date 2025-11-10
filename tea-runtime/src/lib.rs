@@ -1550,6 +1550,12 @@ pub extern "C" fn tea_fail(message: *const TeaString) {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_panic(message: *const TeaString) {
+    let msg = tea_string_to_rust(message).unwrap_or_else(|| "panic called".to_string());
+    panic!("{msg}");
+}
+
+#[no_mangle]
 pub extern "C" fn tea_util_len(value: TeaValue) -> c_longlong {
     unsafe {
         match value.tag {

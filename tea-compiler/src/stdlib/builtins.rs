@@ -31,6 +31,13 @@ pub const BUILTINS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
+        "panic",
+        StdFunctionKind::Panic,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Void,
+    ),
+    std_function(
         "len",
         StdFunctionKind::Length,
         StdArity::Exact(1),

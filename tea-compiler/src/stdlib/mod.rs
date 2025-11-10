@@ -28,6 +28,7 @@ pub enum StdFunctionKind {
     UtilToString,
     ToString,
     TypeOf,
+    Panic,
     StringIndexOf,
     StringSplit,
     StringContains,

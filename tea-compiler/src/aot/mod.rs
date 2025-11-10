@@ -733,6 +733,7 @@ struct LlvmCodeGenerator<'ctx> {
     builtin_println_struct: Option<FunctionValue<'ctx>>,
     builtin_println_error: Option<FunctionValue<'ctx>>,
     builtin_type_of_fn: Option<FunctionValue<'ctx>>,
+    builtin_panic_fn: Option<FunctionValue<'ctx>>,
     builtin_exit_fn: Option<FunctionValue<'ctx>>,
     builtin_dict_delete_fn: Option<FunctionValue<'ctx>>,
     builtin_dict_clear_fn: Option<FunctionValue<'ctx>>,
@@ -984,6 +985,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             builtin_println_struct: None,
             builtin_println_error: None,
             builtin_type_of_fn: None,
+            builtin_panic_fn: None,
             builtin_exit_fn: None,
             builtin_dict_delete_fn: None,
             builtin_dict_clear_fn: None,
@@ -5023,6 +5025,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_to_string_call(&call.arguments, function, locals)
             }
             StdFunctionKind::TypeOf => self.compile_type_of_call(&call.arguments, function, locals),
+            StdFunctionKind::Panic => self.compile_panic_call(&call.arguments, function, locals),
             StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
             StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
             StdFunctionKind::Delete => self.compile_delete_call(&call.arguments, function, locals),
@@ -7785,6 +7788,28 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
+    fn compile_panic_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("panic expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for panic");
+        }
+        let message_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let message_ptr = match message_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("panic expects a String argument"),
+        };
+        let func = self.ensure_panic_fn();
+        self.call_function(func, &[message_ptr.into()], "tea_panic")?;
+        Ok(ExprValue::Void)
+    }
+
     fn compile_length_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -9899,6 +9924,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_type_of", fn_type, Some(Linkage::External));
         self.builtin_type_of_fn = Some(func);
+        func
+    }
+
+    fn ensure_panic_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.builtin_panic_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_panic", fn_type, Some(Linkage::External));
+        self.builtin_panic_fn = Some(func);
         func
     }
 

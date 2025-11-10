@@ -42,7 +42,7 @@ end
 # Examples:
 #   fail("not implemented")
 pub def fail(message)
-  __intrinsic_fail(message)
+  @panic(message)
 end
 
 # Asserts that a value matches a saved snapshot.

@@ -76,7 +76,7 @@ var abs_path = path.absolute("bin/tea", "{base}")
 assert.eq(abs_path, "{absolute}")
 
 var relative_value = path.relative("{target}", "{base}")
-assert.assert(relative_value != "")
+assert.ok(relative_value != "")
 assert.eq(path.separator(), "{separator}")
 "#,
         joined = escape(&joined_str),

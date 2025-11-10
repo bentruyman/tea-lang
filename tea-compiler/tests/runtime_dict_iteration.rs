@@ -153,7 +153,7 @@ test "for loop dict with break"
   
   # Should only sum values before breaking (depends on iteration order)
   # Since HashMap iteration order isn't guaranteed, we just check it's less than full sum
-  assert.assert(sum < 6)
+  assert.ok(sum < 6)
 end
 "#;
 

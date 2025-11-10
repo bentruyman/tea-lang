@@ -1,17 +1,13 @@
 # Assertion helpers for tests and runtime checks.
 
-# Asserts that a condition is true. Optional message for failure.
+# Asserts that a value is truthy.
 #
 # Examples:
-#   assert(1 + 1 == 2)
-#   assert(x > 0, "x must be positive")
-pub def assert(condition, message)
-  if ! condition
-    if message == nil
-      fail("assertion failed")
-    else
-      fail(message)
-    end
+#   ok(1 + 1 == 2)
+#   ok(x > 0)
+pub def ok(value)
+  if ! value
+    @panic("assertion failed")
   end
 end
 
@@ -22,7 +18,7 @@ end
 #   eq("hello", "hello")
 pub def eq(left, right)
   if left != right
-    fail("assertion failed: `{left}` != `{right}`")
+    @panic("assertion failed: `{left}` != `{right}`")
   end
 end
 
@@ -33,16 +29,8 @@ end
 #   ne("hello", "world")
 pub def ne(left, right)
   if left == right
-    fail("assertion failed: `{left}` == `{right}`")
+    @panic("assertion failed: `{left}` == `{right}`")
   end
-end
-
-# Fails immediately with a message.
-#
-# Examples:
-#   fail("not implemented")
-pub def fail(message)
-  @panic(message)
 end
 
 # Asserts that a value matches a saved snapshot.
@@ -56,41 +44,4 @@ pub def snapshot(name, value, path)
   else
     __intrinsic_assert_snapshot(name, value, path)
   end
-end
-
-# Asserts that a string is empty.
-#
-# Examples:
-#   empty("")
-pub def empty(value)
-  if @len(value) != 0
-    fail("assertion failed: expected empty string, got `{value}`")
-  end
-end
-
-# C symbol exports for AOT linking
-# These wrapper functions are exported with External linkage when compiled to native objects
-
-pub def tea_assert(condition, message)
-  assert(condition, message)
-end
-
-pub def tea_assert_eq(left, right)
-  eq(left, right)
-end
-
-pub def tea_assert_ne(left, right)
-  ne(left, right)
-end
-
-pub def tea_fail(message)
-  fail(message)
-end
-
-pub def tea_assert_snapshot(name, value, path)
-  snapshot(name, value, path)
-end
-
-pub def tea_assert_empty(value)
-  empty(value)
 end

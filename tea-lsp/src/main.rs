@@ -124,7 +124,7 @@ mod tests {
 use assert = "std.assert"
 
 def main() -> Void
-  assert.assert(true)
+  assert.ok(true)
 end
 "#,
         );
@@ -147,18 +147,18 @@ end
             "assert module should have docstring"
         );
         assert!(
-            assert_binding.export_docs.get("assert").is_some(),
-            "assert.assert should have docstring"
+            assert_binding.export_docs.get("ok").is_some(),
+            "assert.ok should have docstring"
         );
 
         let symbol_doc = analysis
             .symbols
             .iter()
-            .find(|symbol| symbol.name == "assert")
+            .find(|symbol| symbol.name == "ok")
             .and_then(|symbol| symbol.docstring.clone());
         assert!(
             symbol_doc.is_some(),
-            "assert function should have docstring in symbols"
+            "ok function should have docstring in symbols"
         );
     }
 

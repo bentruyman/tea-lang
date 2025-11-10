@@ -37,7 +37,7 @@ var before = fs.list_dir("{dir}")
 assert.eq(@len(before), 0)
 
 fs.write_text("{file}", "hello fs")
-assert.assert(fs.exists("{file}"))
+assert.ok(fs.exists("{file}"))
 
 var original = fs.read_text("{file}")
 assert.eq(original, "hello fs")
@@ -52,7 +52,7 @@ assert.eq(visit_before[0], "{file}")
 
 fs.ensure_dir("{backups}")
 fs.write_text("{copy}", "hello fs")
-assert.assert(fs.exists("{copy}"))
+assert.ok(fs.exists("{copy}"))
 
 var after_copy = fs.list_dir("{dir}")
 assert.eq(@len(after_copy), 2)

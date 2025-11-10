@@ -8,21 +8,21 @@ fn env_helpers_operate_through_runtime() -> anyhow::Result<()> {
 use assert = "std.assert"
 use env = "std.env"
 
-assert.assert(env.has("TEA_LANG_TEST_VAR") == false)
+assert.ok(env.has("TEA_LANG_TEST_VAR") == false)
 assert.eq(env.get("TEA_LANG_TEST_VAR"), "")
 
 env.set("TEA_LANG_TEST_VAR", "configured")
-assert.assert(env.has("TEA_LANG_TEST_VAR"))
+assert.ok(env.has("TEA_LANG_TEST_VAR"))
 assert.eq(env.get("TEA_LANG_TEST_VAR"), "configured")
 
 var vars = env.vars()
-assert.assert(vars["TEA_LANG_TEST_VAR"] == "configured")
+assert.ok(vars["TEA_LANG_TEST_VAR"] == "configured")
 
 env.unset("TEA_LANG_TEST_VAR")
-assert.assert(env.has("TEA_LANG_TEST_VAR") == false)
+assert.ok(env.has("TEA_LANG_TEST_VAR") == false)
 
 var cwd = env.cwd()
-assert.assert(cwd != "")
+assert.ok(cwd != "")
 "#;
 
     let mut compiler = Compiler::new(CompileOptions::default());

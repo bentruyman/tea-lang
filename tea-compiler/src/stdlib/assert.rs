@@ -2,13 +2,10 @@ use super::{std_function, std_module, StdArity, StdFunction, StdFunctionKind, St
 
 const ASSERT_FUNCTIONS: &[StdFunction] = &[
     std_function(
-        "assert",
+        "ok",
         StdFunctionKind::Assert,
-        StdArity::Range {
-            min: 1,
-            max: Some(2),
-        },
-        &[StdType::Bool, StdType::String],
+        StdArity::Exact(1),
+        &[StdType::Any],
         StdType::Void,
     ),
     std_function(
@@ -26,13 +23,6 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "fail",
-        StdFunctionKind::AssertFail,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
         "snapshot",
         StdFunctionKind::AssertSnapshot,
         StdArity::Range {
@@ -40,13 +30,6 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
             max: Some(3),
         },
         &[StdType::String, StdType::String, StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "empty",
-        StdFunctionKind::AssertEmpty,
-        StdArity::Exact(1),
-        &[StdType::String],
         StdType::Void,
     ),
 ];

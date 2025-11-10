@@ -1,384 +1,462 @@
 # Tea Standard Library Reference
 
-This document provides a comprehensive reference for all modules and functions in the Tea standard library.
+This document provides a comprehensive reference for all built-in functions and standard library modules in Tea.
 
 ## Table of Contents
 
-- [assert](#assert) - Assertion helpers for tests and runtime checks
-- [env](#env) - Environment variable access and working directory management
-- [fs](#fs) - Filesystem operations
-- [json](#json) - JSON encoding and decoding
-- [math](#math) - Mathematical utilities
-- [path](#path) - Path manipulation utilities
-- [string](#string) - String manipulation utilities
-- [yaml](#yaml) - YAML encoding and decoding
+- [Built-ins](#built-ins)
+  - [Debug](#debug)
+  - [Error Handling](#error-handling)
+  - [Math](#math)
+  - [Utility](#utility)
+- [Standard Library](#standard-library)
+  - [assert](#assert) - Assertion helpers for tests and runtime checks
+  - [env](#env) - Environment variable access and working directory management
+  - [fs](#fs) - Filesystem operations
+  - [json](#json) - JSON encoding and decoding
+  - [path](#path) - Path manipulation utilities
+  - [string](#string) - String manipulation utilities
 
 ---
 
-## assert
+## Built-ins
+
+Built-in functions are available globally without imports and use the `@` prefix.
+
+### Debug
+
+#### `@print(value: Unknown) -> Void`
+
+Prints the string representation of a value to stderr.
+
+**Examples:**
+
+```tea
+@print("Hello, world!")
+@print(42)
+@print([1, 2, 3])
+```
+
+#### `@println(value: Unknown) -> Void`
+
+Prints the string representation of a value to stderr, followed by a newline.
+
+**Examples:**
+
+```tea
+@println("Hello, world!")
+@println(42)
+```
+
+#### `@to_string(value: Unknown) -> String`
+
+Converts any value to its string representation.
+
+**Examples:**
+
+```tea
+var s = @to_string(42)        # => "42"
+var s = @to_string([1, 2, 3]) # => "[1, 2, 3]"
+```
+
+#### `@type_of(value: Unknown) -> String`
+
+Returns a string representation of the type of a value.
+
+**Examples:**
+
+```tea
+@type_of(42)        # => "Int"
+@type_of("hello")   # => "String"
+@type_of([1, 2, 3]) # => "List"
+```
+
+### Error Handling
+
+#### `@panic(message: String) -> Void`
+
+Terminates the program immediately with an error message.
+
+**Examples:**
+
+```tea
+@panic("Something went wrong!")
+```
+
+### Math
+
+#### `@floor(value: Float) -> Int`
+
+Rounds a float down to the nearest integer.
+
+**Examples:**
+
+```tea
+@floor(3.7)  # => 3
+@floor(3.2)  # => 3
+@floor(-3.7) # => -4
+```
+
+#### `@ceil(value: Float) -> Int`
+
+Rounds a float up to the nearest integer.
+
+**Examples:**
+
+```tea
+@ceil(3.2)  # => 4
+@ceil(3.7)  # => 4
+@ceil(-3.2) # => -3
+```
+
+#### `@round(value: Float) -> Int`
+
+Rounds a float to the nearest integer.
+
+**Examples:**
+
+```tea
+@round(3.2)  # => 3
+@round(3.7)  # => 4
+@round(3.5)  # => 4
+@round(-3.5) # => -4
+```
+
+#### `@abs(value: Float) -> Float`
+
+Returns the absolute value of a float.
+
+**Examples:**
+
+```tea
+@abs(3.5)   # => 3.5
+@abs(-3.5)  # => 3.5
+@abs(0.0)   # => 0.0
+```
+
+#### `@sqrt(value: Float) -> Float`
+
+Returns the square root of a float.
+
+**Examples:**
+
+```tea
+@sqrt(4.0)  # => 2.0
+@sqrt(9.0)  # => 3.0
+@sqrt(2.0)  # => 1.414...
+```
+
+#### `@min(a: Float, b: Float) -> Float`
+
+Returns the minimum of two floats.
+
+**Examples:**
+
+```tea
+@min(5.0, 10.0)  # => 5.0
+@min(10.0, 5.0)  # => 5.0
+@min(5.0, 5.0)   # => 5.0
+```
+
+#### `@max(a: Float, b: Float) -> Float`
+
+Returns the maximum of two floats.
+
+**Examples:**
+
+```tea
+@max(5.0, 10.0)  # => 10.0
+@max(10.0, 5.0)  # => 10.0
+@max(5.0, 5.0)   # => 5.0
+```
+
+### Utility
+
+#### `@len(value: Dict | List | String) -> Int`
+
+Returns the number of items in a `List`, characters in a `String`, or keys in a `Dict`.
+
+**Examples:**
+
+```tea
+@len("hello")      # => 5
+@len([1, 2, 3])    # => 3
+@len({"a": 1})     # => 1
+```
+
+---
+
+## Standard Library
+
+Standard library modules must be imported with `use` statements before use.
+
+### assert
 
 Assertion helpers for tests and runtime checks.
 
-### Functions
+#### `ok(value: Unknown) -> Void`
 
-#### `assert(condition, message)`
-
-Asserts that a condition is true. Optional message for failure.
+Asserts that a value is truthy. Panics if the value is falsy.
 
 **Examples:**
 
 ```tea
-assert(1 + 1 == 2)
-assert(x > 0, "x must be positive")
+use assert = "std.assert"
+
+assert.ok(1 + 1 == 2)
+assert.ok(x > 0)
 ```
 
-#### `eq(left, right)`
+#### `eq(left: Unknown, right: Unknown) -> Void`
 
-Asserts that two values are equal.
+Asserts that two values are equal. Panics if they are not equal.
 
 **Examples:**
 
 ```tea
+use assert = "std.assert"
+
 assert.eq(1 + 1, 2)
 assert.eq("hello", "hello")
 ```
 
-#### `ne(left, right)`
+#### `ne(left: Unknown, right: Unknown) -> Void`
 
-Asserts that two values are not equal.
+Asserts that two values are not equal. Panics if they are equal.
 
 **Examples:**
 
 ```tea
+use assert = "std.assert"
+
 assert.ne(1, 2)
 assert.ne("hello", "world")
 ```
 
-#### `fail(message)`
+#### `snapshot(name: String, value: Unknown, path: String) -> Void`
 
-Fails immediately with a message.
-
-**Examples:**
-
-```tea
-assert.fail("not implemented")
-```
-
-#### `snapshot(name, value, path)`
-
-Asserts that a value matches a saved snapshot.
+Asserts that a value matches a saved snapshot. Creates the snapshot if it doesn't exist.
 
 **Examples:**
 
 ```tea
+use assert = "std.assert"
+
 assert.snapshot("test_name", result)
 assert.snapshot("test_name", result, "custom/path")
 ```
 
-#### `empty(value)`
-
-Asserts that a string is empty.
-
-**Examples:**
-
-```tea
-assert.empty("")
-```
-
 ---
 
-## env
+### env
 
 Environment variable access and working directory management.
 
-### Functions
-
 #### `get(name: String) -> String`
 
-Get the value of an environment variable.
+Gets the value of an environment variable.
 
 **Examples:**
 
 ```tea
+use env = "std.env"
+
 var path = env.get("PATH")
+var home = env.get("HOME")
 ```
 
 #### `set(name: String, value: String) -> Void`
 
-Set an environment variable.
+Sets an environment variable for the current process.
 
 **Examples:**
 
 ```tea
+use env = "std.env"
+
 env.set("MY_VAR", "my_value")
-```
-
-#### `unset(name: String) -> Void`
-
-Unset an environment variable.
-
-**Examples:**
-
-```tea
-env.unset("MY_VAR")
-```
-
-#### `has(name: String) -> Bool`
-
-Check if an environment variable exists.
-
-**Examples:**
-
-```tea
-if env.has("HOME")
-  print("HOME is set")
-end
-```
-
-#### `vars() -> Dict[String, String]`
-
-Get all environment variables as a dictionary.
-
-**Examples:**
-
-```tea
-var all_vars = env.vars()
 ```
 
 #### `cwd() -> String`
 
-Get the current working directory.
+Gets the current working directory.
 
 **Examples:**
 
 ```tea
+use env = "std.env"
+
 var cwd = env.cwd()
 ```
 
----
+#### `vars() -> Dict[String, String]`
 
-## fs
-
-Filesystem operations for reading, writing, and managing files and directories.
-
-### Functions
-
-#### `read_text(file_path: String) -> String`
-
-Read a text file.
+Gets all environment variables as a dictionary.
 
 **Examples:**
 
 ```tea
-var content = fs.read_text("file.txt")
-```
+use env = "std.env"
 
-#### `write_text(file_path: String, content: String) -> Void`
-
-Write text to a file.
-
-**Examples:**
-
-```tea
-fs.write_text("file.txt", "Hello, world!")
-```
-
-#### `create_dir(dir_path: String) -> Void`
-
-Create a directory.
-
-**Examples:**
-
-```tea
-fs.create_dir("my_dir")
-```
-
-#### `ensure_dir(dir_path: String) -> Void`
-
-Ensure a directory exists, creating it and all parents if needed.
-
-**Examples:**
-
-```tea
-fs.ensure_dir("path/to/nested/dir")
-```
-
-#### `remove(file_path: String) -> Void`
-
-Remove a file or directory.
-
-**Examples:**
-
-```tea
-fs.remove("file.txt")
-```
-
-#### `exists(file_path: String) -> Bool`
-
-Check if a file or directory exists.
-
-**Examples:**
-
-```tea
-if fs.exists("file.txt")
-  print("File exists")
+var all_vars = env.vars()
+for key of @keys(all_vars)
+  @println(`{key}={all_vars[key]}`)
 end
 ```
 
-#### `list_dir(dir_path: String) -> List[String]`
+---
 
-List all entries in a directory.
+### fs
+
+Filesystem operations for reading, writing, and managing files and directories.
+
+#### `read_file(path: String) -> String`
+
+Reads the entire contents of a text file.
 
 **Examples:**
 
 ```tea
-var entries = fs.list_dir(".")
+use fs = "std.fs"
+
+var content = fs.read_file("file.txt")
 ```
 
-#### `walk(dir_path: String) -> List[String]`
+#### `write_file(path: String, contents: String) -> Void`
 
-Walk a directory tree recursively.
+Writes a string to a file, replacing existing contents.
 
 **Examples:**
 
 ```tea
-var all_files = fs.walk("src")
+use fs = "std.fs"
+
+fs.write_file("file.txt", "Hello, world!")
+```
+
+#### `create_dir(path: String) -> Void`
+
+Creates a directory. Parent directories must already exist.
+
+**Examples:**
+
+```tea
+use fs = "std.fs"
+
+fs.create_dir("my_dir")
+```
+
+#### `remove(path: String) -> Void`
+
+Removes a file or directory recursively.
+
+**Examples:**
+
+```tea
+use fs = "std.fs"
+
+fs.remove("file.txt")
+fs.remove("my_dir")
+```
+
+#### `read_dir(path: String) -> List[String]`
+
+Lists all entries in a directory.
+
+**Examples:**
+
+```tea
+use fs = "std.fs"
+
+var entries = fs.read_dir(".")
+for entry of entries
+  @println(entry)
+end
+```
+
+#### `rename(source: String, target: String) -> Void`
+
+Renames or moves a file or directory.
+
+**Examples:**
+
+```tea
+use fs = "std.fs"
+
+fs.rename("old.txt", "new.txt")
+fs.rename("file.txt", "subdir/file.txt")
 ```
 
 ---
 
-## json
+### json
 
 JSON encoding and decoding utilities.
 
-### Functions
-
 #### `encode(value: Dict[String, String]) -> String`
 
-Encode a value to JSON string.
+Encodes a value to a JSON string.
 
 **Examples:**
 
 ```tea
+use json = "std.json"
+
 var json_str = json.encode({"name": "tea", "version": "1.0"})
 ```
 
 #### `decode(json_str: String) -> Dict[String, String]`
 
-Decode a JSON string to a value.
+Decodes a JSON string to a value.
 
 **Examples:**
 
 ```tea
+use json = "std.json"
+
 var data = json.decode("{\"name\":\"tea\"}")
 ```
 
 ---
 
-## math
-
-Mathematical utilities for integer arithmetic operations.
-
-All functions work with integers. Floating point operations are not yet supported.
-
-### Functions
-
-#### `abs(n: Int) -> Int`
-
-Get the absolute value of a number.
-
-**Examples:**
-
-```tea
-math.abs(-5)  # => 5
-math.abs(5)   # => 5
-math.abs(0)   # => 0
-```
-
-#### `sign(n: Int) -> Int`
-
-Get the sign of a number (-1, 0, or 1).
-
-**Examples:**
-
-```tea
-math.sign(-5)  # => -1
-math.sign(0)   # => 0
-math.sign(5)   # => 1
-```
-
-#### `max(a: Int, b: Int) -> Int`
-
-Get the maximum of two integers.
-
-**Examples:**
-
-```tea
-math.max(5, 10)  # => 10
-math.max(10, 5)  # => 10
-math.max(5, 5)   # => 5
-```
-
-#### `min(a: Int, b: Int) -> Int`
-
-Get the minimum of two integers.
-
-**Examples:**
-
-```tea
-math.min(5, 10)  # => 5
-math.min(10, 5)  # => 5
-math.min(5, 5)   # => 5
-```
-
-#### `pow(base: Int, exp: Int) -> Int`
-
-Raise a base to an integer exponent.
-
-**Examples:**
-
-```tea
-math.pow(2, 3)   # => 8
-math.pow(5, 0)   # => 1
-math.pow(10, 2)  # => 100
-```
-
----
-
-## path
+### path
 
 Path manipulation utilities for working with file paths.
 
-### Functions
-
 #### `join(parts: List[String]) -> String`
 
-Join path components into a single path.
+Joins path components into a single path.
 
 **Examples:**
 
 ```tea
-var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
+use path = "std.path"
+
+var p = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
 ```
 
-#### `components(file_path: String) -> List[String]`
+#### `split(file_path: String) -> List[String]`
 
-Split a path into its components.
+Splits a path into its components.
 
 **Examples:**
 
 ```tea
-var parts = path.components("/usr/local/bin")  # => ["usr", "local", "bin"]
-var parts = path.components("usr/local/")      # => ["usr", "local"]
+use path = "std.path"
+
+var parts = path.split("/usr/local/bin")  # => ["usr", "local", "bin"]
+var parts = path.split("usr/local/")      # => ["usr", "local"]
 ```
 
 #### `dirname(file_path: String) -> String`
 
-Get the directory part of a path.
+Gets the directory part of a path.
 
 **Examples:**
 
 ```tea
+use path = "std.path"
+
 var dir = path.dirname("/usr/local/bin/tea")  # => "/usr/local/bin"
 var dir = path.dirname("/usr/local/")         # => "/usr/local"
 var dir = path.dirname("file.txt")            # => ""
@@ -387,11 +465,13 @@ var dir = path.dirname("/")                   # => "/"
 
 #### `basename(file_path: String) -> String`
 
-Get the filename part of a path.
+Gets the filename part of a path.
 
 **Examples:**
 
 ```tea
+use path = "std.path"
+
 var name = path.basename("/usr/local/bin/tea")  # => "tea"
 var name = path.basename("/usr/local/")         # => "local"
 var name = path.basename("file.txt")            # => "file.txt"
@@ -400,157 +480,138 @@ var name = path.basename("/")                   # => ""
 
 #### `extension(file_path: String) -> String`
 
-Get the extension of a path.
+Gets the extension of a path (without the dot).
 
 **Examples:**
 
 ```tea
+use path = "std.path"
+
 var ext = path.extension("file.tea")     # => "tea"
 var ext = path.extension("file.tar.gz")  # => "gz"
 var ext = path.extension(".env")         # => ""
 var ext = path.extension("file")         # => ""
 ```
 
-#### `normalize(file_path: String) -> String`
-
-Normalize a path (remove . and .. components).
-
-**Examples:**
-
-```tea
-var norm = path.normalize("./foo/../bar")       # => "bar"
-var norm = path.normalize("/usr/./local/../bin")  # => "/usr/bin"
-var norm = path.normalize("a/b/c/../../d")      # => "a/d"
-```
-
-#### `absolute(file_path: String) -> String`
-
-Convert a path to absolute form.
-
-**Examples:**
-
-```tea
-var abs = path.absolute("file.txt")  # => "/current/dir/file.txt"
-```
-
-#### `relative(from: String, to: String) -> String`
-
-Get the relative path from one path to another.
-
-**Examples:**
-
-```tea
-var rel = path.relative("/usr/local", "/usr/local/bin")  # => "bin"
-```
-
-#### `separator() -> String`
-
-Get the system path separator ("/" or "\").
-
-**Examples:**
-
-```tea
-var sep = path.separator()  # => "/" on Unix
-```
-
 ---
 
-## string
+### string
 
 String manipulation utilities for common text operations.
 
-### Functions
-
 #### `starts_with(text: String, prefix: String) -> Bool`
 
-Check if a string starts with a given prefix.
+Checks if a string starts with a given prefix.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
 string.starts_with("hello world", "hello")  # => true
 string.starts_with("hello world", "world")  # => false
 ```
 
 #### `ends_with(text: String, suffix: String) -> Bool`
 
-Check if a string ends with a given suffix.
+Checks if a string ends with a given suffix.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
 string.ends_with("hello world", "world")  # => true
 string.ends_with("hello world", "hello")  # => false
 ```
 
-#### `trim_start(text: String) -> String`
+#### `replace(text: String, pattern: String, replacement: String) -> String`
 
-Trim whitespace from the start of a string.
+Replaces all occurrences of a pattern in a string with a replacement.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
+string.replace("hello world", "world", "tea")  # => "hello tea"
+string.replace("aaa", "a", "b")                # => "bbb"
+```
+
+#### `to_lower(text: String) -> String`
+
+Converts a string to lowercase.
+
+**Examples:**
+
+```tea
+use string = "std.string"
+
+string.to_lower("HELLO")       # => "hello"
+string.to_lower("Hello World") # => "hello world"
+```
+
+#### `to_upper(text: String) -> String`
+
+Converts a string to uppercase.
+
+**Examples:**
+
+```tea
+use string = "std.string"
+
+string.to_upper("hello")       # => "HELLO"
+string.to_upper("Hello World") # => "HELLO WORLD"
+```
+
+#### `trim_start(text: String) -> String`
+
+Trims whitespace from the start of a string.
+
+**Examples:**
+
+```tea
+use string = "std.string"
+
 string.trim_start("  hello  ")  # => "hello  "
 string.trim_start("\t\nhello")  # => "hello"
 ```
 
 #### `trim_end(text: String) -> String`
 
-Trim whitespace from the end of a string.
+Trims whitespace from the end of a string.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
 string.trim_end("  hello  ")  # => "  hello"
 string.trim_end("hello\n\t")  # => "hello"
 ```
 
 #### `trim(text: String) -> String`
 
-Trim whitespace from both ends of a string.
+Trims whitespace from both ends of a string.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
 string.trim("  hello  ")     # => "hello"
 string.trim("\t\nhello\n\t") # => "hello"
 ```
 
 #### `reverse(text: String) -> String`
 
-Reverse a string.
+Reverses a string.
 
 **Examples:**
 
 ```tea
+use string = "std.string"
+
 string.reverse("hello")  # => "olleh"
 string.reverse("ab")     # => "ba"
-```
-
----
-
-## yaml
-
-YAML encoding and decoding utilities.
-
-### Functions
-
-#### `encode(value: Dict[String, String]) -> String`
-
-Encode a value to YAML string.
-
-**Examples:**
-
-```tea
-var yaml_str = yaml.encode({"name": "tea", "version": "1.0"})
-```
-
-#### `decode(yaml_str: String) -> Dict[String, String]`
-
-Decode a YAML string to a value.
-
-**Examples:**
-
-```tea
-var data = yaml.decode("name: tea\nversion: 1.0")
 ```

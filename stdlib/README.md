@@ -4,16 +4,12 @@ This directory contains the Tea standard library, written in Tea itself and buil
 
 ## Structure
 
-- `util/` - Utility functions for type inspection and helpers
 - `assert/` - Assertion helpers for testing
 - `env/` - Environment variable access
 - `fs/` - Filesystem operations
-- `path/` - Path manipulation utilities
-- `io/` - Standard I/O operations
-- `cli/` - CLI argument parsing and utilities
-- `process/` - Process spawning and management
 - `json/` - JSON encoding/decoding
-- `yaml/` - YAML encoding/decoding
+- `path/` - Path manipulation utilities
+- `string/` - String manipulation utilities
 
 ## Module Structure
 

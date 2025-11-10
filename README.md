@@ -20,7 +20,7 @@ end
 - **Familiar syntax** – indentation-based, inspired by Ruby and Python
 - **Generics** – write once, use anywhere with automatic specialization
 - **Native compilation** – compiles to fast, standalone native binaries
-- **Rich standard library** – filesystem, processes, JSON/YAML, and CLI helpers built-in
+- **Rich standard library** – filesystem, JSON, path, and string utilities built-in
 
 ## Everyday Tea
 
@@ -35,17 +35,17 @@ use string = "std.string"
 var root = env.cwd()
 var entries = fs.read_dir(root)
 
-print("Tea files in ${root}:")
+@print(`Tea files in {root}:`)
 
 for entry of entries
   if string.ends_with(entry, ".tea")
     var absolute = path.join([root, entry])
-    print("• ${absolute}")
+    @print(`• {absolute}`)
   end
 end
 ```
 
-Modules like `std.assert`, `std.math`, and the debug built-ins (`@println`, `@type_of`, `@len`) cover quick checks and diagnostics—see [`docs/new-stdlib.md`](docs/new-stdlib.md) for the current catalog.
+Modules like `std.assert`, `std.fs`, `std.path`, and the debug built-ins (`@println`, `@type_of`, `@len`) cover quick checks and diagnostics—see [`docs/stdlib-reference.md`](docs/stdlib-reference.md) for the complete reference.
 
 ## Quick Start
 
@@ -117,7 +117,7 @@ Explore more in the [`examples/`](examples/) directory:
 
 - **[Getting Started Guide](docs/)** – comprehensive language reference
 - **[Language Semantics](docs/reference/language/semantics.md)** – types, scoping, modules
-- **[Standard Library](docs/new-stdlib.md)** – built-ins and modules for everyday scripting
+- **[Standard Library](docs/stdlib-reference.md)** – built-ins and modules for everyday scripting
 - **[Compiler Architecture](docs/explanation/aot-backend.md)** – LLVM compilation details
 - **[LSP Setup](docs/how-to/lsp-setup.md)** – editor integration
 

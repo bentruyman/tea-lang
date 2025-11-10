@@ -28,7 +28,9 @@ pub use crate::formatter::format_source;
 pub use crate::lexer::{Keyword, Lexer, Token, TokenKind};
 pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 pub use crate::source::{SourceFile, SourceId};
-pub use crate::stdlib::{find_module as stdlib_find_module, StdFunction, StdModule};
+pub use crate::stdlib::{
+    find_module as stdlib_find_module, StdFunction, StdModule, StdType, BUILTINS as STDLIB_BUILTINS,
+};
 pub use crate::typechecker::TypeChecker;
 
 pub mod aot;

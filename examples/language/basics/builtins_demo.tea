@@ -1,0 +1,36 @@
+## Demo of builtin functions with LSP hover documentation
+##
+## When you hover over any @builtin function in an LSP-enabled editor,
+## you'll see its type signature and documentation.
+
+def main() -> Void
+  ## Print functions - hover over @println or @print to see docs
+  @println("Hello, world!")
+  @print("No newline")
+
+  ## Type introspection - hover over @type_of to see: (Any) -> String
+  var message = "Tea Language"
+  @println(@type_of(message))
+
+  ## Length function - hover over @len to see: (Any) -> Int
+  var items = [1, 2, 3, 4, 5]
+  @println(@len(items))
+  @println(@len(message))
+
+  ## Math functions - hover to see their signatures
+  var pi = 3.14159
+  @println(@floor(pi))
+  @println(@ceil(pi))
+  @println(@round(pi))
+  @println(@abs(-42.5))
+  @println(@sqrt(16.0))
+
+  ## Min/Max - hover over @max or @min to see: (Float, Float) -> Float
+  @println(@max(3.5, 7.2))
+  @println(@min(3.5, 7.2))
+
+  ## String conversion - hover over @to_string to see: (Any) -> String
+  var count = 42
+  var text = @to_string(count)
+  @println(text)
+end

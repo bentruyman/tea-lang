@@ -198,6 +198,33 @@ VS Code does not ship with a generic “register any LSP binary” workflow, so 
 
 6. Restart VS Code. Open a Tea file and check **View → Output → Tea Language Server** for startup logs. Set the optional `"tea.lspPath"` setting (User or Workspace scope) if VS Code cannot find `tea-lsp` on your `PATH`.
 
+## Features
+
+The Tea LSP provides the following IDE features:
+
+- **Hover documentation** – Hover over any identifier, module member, struct field, or builtin function (like `@println`) to see its type signature and documentation.
+- **Go-to definition** – Jump to where symbols are defined.
+- **Auto-completion** – Get suggestions for identifiers, module members, and builtin functions as you type. Builtins appear with an `@` prefix and include their type signatures.
+- **Diagnostics** – Real-time compiler errors and warnings as you edit.
+
+### Builtin Functions
+
+All builtin functions (those starting with `@`) have comprehensive documentation available in the LSP. Simply hover over any builtin like `@println`, `@len`, `@type_of`, etc. to see:
+
+- The function's parameter types
+- The return type
+- A description of what the function does
+
+For example, hovering over `@println` will show:
+
+```
+builtin `@println` : (Any) -> Void
+
+Write the string representation of a value to stderr with a newline.
+```
+
+You can also see all available builtins by triggering auto-completion and typing `@` – the LSP will suggest all builtin functions with their signatures.
+
 ## Troubleshooting
 
 - **Server binary not found** – confirm `tea-lsp` is in your `PATH` (`which tea-lsp`). Configure `cmd` in Neovim or set `tea.lspPath` in VS Code if the binary lives elsewhere.

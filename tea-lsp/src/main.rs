@@ -1634,6 +1634,47 @@ impl LanguageServer for TeaLanguageServer {
             }
         }
 
+        // Check if hovering over a builtin function
+        if let Some(name) = identifier_at_position(&doc.text, &position) {
+            if let Some(builtin) = tea_compiler::STDLIB_BUILTINS
+                .iter()
+                .find(|builtin| builtin.name == name)
+            {
+                let mut value = format!("builtin `@{}`", builtin.name);
+
+                // Show parameter types
+                if !builtin.params.is_empty() {
+                    value.push_str(" : (");
+                    for (i, param) in builtin.params.iter().enumerate() {
+                        if i > 0 {
+                            value.push_str(", ");
+                        }
+                        value.push_str(format_std_type(param));
+                    }
+                    value.push_str(") -> ");
+                    value.push_str(format_std_type(&builtin.return_type));
+                } else {
+                    value.push_str(" -> ");
+                    value.push_str(format_std_type(&builtin.return_type));
+                }
+
+                if !builtin.docstring.is_empty() {
+                    value.push_str("\n\n");
+                    value.push_str(builtin.docstring);
+                }
+
+                let contents = HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::PlainText,
+                    value,
+                });
+
+                return Ok(Some(Hover {
+                    contents,
+                    range: None,
+                }));
+            }
+        }
+
         Ok(None)
     }
 
@@ -1763,6 +1804,34 @@ impl LanguageServer for TeaLanguageServer {
                     }
                     items.push(item);
                 }
+            }
+        }
+
+        // Add builtin functions to completion
+        for builtin in tea_compiler::STDLIB_BUILTINS {
+            if seen.insert(format!("@{}", builtin.name)) {
+                let detail = if !builtin.params.is_empty() {
+                    let params = builtin
+                        .params
+                        .iter()
+                        .map(|p| format_std_type(p))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("({}) -> {}", params, format_std_type(&builtin.return_type))
+                } else {
+                    format!("-> {}", format_std_type(&builtin.return_type))
+                };
+
+                let mut item =
+                    CompletionItem::new_simple(format!("@{}", builtin.name), "builtin".to_string());
+                item.kind = Some(CompletionItemKind::FUNCTION);
+                item.detail = Some(detail);
+                if !builtin.docstring.is_empty() {
+                    item.documentation = Some(tower_lsp::lsp_types::Documentation::String(
+                        builtin.docstring.to_string(),
+                    ));
+                }
+                items.push(item);
             }
         }
 
@@ -2033,6 +2102,22 @@ fn position_to_offset(text: &str, position: &Position) -> Option<usize> {
     }
 
     None
+}
+
+fn format_std_type(ty: &tea_compiler::StdType) -> &'static str {
+    use tea_compiler::StdType;
+    match ty {
+        StdType::Any => "Any",
+        StdType::Bool => "Bool",
+        StdType::Int => "Int",
+        StdType::Float => "Float",
+        StdType::String => "String",
+        StdType::List => "List",
+        StdType::Dict => "Dict",
+        StdType::Struct => "Struct",
+        StdType::Nil => "Nil",
+        StdType::Void => "Void",
+    }
 }
 
 fn identifier_at_position(text: &str, position: &Position) -> Option<String> {

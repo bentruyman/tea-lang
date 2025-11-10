@@ -9,24 +9,10 @@ const ENV_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
-        "has",
-        StdFunctionKind::EnvHas,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "set",
         StdFunctionKind::EnvSet,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "unset",
-        StdFunctionKind::EnvUnset,
-        StdArity::Exact(1),
-        &[StdType::String],
         StdType::Void,
     ),
     std_function(

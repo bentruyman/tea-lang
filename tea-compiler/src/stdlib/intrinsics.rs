@@ -127,20 +127,6 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
-        "env_unset",
-        StdFunctionKind::EnvUnset,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Void,
-    ),
-    std_function(
-        "env_has",
-        StdFunctionKind::EnvHas,
-        StdArity::Exact(1),
-        &[StdType::String],
-        StdType::Bool,
-    ),
-    std_function(
         "env_vars",
         StdFunctionKind::EnvVars,
         StdArity::Exact(0),

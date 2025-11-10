@@ -5086,11 +5086,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_math_max_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
-            StdFunctionKind::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
             StdFunctionKind::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
-            StdFunctionKind::EnvUnset => {
-                self.compile_env_unset_call(&call.arguments, function, locals)
-            }
             StdFunctionKind::EnvVars => {
                 self.compile_env_vars_call(&call.arguments, function, locals)
             }
@@ -5187,8 +5183,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             // Environment
             Intrinsic::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
             Intrinsic::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
-            Intrinsic::EnvUnset => self.compile_env_unset_call(&call.arguments, function, locals),
-            Intrinsic::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
             Intrinsic::EnvVars => self.compile_env_vars_call(&call.arguments, function, locals),
             Intrinsic::EnvCwd => self.compile_env_cwd_call(&call.arguments, function, locals),
 

@@ -20,14 +20,6 @@ pub def set(name: String, value: String) -> Void
   intrinsics.env_set(name, value)
 end
 
-# Unset an environment variable.
-#
-# Examples:
-#   env.unset("MY_VAR")
-pub def unset(name: String) -> Void
-  intrinsics.env_unset(name)
-end
-
 # Get all environment variables as a dictionary.
 #
 # Examples:

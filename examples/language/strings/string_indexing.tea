@@ -2,28 +2,28 @@
 
 # Basic indexing
 var hello = "hello"
-@print(hello[0])  # Expect: h
-@print(hello[1])  # Expect: e
-@print(hello[4])  # Expect: o
+@println(hello[0])  # Expect: h
+@println(hello[1])  # Expect: e
+@println(hello[4])  # Expect: o
 
 # Indexing with spaces and punctuation
 var phrase = "Hello, World!"
-@print(phrase[0])  # Expect: H
-@print(phrase[5])  # Expect: ,
-@print(phrase[6])  # Expect:
-@print(phrase[7])  # Expect: W
+@println(phrase[0])  # Expect: H
+@println(phrase[5])  # Expect: ,
+@println(phrase[6])  # Expect:
+@println(phrase[7])  # Expect: W
 
 # Unicode characters (emojis)
 var emojis = "🎉🎊🎈"
-@print(emojis[0])  # Expect: 🎉
-@print(emojis[1])  # Expect: 🎊
-@print(emojis[2])  # Expect: 🎈
+@println(emojis[0])  # Expect: 🎉
+@println(emojis[1])  # Expect: 🎊
+@println(emojis[2])  # Expect: 🎈
 
 # Using in expressions
 var first = "Tea"[0]
 var second = "Tea"[1]
 var third = "Tea"[2]
-@print(first + second + third)  # Expect: Tea
+@println(first + second + third)  # Expect: Tea
 
 # Empty string edge case would panic, so we don't test it
 # Negative index would panic, so we don't test it

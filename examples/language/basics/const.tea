@@ -3,22 +3,22 @@
 # 120
 
 const ANSWER = 42
-@print(ANSWER)
+@println(ANSWER)
 
 def scale(value: Int) -> Int
   const multiplier = 3
   value * multiplier
 end
 
-@print(scale(40))
+@println(scale(40))
 
 # Attempting to reassign a const like this would raise an error:
 # ANSWER = 0
 
-@print("Start")
+@println("Start")
 
 def func() -> Void
-  @print("BODY")
+  @println("BODY")
 end
 
-@print("End")
+@println("End")

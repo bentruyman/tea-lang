@@ -1,15 +1,15 @@
 const language = "tea-lang"
-@print(language)
+@println(language)
 
 var greeting = "Hello from tea-lang"
 var count = 2
 
 if count == 2
-  @print(greeting)
+  @println(greeting)
 end
 
 var total = 1 + 2 + 3
-@print(total)
+@println(total)
 
 def add(a: Int, b: Int) -> Int
   return a + b
@@ -17,7 +17,7 @@ end
 
 var x: Int? = nil
 x = 1
-@print(add(x ?? 1, 2))
+@println(add(x ?? 1, 2))
 
 var maybe_name: String? = nil
 
@@ -25,4 +25,4 @@ if maybe_name == nil
   maybe_name = "tea"
 end
 
-@print(maybe_name!)
+@println(maybe_name!)

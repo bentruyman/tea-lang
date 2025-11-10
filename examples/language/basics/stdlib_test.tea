@@ -6,16 +6,16 @@ use fs = "std.fs"
 use path = "std.path"
 
 pub def test_env() -> Void
-  @print("=== Testing std.env ===")
+  @println("=== Testing std.env ===")
 
   # Test cwd
-  @print(env.cwd())
+  @println(env.cwd())
 
   # Test get - PATH should exist on all systems
   var path_var = env.get("PATH")
 
   if @len(path_var) > 0
-    @print("✓ env.get works - PATH exists")
+    @println("✓ env.get works - PATH exists")
   end
 
   # Test set/get
@@ -23,44 +23,44 @@ pub def test_env() -> Void
   var value = env.get("TEA_TEST_VAR")
 
   if value == "test_value"
-    @print("✓ env.set works")
+    @println("✓ env.set works")
   end
 
   # Test vars - just verify it doesn't crash
   env.vars()
-  @print("✓ env.vars works")
+  @println("✓ env.vars works")
 end
 
 pub def test_path() -> Void
-  @print("=== Testing std.path ===")
+  @println("=== Testing std.path ===")
 
   # Test join
   var joined = path.join(["usr", "local", "bin"])
-  @print(joined)
+  @println(joined)
 
   # Test basename and dirname
   var file_path = "/usr/local/bin/tea"
-  @print(path.basename(file_path))
-  @print(path.dirname(file_path))
+  @println(path.basename(file_path))
+  @println(path.dirname(file_path))
 
   # Test extension
-  @print(path.extension("script.tea"))
+  @println(path.extension("script.tea"))
 
   # Test split
   var parts = path.split("/usr/local/bin")
 
   if @len(parts) == 3
-    @print("✓ path.split works")
+    @println("✓ path.split works")
   end
 end
 
 pub def test_fs() -> Void
-  @print("=== Testing std.fs ===")
+  @println("=== Testing std.fs ===")
 
   # Test create_dir
   var test_dir = "/tmp/tea_test_dir"
   fs.create_dir(test_dir)
-  @print("✓ fs.create_dir works")
+  @println("✓ fs.create_dir works")
 
   # Test write_file and read_file
   var test_file = "/tmp/tea_test_dir/test_file.txt"
@@ -68,20 +68,20 @@ pub def test_fs() -> Void
   var content = fs.read_file(test_file)
 
   if content == "Hello from Tea!"
-    @print("✓ fs.write_file and fs.read_file work")
+    @println("✓ fs.write_file and fs.read_file work")
   end
 
   # Test read_dir
   var entries = fs.read_dir("/tmp/tea_test_dir")
 
   if @len(entries) >= 1
-    @print("✓ fs.read_dir works")
+    @println("✓ fs.read_dir works")
   end
 
   # Clean up
   fs.remove(test_file)
   fs.remove(test_dir)
-  @print("✓ fs.remove works")
+  @println("✓ fs.remove works")
 end
 
 # Run all tests
@@ -89,4 +89,4 @@ test_env()
 test_path()
 test_fs()
 
-@print("=== All Stdlib Tests Complete ===")
+@println("=== All Stdlib Tests Complete ===")

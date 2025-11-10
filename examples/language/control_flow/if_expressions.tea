@@ -8,16 +8,16 @@
 var count = 2
 
 if count == 2
-  @print("count is 2")
+  @println("count is 2")
 end
 
 # If-else statement
 var score = 85
 
 if score >= 90
-  @print("Grade: A")
+  @println("Grade: A")
 else
-  @print("Grade: B")
+  @println("Grade: B")
 end
 
 # If-statement with side effects
@@ -27,7 +27,7 @@ if maybe_name == nil
   maybe_name = "tea"
 end
 
-@print(maybe_name!) # Expect: tea
+@println(maybe_name!) # Expect: tea
 
 # ============================================
 # if-expressions: Ternary-like conditionals
@@ -36,24 +36,24 @@ end
 # Basic if-expression (returns a value)
 const a = true
 const x = if(a) 1 else 2
-@print(x) # Expect: 1
+@println(x) # Expect: 1
 
 const b = false
 const y = if(b) 10 else 20
-@print(y) # Expect: 20
+@println(y) # Expect: 20
 
 # If-expression in compound assignment
 var z = 0
 z += if(a) 1 else 2
-@print(z) # Expect: 1
+@println(z) # Expect: 1
 
 # Nested if-expressions
 const nested = if(true) if(false) 1 else 2 else 3 # TODO: consider not allowing this
-@print(nested) # Expect: 2
+@println(nested) # Expect: 2
 
 # If-expression with string values
 const greeting = if(a) "hello" else "goodbye"
-@print(greeting) # Expect: hello
+@println(greeting) # Expect: hello
 
 # If-expression with function calls
 def double(n: Int) -> Int
@@ -61,4 +61,4 @@ def double(n: Int) -> Int
 end
 
 const result = if(true) double(5) else double(10)
-@print(result) # Expect: 10
+@println(result) # Expect: 10

@@ -4,56 +4,56 @@
 use intrinsics = "std.intrinsics"
 
 pub def test_conversions() -> Void
-  @print("=== Conversions ===")
+  @println("=== Conversions ===")
 
   var num = 12345
   var str = intrinsics.to_string(num)
-  @print(str)
+  @println(str)
 end
 
 pub def test_environment() -> Void
-  @print("=== Environment ===")
+  @println("=== Environment ===")
 
   var cwd = intrinsics.env_cwd()
-  @print(cwd)
+  @println(cwd)
 
   # Test getting PATH variable - if it exists, it will have content
   var path = intrinsics.env_get("PATH")
 
   if @len(path) > 0
-    @print("✓ PATH variable exists")
+    @println("✓ PATH variable exists")
   end
 end
 
 pub def test_path_operations() -> Void
-  @print("=== Path Operations ===")
+  @println("=== Path Operations ===")
 
   var parts = ["usr", "local", "bin"]
   var joined = intrinsics.path_join(parts)
-  @print(joined)
+  @println(joined)
 
   var basename = intrinsics.path_basename("/usr/local/bin/tea")
-  @print(basename)
+  @println(basename)
 
   var dirname = intrinsics.path_dirname("/usr/local/bin/tea")
-  @print(dirname)
+  @println(dirname)
 
   var ext = intrinsics.path_extension("script.tea")
-  @print(ext)
+  @println(ext)
 
   # Note: path_separator() was removed in stdlib refactoring
-  @print("✓ Path operations work")
+  @println("✓ Path operations work")
 end
 
 pub def test_filesystem() -> Void
-  @print("=== Filesystem ===")
+  @println("=== Filesystem ===")
 
   # Test reading current directory (if it works, directory exists)
   var cwd = intrinsics.env_cwd()
   var entries = intrinsics.fs_list_dir(cwd)
 
   if @len(entries) >= 0
-    @print("✓ Can read current directory")
+    @println("✓ Can read current directory")
   end
 end
 
@@ -63,4 +63,4 @@ test_environment()
 test_path_operations()
 test_filesystem()
 
-@print("=== All Tests Complete ===")
+@println("=== All Tests Complete ===")

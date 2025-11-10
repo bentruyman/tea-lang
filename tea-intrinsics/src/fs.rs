@@ -76,3 +76,32 @@ pub fn walk(path: &str) -> Result<Vec<String>> {
     entries.sort();
     Ok(entries)
 }
+
+/// Renames or moves a file or directory
+pub fn rename(source: &str, target: &str) -> Result<()> {
+    fs::rename(source, target).map_err(|error| {
+        anyhow::anyhow!("rename failed from '{}' to '{}': {}", source, target, error)
+    })
+}
+
+/// File metadata information
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    pub is_file: bool,
+    pub is_dir: bool,
+    pub size: u64,
+    pub readonly: bool,
+}
+
+/// Gets metadata information about a file or directory
+pub fn stat(path: &str) -> Result<FileInfo> {
+    let metadata =
+        fs::metadata(path).map_err(|error| anyhow::anyhow!(fs_error("stat", path, &error)))?;
+
+    Ok(FileInfo {
+        is_file: metadata.is_file(),
+        is_dir: metadata.is_dir(),
+        size: metadata.len(),
+        readonly: metadata.permissions().readonly(),
+    })
+}

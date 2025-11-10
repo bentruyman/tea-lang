@@ -18,3 +18,13 @@ pub fn contains(haystack: &str, needle: &str) -> bool {
 pub fn replace(text: &str, search: &str, replacement: &str) -> String {
     text.replace(search, replacement)
 }
+
+/// Converts a string to lowercase
+pub fn to_lower(text: &str) -> String {
+    text.to_lowercase()
+}
+
+/// Converts a string to uppercase
+pub fn to_upper(text: &str) -> String {
+    text.to_uppercase()
+}

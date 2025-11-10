@@ -5034,6 +5034,33 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::StringReplace => {
                 self.compile_string_replace_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::StringToLower => {
+                self.compile_string_to_lower_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::StringToUpper => {
+                self.compile_string_to_upper_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathFloor => {
+                self.compile_math_floor_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathCeil => {
+                self.compile_math_ceil_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathRound => {
+                self.compile_math_round_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathAbs => {
+                self.compile_math_abs_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathSqrt => {
+                self.compile_math_sqrt_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathMin => {
+                self.compile_math_min_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::MathMax => {
+                self.compile_math_max_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
             StdFunctionKind::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
             StdFunctionKind::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
@@ -5091,6 +5118,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
+            StdFunctionKind::FsRename => {
+                self.compile_fs_rename_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsStat => self.compile_fs_stat_call(&call.arguments, function, locals),
         }
     }
 
@@ -5468,6 +5499,87 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         _locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
         bail!("string_replace is not supported by the LLVM backend yet")
+    }
+
+    fn compile_string_to_lower_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_to_lower is not supported by the LLVM backend yet")
+    }
+
+    fn compile_string_to_upper_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("string_to_upper is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_floor_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_floor is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_ceil_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_ceil is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_round_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_round is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_abs_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_abs is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_sqrt_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_sqrt is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_min_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_min is not supported by the LLVM backend yet")
+    }
+
+    fn compile_math_max_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("math_max is not supported by the LLVM backend yet")
     }
 
     fn compile_env_get_call(
@@ -6957,6 +7069,24 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             pointer,
             element_type: Box::new(ValueType::String),
         })
+    }
+
+    fn compile_fs_rename_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("fs_rename is not supported by the LLVM backend yet")
+    }
+
+    fn compile_fs_stat_call(
+        &mut self,
+        _arguments: &[crate::ast::CallArgument],
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        bail!("fs_stat is not supported by the LLVM backend yet")
     }
 
     fn compile_fs_glob_call(

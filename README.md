@@ -22,6 +22,31 @@ end
 - **Native compilation** – compiles to fast, standalone native binaries
 - **Rich standard library** – filesystem, processes, JSON/YAML, and CLI helpers built-in
 
+## Everyday Tea
+
+Most Tea scripts compose stdlib helpers to automate builds, tooling, and ops without sacrificing native performance.
+
+```tea
+use env = "std.env"
+use fs = "std.fs"
+use path = "std.path"
+use string = "std.string"
+
+var root = env.cwd()
+var entries = fs.read_dir(root)
+
+print("Tea files in ${root}:")
+
+for entry of entries
+  if string.ends_with(entry, ".tea")
+    var absolute = path.join([root, entry])
+    print("• ${absolute}")
+  end
+end
+```
+
+Modules like `std.assert`, `std.math`, and the debug built-ins (`@println`, `@type_of`, `@len`) cover quick checks and diagnostics—see [`docs/new-stdlib.md`](docs/new-stdlib.md) for the current catalog.
+
 ## Quick Start
 
 ### Installation
@@ -92,7 +117,7 @@ Explore more in the [`examples/`](examples/) directory:
 
 - **[Getting Started Guide](docs/)** – comprehensive language reference
 - **[Language Semantics](docs/reference/language/semantics.md)** – types, scoping, modules
-- **[Standard Library](docs/roadmap/cli-stdlib.md)** – available modules and roadmap
+- **[Standard Library](docs/new-stdlib.md)** – built-ins and modules for everyday scripting
 - **[Compiler Architecture](docs/explanation/aot-backend.md)** – LLVM compilation details
 - **[LSP Setup](docs/how-to/lsp-setup.md)** – editor integration
 

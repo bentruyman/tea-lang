@@ -27,6 +27,15 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::StringReplace => {
             "Replace all occurrences of a substring with another string."
         }
+        StdFunctionKind::StringToLower => "Convert a string to lowercase.",
+        StdFunctionKind::StringToUpper => "Convert a string to uppercase.",
+        StdFunctionKind::MathFloor => "Round a float down to the nearest integer.",
+        StdFunctionKind::MathCeil => "Round a float up to the nearest integer.",
+        StdFunctionKind::MathRound => "Round a float to the nearest integer.",
+        StdFunctionKind::MathAbs => "Return the absolute value of a float.",
+        StdFunctionKind::MathSqrt => "Return the square root of a float.",
+        StdFunctionKind::MathMin => "Return the minimum of two floats.",
+        StdFunctionKind::MathMax => "Return the maximum of two floats.",
         StdFunctionKind::EnvGet => "Lookup an environment variable (returns Nil if unset).",
         StdFunctionKind::EnvHas => "Return true if an environment variable is set.",
         StdFunctionKind::EnvSet => "Set an environment variable for child processes.",
@@ -41,6 +50,8 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::FsExists => "Return true if a path exists.",
         StdFunctionKind::FsListDir => "List entries in a directory.",
         StdFunctionKind::FsWalk => "Walk a directory tree depth-first.",
+        StdFunctionKind::FsRename => "Rename or move a file or directory.",
+        StdFunctionKind::FsStat => "Get metadata information about a file or directory.",
         StdFunctionKind::PathJoin => "Join multiple path segments.",
         StdFunctionKind::PathComponents => "Split a path into components.",
         StdFunctionKind::PathDirname => "Return the directory portion of a path.",

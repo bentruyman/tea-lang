@@ -39,6 +39,70 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::String, StdType::String, StdType::String],
         StdType::String,
     ),
+    std_function(
+        "string_to_lower",
+        StdFunctionKind::StringToLower,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "string_to_upper",
+        StdFunctionKind::StringToUpper,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    // Math
+    std_function(
+        "math_floor",
+        StdFunctionKind::MathFloor,
+        StdArity::Exact(1),
+        &[StdType::Float],
+        StdType::Int,
+    ),
+    std_function(
+        "math_ceil",
+        StdFunctionKind::MathCeil,
+        StdArity::Exact(1),
+        &[StdType::Float],
+        StdType::Int,
+    ),
+    std_function(
+        "math_round",
+        StdFunctionKind::MathRound,
+        StdArity::Exact(1),
+        &[StdType::Float],
+        StdType::Int,
+    ),
+    std_function(
+        "math_abs",
+        StdFunctionKind::MathAbs,
+        StdArity::Exact(1),
+        &[StdType::Float],
+        StdType::Float,
+    ),
+    std_function(
+        "math_sqrt",
+        StdFunctionKind::MathSqrt,
+        StdArity::Exact(1),
+        &[StdType::Float],
+        StdType::Float,
+    ),
+    std_function(
+        "math_min",
+        StdFunctionKind::MathMin,
+        StdArity::Exact(2),
+        &[StdType::Float, StdType::Float],
+        StdType::Float,
+    ),
+    std_function(
+        "math_max",
+        StdFunctionKind::MathMax,
+        StdArity::Exact(2),
+        &[StdType::Float, StdType::Float],
+        StdType::Float,
+    ),
     // Assertions
     std_function(
         "fail",
@@ -139,6 +203,20 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
+    ),
+    std_function(
+        "fs_rename",
+        StdFunctionKind::FsRename,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_stat",
+        StdFunctionKind::FsStat,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Struct,
     ),
     // Path
     std_function(

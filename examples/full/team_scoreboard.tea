@@ -74,6 +74,7 @@ def find_team(name: String) -> Team ! TeamError.NotFound
   throw TeamError.NotFound(name)
 end
 
+## Announce the favorite team
 def announce_favorite(name: String) -> String
   var team = find_team(name) catch err
   case is TeamError.NotFound

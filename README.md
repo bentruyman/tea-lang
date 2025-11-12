@@ -1,5 +1,8 @@
 # Tea Language
 
+[![CI](https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml/badge.svg)](https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A strongly typed scripting language with Ruby-inspired syntax that compiles to native code.
 
 ```tea
@@ -51,11 +54,53 @@ Modules like `std.assert`, `std.fs`, `std.path`, and the debug built-ins (`@prin
 
 ### Installation
 
+#### Automated Installation (Recommended)
+
+For macOS and Linux, use the install script:
+
+```bash
+curl -fsSL https://tea-lang.dev/install.sh | bash
+```
+
+Or clone and run locally:
+
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
-make setup  # Installs dependencies and generates code
+./install.sh
 ```
+
+#### Prerequisites
+
+Before installing, ensure you have:
+
+- **Rust** (1.70+) – Install from [rustup.rs](https://rustup.rs)
+- **Bun** – Install from [bun.sh](https://bun.sh)
+- **Make** – Usually pre-installed on macOS/Linux
+- **LLVM** (optional but recommended) – For AOT compilation
+  - macOS: `brew install llvm`
+  - Ubuntu/Debian: `apt-get install llvm-dev`
+  - RHEL/CentOS: `yum install llvm-devel`
+
+#### Manual Installation
+
+If you prefer to build manually:
+
+```bash
+git clone https://github.com/bentruyman/tea-lang
+cd tea-lang
+make setup              # Install dependencies and generate code
+cargo build --release   # Build the compiler
+make install            # Install to ~/.cargo/bin
+```
+
+Ensure `~/.cargo/bin` is in your PATH:
+
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
 
 ### Your First Program
 
@@ -76,6 +121,12 @@ print("Sum: ${sum}")
 ```
 
 Run it:
+
+```bash
+tea hello.tea
+```
+
+Or during development (without installing):
 
 ```bash
 cargo run -p tea-cli -- hello.tea
@@ -100,9 +151,11 @@ add(5, true)  # Error: expected Int, found Bool
 Build a standalone binary:
 
 ```bash
-cargo run -p tea-cli -- build hello.tea
+tea build hello.tea
 ./bin/hello
 ```
+
+The binary is fully standalone and can be distributed without any runtime dependencies.
 
 ## Examples
 
@@ -120,6 +173,34 @@ Explore more in the [`examples/`](examples/) directory:
 - **[Standard Library](docs/stdlib-reference.md)** – built-ins and modules for everyday scripting
 - **[Compiler Architecture](docs/explanation/aot-backend.md)** – LLVM compilation details
 - **[LSP Setup](docs/how-to/lsp-setup.md)** – editor integration
+
+## Troubleshooting
+
+### Common Installation Issues
+
+**`tea: command not found`**
+
+- Ensure `~/.cargo/bin` is in your PATH
+- Run `export PATH="$HOME/.cargo/bin:$PATH"`
+- Add the export to your shell profile for persistence
+
+**`LLVM not found` errors during compilation**
+
+- LLVM is required for AOT compilation features
+- Install LLVM: `brew install llvm` (macOS) or `apt-get install llvm-dev` (Ubuntu)
+- Alternatively, run Tea scripts without building: `tea script.tea`
+
+**Build fails with "failed to compile tea-runtime"**
+
+- Ensure you have the latest Rust: `rustup update`
+- Clean and rebuild: `cargo clean && cargo build --release`
+
+**`bun: command not found` during setup**
+
+- Install Bun: `curl -fsSL https://bun.sh/install | bash`
+- Restart your shell or source your profile
+
+For more help, open an issue at [github.com/bentruyman/tea-lang/issues](https://github.com/bentruyman/tea-lang/issues).
 
 ## Development
 
@@ -142,7 +223,10 @@ make test     # Run test suite
 
 ### Contributing
 
-See [AGENTS.md](AGENTS.md) for repository guidelines, coding style, and development workflow.
+Contributions are welcome! Please see:
+
+- [Contributing Guide](docs/project/CONTRIBUTING.md) - How to contribute
+- [Development Guidelines](AGENTS.md) - Coding style and workflow
 
 ## License
 

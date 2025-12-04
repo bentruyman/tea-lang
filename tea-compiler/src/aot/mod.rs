@@ -925,8 +925,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             false,
         );
 
+        // TeaValue = { tag: i32, _padding: i32, payload: i64 }
+        // Explicit padding to ensure consistent C ABI layout (16 bytes total)
         let value_payload = context.i64_type();
-        tea_value.set_body(&[context.i32_type().into(), value_payload.into()], false);
+        tea_value.set_body(
+            &[
+                context.i32_type().into(), // tag
+                context.i32_type().into(), // explicit padding for alignment
+                value_payload.into(),      // payload (i64)
+            ],
+            false,
+        );
 
         // Small list optimization: 136-byte struct
         // tag (i8): 0=heap, 1=inline
@@ -3654,13 +3663,37 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     element_type,
                 } => {
                     let index_value = key_expr.into_int()?;
-                    let list_get = self.ensure_list_get();
-                    let tea_value = self
-                        .call_function(list_get, &[pointer.into(), index_value.into()], "list_get")?
-                        .try_as_basic_value()
-                        .left()
-                        .ok_or_else(|| anyhow!("expected TeaValue"))?
-                        .into_struct_value();
+                    // Inline list access for small lists
+                    // TeaList: { tag: i8, len: i8, padding: [6 x i8], data: [8 x TeaValue] }
+                    let list_type = self
+                        .context
+                        .get_struct_type("TeaList")
+                        .ok_or_else(|| anyhow!("TeaList type not found"))?;
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    // Get pointer to data array (field 3)
+                    let data_ptr = map_builder_error(
+                        self.builder
+                            .build_struct_gep(list_type, pointer, 3, "data_ptr"),
+                    )?;
+                    // Index into the data array
+                    let elem_ptr = unsafe {
+                        map_builder_error(self.builder.build_in_bounds_gep(
+                            tea_value_type.array_type(8),
+                            data_ptr,
+                            &[self.context.i64_type().const_zero(), index_value],
+                            "elem_ptr",
+                        ))?
+                    };
+                    // Load the TeaValue
+                    let tea_value = map_builder_error(self.builder.build_load(
+                        tea_value_type,
+                        elem_ptr,
+                        "list_elem",
+                    ))?
+                    .into_struct_value();
                     self.tea_value_to_expr(tea_value, *element_type)
                 }
                 ExprValue::Dict {
@@ -3737,21 +3770,65 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .get(index)
                     .cloned()
                     .ok_or_else(|| anyhow!("missing field type metadata"))?;
-                let get_fn = self.ensure_struct_get();
-                let tea_value = self
-                    .call_function(
-                        get_fn,
-                        &[
-                            pointer.into(),
-                            self.int_type().const_int(index as u64, false).into(),
-                        ],
-                        "struct_get",
-                    )?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue from struct_get"))?
-                    .into_struct_value();
-                self.tea_value_to_expr(tea_value, field_type)
+
+                // Inline struct field access to avoid ABI issues with TeaValue return
+                // TeaStructInstance: { template: ptr, fields: ptr }
+                // Load the fields pointer (field 1), then index into it
+                let struct_instance_type = self
+                    .context
+                    .get_struct_type("TeaStructInstance")
+                    .ok_or_else(|| anyhow!("TeaStructInstance type not found"))?;
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
+                // Get pointer to fields field (index 1)
+                let fields_ptr_ptr = unsafe {
+                    map_builder_error(self.builder.build_struct_gep(
+                        struct_instance_type,
+                        pointer,
+                        1,
+                        "fields_ptr_ptr",
+                    ))?
+                };
+
+                // Load the fields pointer
+                let fields_ptr = map_builder_error(self.builder.build_load(
+                    self.ptr_type,
+                    fields_ptr_ptr,
+                    "fields_ptr",
+                ))?
+                .into_pointer_value();
+
+                // Index into the fields array to get pointer to TeaValue
+                let field_ptr = unsafe {
+                    map_builder_error(self.builder.build_in_bounds_gep(
+                        tea_value_type,
+                        fields_ptr,
+                        &[self.context.i64_type().const_int(index as u64, false)],
+                        "field_ptr",
+                    ))?
+                };
+
+                // Get pointer to payload field within TeaValue (field 2 is payload)
+                // TeaValue: { tag: i32 (field 0), padding: i32 (field 1), payload: i64 (field 2) }
+                let payload_ptr = unsafe {
+                    map_builder_error(self.builder.build_struct_gep(
+                        tea_value_type,
+                        field_ptr,
+                        2,
+                        "field_payload_ptr",
+                    ))?
+                };
+                let payload = map_builder_error(self.builder.build_load(
+                    self.context.i64_type(),
+                    payload_ptr,
+                    "field_payload",
+                ))?
+                .into_int_value();
+
+                self.payload_to_expr(payload, field_type)
             }
             ExprValue::Dict {
                 pointer,
@@ -3805,20 +3882,30 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .get(index)
                     .cloned()
                     .ok_or_else(|| anyhow!("missing field type metadata for error field"))?;
+                // Use output pointer to avoid ARM64 ABI issues with TeaValue return
                 let get_fn = self.ensure_error_get();
-                let tea_value = self
-                    .call_function(
-                        get_fn,
-                        &[
-                            pointer.into(),
-                            self.int_type().const_int(index as u64, false).into(),
-                        ],
-                        "error_get_field",
-                    )?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue from error_get_field"))?
-                    .into_struct_value();
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                let out_alloca = map_builder_error(
+                    self.builder.build_alloca(tea_value_type, "error_field_out"),
+                )?;
+                self.call_function(
+                    get_fn,
+                    &[
+                        pointer.into(),
+                        self.int_type().const_int(index as u64, false).into(),
+                        out_alloca.into(),
+                    ],
+                    "error_get_field",
+                )?;
+                let tea_value = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    out_alloca,
+                    "error_field_value",
+                ))?
+                .into_struct_value();
                 self.tea_value_to_expr(tea_value, field_type)
             }
             _ => bail!("member access expects a struct value"),
@@ -5484,13 +5571,27 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let left_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
         let right_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-        let left_value = self.expr_to_tea_value(left_expr)?;
-        let right_value = self.expr_to_tea_value(right_expr)?;
+        let left_value = self.expr_to_tea_value(left_expr)?.into_struct_value();
+        let right_value = self.expr_to_tea_value(right_expr)?.into_struct_value();
+
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
+        // Pass by pointer for ARM64 ABI compatibility
+        let left_alloca =
+            map_builder_error(self.builder.build_alloca(tea_value_type, "assert_eq_left"))?;
+        map_builder_error(self.builder.build_store(left_alloca, left_value))?;
+
+        let right_alloca =
+            map_builder_error(self.builder.build_alloca(tea_value_type, "assert_eq_right"))?;
+        map_builder_error(self.builder.build_store(right_alloca, right_value))?;
 
         let func = self.ensure_assert_eq_fn();
         self.call_function(
             func,
-            &[left_value.into(), right_value.into()],
+            &[left_alloca.into(), right_alloca.into()],
             "tea_assert_eq",
         )?;
         Ok(ExprValue::Void)
@@ -5513,13 +5614,27 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let left_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
         let right_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-        let left_value = self.expr_to_tea_value(left_expr)?;
-        let right_value = self.expr_to_tea_value(right_expr)?;
+        let left_value = self.expr_to_tea_value(left_expr)?.into_struct_value();
+        let right_value = self.expr_to_tea_value(right_expr)?.into_struct_value();
+
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
+        // Pass by pointer for ARM64 ABI compatibility
+        let left_alloca =
+            map_builder_error(self.builder.build_alloca(tea_value_type, "assert_ne_left"))?;
+        map_builder_error(self.builder.build_store(left_alloca, left_value))?;
+
+        let right_alloca =
+            map_builder_error(self.builder.build_alloca(tea_value_type, "assert_ne_right"))?;
+        map_builder_error(self.builder.build_store(right_alloca, right_value))?;
 
         let func = self.ensure_assert_ne_fn();
         self.call_function(
             func,
-            &[left_value.into(), right_value.into()],
+            &[left_alloca.into(), right_alloca.into()],
             "tea_assert_ne",
         )?;
         Ok(ExprValue::Void)
@@ -5564,19 +5679,53 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         // Fast path: inline length access for strings and lists
         match &value_expr {
-            ExprValue::String(ptr) | ExprValue::List { pointer: ptr, .. } => {
-                // TeaString and TeaList both have 'len' as first field (i64)
-                // struct TeaString { len: i64, data: *const c_char }
-                // struct TeaList { len: i64, capacity: i64, items: *mut TeaValue }
+            ExprValue::String(ptr) => {
+                // TeaString: { tag: i8, len: i8, data: [22 x i8] }
+                // Length is in field 1 as i8
+                let string_type = self
+                    .context
+                    .get_struct_type("TeaString")
+                    .ok_or_else(|| anyhow!("TeaString type not found"))?;
                 let len_ptr = map_builder_error(self.builder.build_struct_gep(
-                    self.value_type(),
+                    string_type,
                     *ptr,
-                    0,
+                    1,
                     "len_ptr",
                 ))?;
-                let length =
-                    map_builder_error(self.builder.build_load(self.int_type(), len_ptr, "len"))?
-                        .into_int_value();
+                let len_i8 = map_builder_error(self.builder.build_load(
+                    self.context.i8_type(),
+                    len_ptr,
+                    "len_i8",
+                ))?
+                .into_int_value();
+                let length = map_builder_error(self.builder.build_int_z_extend(
+                    len_i8,
+                    self.int_type(),
+                    "len",
+                ))?;
+                return Ok(ExprValue::Int(length));
+            }
+            ExprValue::List { pointer: ptr, .. } => {
+                // TeaList: { tag: i8, len: i8, padding: [6 x i8], data: [8 x TeaValue] }
+                // Length is in field 1 as i8
+                let list_type = self
+                    .context
+                    .get_struct_type("TeaList")
+                    .ok_or_else(|| anyhow!("TeaList type not found"))?;
+                let len_ptr = map_builder_error(
+                    self.builder.build_struct_gep(list_type, *ptr, 1, "len_ptr"),
+                )?;
+                let len_i8 = map_builder_error(self.builder.build_load(
+                    self.context.i8_type(),
+                    len_ptr,
+                    "len_i8",
+                ))?
+                .into_int_value();
+                let length = map_builder_error(self.builder.build_int_z_extend(
+                    len_i8,
+                    self.int_type(),
+                    "len",
+                ))?;
                 return Ok(ExprValue::Int(length));
             }
             _ => {
@@ -5607,10 +5756,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             bail!("named arguments are not supported for to_string");
         }
         let value_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let tea_value = self.expr_to_tea_value(value_expr)?;
+        let tea_value = self.expr_to_tea_value(value_expr)?.into_struct_value();
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+        // Pass by pointer for ARM64 ABI compatibility
+        let alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "tea_value_tmp"))?;
+        map_builder_error(self.builder.build_store(alloca, tea_value))?;
         let func = self.ensure_util_to_string_fn();
         let pointer = self
-            .call_function(func, &[tea_value.into()], "tea_util_to_string")?
+            .call_function(func, &[alloca.into()], "tea_util_to_string")?
             .try_as_basic_value()
             .left()
             .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
@@ -7804,13 +7960,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             error
                         )
                     })?;
-                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(converted)?);
+                // Pass TeaValue by pointer to avoid ARM64 ABI issues
+                let tea_value = self.expr_to_tea_value(converted)?.into_struct_value();
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                let tea_value_alloca = map_builder_error(
+                    self.builder
+                        .build_alloca(tea_value_type, "struct_field_value"),
+                )?;
+                map_builder_error(self.builder.build_store(tea_value_alloca, tea_value))?;
                 self.call_function(
                     set_fn,
                     &[
                         struct_ptr.into(),
                         self.int_type().const_int(index as u64, false).into(),
-                        tea_value,
+                        tea_value_alloca.into(),
                     ],
                     "struct_set",
                 )?;
@@ -7848,13 +8014,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             error
                         )
                     })?;
-                let tea_value = BasicMetadataValueEnum::from(self.expr_to_tea_value(converted)?);
+                // Pass TeaValue by pointer to avoid ARM64 ABI issues
+                let tea_value = self.expr_to_tea_value(converted)?.into_struct_value();
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                let tea_value_alloca = map_builder_error(
+                    self.builder
+                        .build_alloca(tea_value_type, "struct_field_value"),
+                )?;
+                map_builder_error(self.builder.build_store(tea_value_alloca, tea_value))?;
                 self.call_function(
                     set_fn,
                     &[
                         struct_ptr.into(),
                         self.int_type().const_int(index as u64, false).into(),
-                        tea_value,
+                        tea_value_alloca.into(),
                     ],
                     "struct_set",
                 )?;
@@ -7957,13 +8133,23 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         error
                     )
                 })?;
-            let tea_value = self.expr_to_tea_value(converted)?;
+            // Pass TeaValue by pointer to avoid ARM64 ABI issues
+            let tea_value = self.expr_to_tea_value(converted)?.into_struct_value();
+            let tea_value_type = self
+                .context
+                .get_struct_type("TeaValue")
+                .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+            let tea_value_alloca = map_builder_error(
+                self.builder
+                    .build_alloca(tea_value_type, "error_field_value"),
+            )?;
+            map_builder_error(self.builder.build_store(tea_value_alloca, tea_value))?;
             self.call_function(
                 set_fn,
                 &[
                     error_ptr.into(),
                     self.int_type().const_int(index as u64, false).into(),
-                    tea_value.into(),
+                    tea_value_alloca.into(),
                 ],
                 "error_set",
             )?;
@@ -8026,9 +8212,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     self.call_function(func, &[pointer.into()], "print_closure")?;
                 }
                 ExprValue::Optional { value, .. } => {
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    // Pass by pointer for ARM64 ABI compatibility
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "opt_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
                     let to_string = self.ensure_util_to_string_fn();
                     let string_ptr = self
-                        .call_function(to_string, &[value.into()], "optional_to_string")?
+                        .call_function(to_string, &[alloca.into()], "optional_to_string")?
                         .try_as_basic_value()
                         .left()
                         .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
@@ -8101,9 +8296,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     self.call_function(func, &[pointer.into()], "println_closure")?;
                 }
                 ExprValue::Optional { value, .. } => {
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    // Pass by pointer for ARM64 ABI compatibility
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "opt_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
                     let to_string = self.ensure_util_to_string_fn();
                     let string_ptr = self
-                        .call_function(to_string, &[value.into()], "optional_to_string")?
+                        .call_function(to_string, &[alloca.into()], "optional_to_string")?
                         .try_as_basic_value()
                         .left()
                         .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
@@ -8756,87 +8960,330 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     }
 
     fn expr_to_tea_value(&mut self, value: ExprValue<'ctx>) -> Result<BasicValueEnum<'ctx>> {
+        // Inline construction of TeaValue to avoid ABI issues with struct returns.
+        // TeaValue is { tag: i32, padding: i32, payload: i64 } - 16 bytes total
+        // Explicit padding ensures consistent layout with Rust #[repr(C)] struct
+        // Tags: Int=0, Float=1, Bool=2, String=3, List=4, Dict=5, Struct=6, Error=7, Closure=8, Nil=9
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
         match value {
             ExprValue::Int(v) => {
-                let func = self.ensure_value_from_int();
-                let call = self.call_function(func, &[v.into()], "val_int")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 0 (Int), payload = int value directly
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                // Build struct by allocating on stack and storing to fields individually
+                // This avoids insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_int"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(0, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
+                map_builder_error(self.builder.build_store(payload_ptr, v))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_int_loaded",
+                ))?;
+                Ok(loaded)
             }
             ExprValue::Float(v) => {
-                let func = self.ensure_value_from_float();
-                let call = self.call_function(func, &[v.into()], "val_float")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 1 (Float), payload = float bitcast to i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(1, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_bit_cast(
+                    v,
+                    self.context.i64_type(),
+                    "float_bits",
+                ))?
+                .into_int_value();
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Bool(v) => {
-                let cast = self.bool_to_i32(v, "bool_i32")?;
-                let func = self.ensure_value_from_bool();
-                let call = self.call_function(func, &[cast.into()], "val_bool")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 2 (Bool), payload = 0 or 1 as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(2, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_int_z_extend(
+                    v,
+                    self.context.i64_type(),
+                    "bool_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::String(ptr) => {
-                let func = self.ensure_value_from_string();
-                let call = self.call_function(func, &[ptr.into()], "val_str")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 3 (String), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(3, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    ptr,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::List { pointer, .. } => {
-                let func = self.ensure_value_from_list();
-                let call = self.call_function(func, &[pointer.into()], "val_list")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 4 (List), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(4, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    pointer,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Dict { pointer, .. } => {
-                let func = self.ensure_value_from_dict();
-                let call = self.call_function(func, &[pointer.into()], "val_dict")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 5 (Dict), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(5, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    pointer,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Struct { pointer, .. } => {
-                let func = self.ensure_value_from_struct();
-                let call = self.call_function(func, &[pointer.into()], "val_struct")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 6 (Struct), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(6, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    pointer,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Error { pointer, .. } => {
-                let func = self.ensure_value_from_error();
-                let call = self.call_function(func, &[pointer.into()], "val_error")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 7 (Error), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(7, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    pointer,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Closure { pointer, .. } => {
-                let func = self.ensure_value_from_closure();
-                let call = self.call_function(func, &[pointer.into()], "val_closure")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 8 (Closure), payload = pointer as i64
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(8, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = map_builder_error(self.builder.build_ptr_to_int(
+                    pointer,
+                    self.context.i64_type(),
+                    "ptr_i64",
+                ))?;
+                let undef = tea_value_type.get_undef();
+                let s1 = map_builder_error(self.builder.build_insert_value(
+                    undef,
+                    tag,
+                    0,
+                    "tea_val_tag",
+                ))?;
+                let s1b = map_builder_error(self.builder.build_insert_value(
+                    s1,
+                    padding,
+                    1,
+                    "tea_val_padding",
+                ))?;
+                let s2 = map_builder_error(self.builder.build_insert_value(
+                    s1b,
+                    payload,
+                    2,
+                    "tea_val_payload",
+                ))?
+                .into_struct_value();
+                Ok(s2.into())
             }
             ExprValue::Void => {
-                let func = self.ensure_value_nil();
-                let call = self.call_function(func, &[], "val_nil")?;
-                Ok(call
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected TeaValue"))?)
+                // Tag = 9 (Nil), payload = 0
+                // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+                let tag = self.context.i32_type().const_int(9, false);
+                let padding = self.context.i32_type().const_zero();
+                let payload = self.context.i64_type().const_zero();
+                let struct_val = tea_value_type.const_named_struct(&[
+                    tag.into(),
+                    padding.into(),
+                    payload.into(),
+                ]);
+                Ok(struct_val.into())
             }
             ExprValue::Optional { value, .. } => Ok(value.into()),
         }
@@ -9222,10 +9669,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         match value {
             ExprValue::String(ptr) => Ok(ptr),
             other => {
-                let tea_value = self.expr_to_tea_value(other)?;
+                let tea_value = self.expr_to_tea_value(other)?.into_struct_value();
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
+                // ARM64 ABI fix: Pass TeaValue by pointer instead of by value
+                // This avoids struct passing issues with the C ABI on ARM64
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_value_tmp"))?;
+                map_builder_error(self.builder.build_store(alloca, tea_value))?;
+
                 let func = self.ensure_util_to_string_fn();
                 let call = self
-                    .call_function(func, &[tea_value.into()], "tea_util_to_string")?
+                    .call_function(func, &[alloca.into()], "tea_util_to_string")?
                     .try_as_basic_value()
                     .left()
                     .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
@@ -9268,87 +9726,77 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(result)
     }
 
-    fn tea_value_to_expr(
+    /// Convert a TeaValue payload (i64) to an ExprValue based on the expected type.
+    fn payload_to_expr(
         &mut self,
-        value: StructValue<'ctx>,
+        payload: IntValue<'ctx>,
         ty: ValueType,
     ) -> Result<ExprValue<'ctx>> {
         match ty {
             ValueType::Int => {
-                let func = self.ensure_value_as_int();
-                let result = self
-                    .call_function(func, &[value.into()], "val_as_int")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Int value"))?
-                    .into_int_value();
-                Ok(ExprValue::Int(result))
+                // Payload is the int value directly
+                Ok(ExprValue::Int(payload))
             }
             ValueType::Float => {
-                let func = self.ensure_value_as_float();
-                let result = self
-                    .call_function(func, &[value.into()], "val_as_float")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Float value"))?
-                    .into_float_value();
-                Ok(ExprValue::Float(result))
+                // Payload is the float value bitcast from i64
+                let float_val = map_builder_error(self.builder.build_bit_cast(
+                    payload,
+                    self.float_type(),
+                    "float_val",
+                ))?
+                .into_float_value();
+                Ok(ExprValue::Float(float_val))
             }
             ValueType::Bool => {
-                let func = self.ensure_value_as_bool();
-                let raw = self
-                    .call_function(func, &[value.into()], "val_as_bool")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Bool value"))?
-                    .into_int_value();
-                let bool_val = self.i32_to_bool(raw, "bool_from_i32")?;
+                // Payload is 0 or 1 as i64, convert to i1
+                let bool_val = map_builder_error(self.builder.build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    payload,
+                    self.context.i64_type().const_zero(),
+                    "bool_val",
+                ))?;
                 Ok(ExprValue::Bool(bool_val))
             }
             ValueType::String => {
-                let func = self.ensure_value_as_string();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_string")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected String value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "string_ptr",
+                ))?;
                 Ok(ExprValue::String(ptr))
             }
             ValueType::List(inner) => {
-                let func = self.ensure_value_as_list();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_list")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected List value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "list_ptr",
+                ))?;
                 Ok(ExprValue::List {
                     pointer: ptr,
                     element_type: inner,
                 })
             }
             ValueType::Dict(inner) => {
-                let func = self.ensure_value_as_dict();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_dict")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Dict value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "dict_ptr",
+                ))?;
                 Ok(ExprValue::Dict {
                     pointer: ptr,
                     value_type: inner,
                 })
             }
             ValueType::Struct(struct_name) => {
-                let func = self.ensure_value_as_struct();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_struct")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Struct value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "struct_ptr",
+                ))?;
                 Ok(ExprValue::Struct {
                     pointer: ptr,
                     struct_name,
@@ -9358,13 +9806,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 error_name,
                 variant_name,
             } => {
-                let func = self.ensure_value_as_error();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_error")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected Error value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "error_ptr",
+                ))?;
                 Ok(ExprValue::Error {
                     pointer: ptr,
                     error_name,
@@ -9372,22 +9819,43 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 })
             }
             ValueType::Function(param_types, return_type) => {
-                let func = self.ensure_value_as_closure();
-                let ptr = self
-                    .call_function(func, &[value.into()], "val_as_closure")?
-                    .try_as_basic_value()
-                    .left()
-                    .ok_or_else(|| anyhow!("expected closure value"))?
-                    .into_pointer_value();
+                // Payload is a pointer stored as i64
+                let ptr = map_builder_error(self.builder.build_int_to_ptr(
+                    payload,
+                    self.ptr_type,
+                    "closure_ptr",
+                ))?;
                 Ok(ExprValue::Closure {
                     pointer: ptr,
                     param_types,
                     return_type,
                 })
             }
-            ValueType::Optional(inner) => Ok(ExprValue::Optional { value, inner }),
-            ValueType::Void => Ok(ExprValue::Void),
+            ValueType::Optional(_) | ValueType::Void => {
+                bail!("payload_to_expr doesn't handle Optional or Void")
+            }
         }
+    }
+
+    fn tea_value_to_expr(
+        &mut self,
+        value: StructValue<'ctx>,
+        ty: ValueType,
+    ) -> Result<ExprValue<'ctx>> {
+        // Handle Optional specially since it needs the full TeaValue
+        if let ValueType::Optional(inner) = ty {
+            return Ok(ExprValue::Optional { value, inner });
+        }
+        if ty == ValueType::Void {
+            return Ok(ExprValue::Void);
+        }
+
+        // Extract payload directly using extractvalue instruction
+        // TeaValue is { tag: i32, padding: i32, payload: i64 } - payload is at index 2
+        let payload = map_builder_error(self.builder.build_extract_value(value, 2, "payload"))?
+            .into_int_value();
+
+        self.payload_to_expr(payload, ty)
     }
 
     fn parse_type(&self, type_expr: &TypeExpression) -> Result<ValueType> {
@@ -10071,11 +10539,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.builtin_assert_eq_fn {
             return func;
         }
-        let value_type = self.value_type();
+        // Pass TeaValue by pointer for ARM64 ABI compatibility
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let fn_type = self
             .context
             .void_type()
-            .fn_type(&[value_type.into(), value_type.into()], false);
+            .fn_type(&[ptr_type.into(), ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_assert_eq", fn_type, Some(Linkage::External));
@@ -10087,11 +10556,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.builtin_assert_ne_fn {
             return func;
         }
-        let value_type = self.value_type();
+        // Pass TeaValue by pointer for ARM64 ABI compatibility
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let fn_type = self
             .context
             .void_type()
-            .fn_type(&[value_type.into(), value_type.into()], false);
+            .fn_type(&[ptr_type.into(), ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_assert_ne", fn_type, Some(Linkage::External));
@@ -10131,8 +10601,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.util_to_string_fn {
             return func;
         }
-        let value_type = self.value_type();
-        let fn_type = self.string_ptr_type().fn_type(&[value_type.into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.string_ptr_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_util_to_string", fn_type, Some(Linkage::External));
@@ -11056,11 +11527,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.struct_set_fn {
             return func;
         }
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let fn_type = self.context.void_type().fn_type(
             &[
                 self.struct_ptr_type().into(),
                 self.int_type().into(),
-                self.value_type().into(),
+                ptr_type.into(), // TeaValue pointer
             ],
             false,
         );
@@ -11219,8 +11692,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.struct_get_fn {
             return func;
         }
-        let fn_type = self.value_type().fn_type(
-            &[self.struct_ptr_type().into(), self.int_type().into()],
+        // Returns void, writes result to output pointer to avoid ARM64 ABI issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                self.struct_ptr_type().into(),
+                self.int_type().into(),
+                ptr_type.into(), // output pointer for TeaValue
+            ],
             false,
         );
         let func =
@@ -11248,11 +11727,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.error_set_fn {
             return func;
         }
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let fn_type = self.context.void_type().fn_type(
             &[
                 self.error_ptr_type().into(),
                 self.int_type().into(),
-                self.value_type().into(),
+                ptr_type.into(), // TeaValue pointer
             ],
             false,
         );
@@ -11267,8 +11748,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.error_get_fn {
             return func;
         }
-        let fn_type = self.value_type().fn_type(
-            &[self.error_ptr_type().into(), self.int_type().into()],
+        // Returns void, writes result to output pointer to avoid ARM64 ABI issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                self.error_ptr_type().into(),
+                self.int_type().into(),
+                ptr_type.into(), // output pointer for TeaValue
+            ],
             false,
         );
         let func =
@@ -11471,7 +11958,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_int_fn {
             return func;
         }
-        let fn_type = self.int_type().fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.int_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_int", fn_type, Some(Linkage::External));
@@ -11483,9 +11972,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_float_fn {
             return func;
         }
-        let fn_type = self
-            .float_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.float_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_float", fn_type, Some(Linkage::External));
@@ -11497,10 +11986,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_bool_fn {
             return func;
         }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.context.i32_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_bool", fn_type, Some(Linkage::External));
@@ -11512,9 +12000,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_string_fn {
             return func;
         }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.string_ptr_type().fn_type(&[ptr_type.into()], false);
         let func =
             self.module
                 .add_function("tea_value_as_string", fn_type, Some(Linkage::External));
@@ -11526,9 +12014,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_list_fn {
             return func;
         }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.list_ptr_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_list", fn_type, Some(Linkage::External));
@@ -11540,9 +12028,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_dict_fn {
             return func;
         }
-        let fn_type = self
-            .dict_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.dict_ptr_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_dict", fn_type, Some(Linkage::External));
@@ -11554,9 +12042,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_struct_fn {
             return func;
         }
-        let fn_type = self
-            .struct_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.struct_ptr_type().fn_type(&[ptr_type.into()], false);
         let func =
             self.module
                 .add_function("tea_value_as_struct", fn_type, Some(Linkage::External));
@@ -11568,9 +12056,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_error_fn {
             return func;
         }
-        let fn_type = self
-            .error_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.error_ptr_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_value_as_error", fn_type, Some(Linkage::External));
@@ -11582,9 +12070,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.value_as_closure_fn {
             return func;
         }
-        let fn_type = self
-            .closure_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.closure_ptr_type().fn_type(&[ptr_type.into()], false);
         let func =
             self.module
                 .add_function("tea_value_as_closure", fn_type, Some(Linkage::External));

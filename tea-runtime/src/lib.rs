@@ -410,7 +410,7 @@ fn expect_string_list_from_list(list: *const TeaList, context: &str) -> Vec<Stri
     let mut values = Vec::with_capacity(len as usize);
     for index in 0..len {
         let value = tea_list_get(list, index);
-        let string_ptr = tea_value_as_string(value);
+        let string_ptr = tea_value_as_string(&value);
         values.push(expect_string(
             string_ptr,
             "expected list elements to be valid UTF-8 strings",
@@ -1043,12 +1043,13 @@ pub extern "C" fn tea_alloc_struct(template: *const TeaStructTemplate) -> *mut T
 pub extern "C" fn tea_struct_set_field(
     instance: *mut TeaStructInstance,
     index: c_longlong,
-    value: TeaValue,
+    value_ptr: *const TeaValue,
 ) {
     unsafe {
         if instance.is_null() {
             panic!("null struct instance");
         }
+        let value = *value_ptr;
         let instance_ref = &mut *instance;
         if instance_ref.template.is_null() {
             panic!("struct instance has null template");
@@ -1065,7 +1066,8 @@ pub extern "C" fn tea_struct_set_field(
 pub extern "C" fn tea_struct_get_field(
     instance: *const TeaStructInstance,
     index: c_longlong,
-) -> TeaValue {
+    out_value: *mut TeaValue,
+) {
     unsafe {
         if instance.is_null() {
             panic!("null struct instance");
@@ -1078,7 +1080,7 @@ pub extern "C" fn tea_struct_get_field(
         if index < 0 || index >= template_ref.field_count {
             panic!("field index out of bounds");
         }
-        *instance_ref.fields.add(index as usize)
+        *out_value = *instance_ref.fields.add(index as usize);
     }
 }
 
@@ -1149,12 +1151,13 @@ pub extern "C" fn tea_alloc_error(template: *const TeaErrorTemplate) -> *mut Tea
 pub extern "C" fn tea_error_set_field(
     instance: *mut TeaErrorInstance,
     index: c_longlong,
-    value: TeaValue,
+    value_ptr: *const TeaValue,
 ) {
     unsafe {
         if instance.is_null() {
             panic!("null error instance");
         }
+        let value = *value_ptr;
         let instance_ref = &mut *instance;
         if instance_ref.template.is_null() {
             panic!("error instance has null template");
@@ -1171,7 +1174,8 @@ pub extern "C" fn tea_error_set_field(
 pub extern "C" fn tea_error_get_field(
     instance: *const TeaErrorInstance,
     index: c_longlong,
-) -> TeaValue {
+    out_value: *mut TeaValue,
+) {
     unsafe {
         if instance.is_null() {
             panic!("null error instance");
@@ -1184,7 +1188,7 @@ pub extern "C" fn tea_error_get_field(
         if index < 0 || index >= template_ref.field_count {
             panic!("error field index out of bounds");
         }
-        *instance_ref.fields.add(index as usize)
+        *out_value = *instance_ref.fields.add(index as usize);
     }
 }
 
@@ -1545,8 +1549,10 @@ pub extern "C" fn tea_assert(condition: c_int, message: *const TeaString) {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_assert_eq(left: TeaValue, right: TeaValue) {
+pub extern "C" fn tea_assert_eq(left_ptr: *const TeaValue, right_ptr: *const TeaValue) {
     unsafe {
+        let left = *left_ptr;
+        let right = *right_ptr;
         if !tea_value_equals(left, right) {
             let left_str = tea_value_to_string(left);
             let right_str = tea_value_to_string(right);
@@ -1569,8 +1575,10 @@ pub extern "C" fn tea_error_get_template(
 }
 
 #[no_mangle]
-pub extern "C" fn tea_assert_ne(left: TeaValue, right: TeaValue) {
+pub extern "C" fn tea_assert_ne(left_ptr: *const TeaValue, right_ptr: *const TeaValue) {
     unsafe {
+        let left = *left_ptr;
+        let right = *right_ptr;
         if tea_value_equals(left, right) {
             let value_str = tea_value_to_string(left);
             panic!("assert_ne failed: values are both {}", value_str);
@@ -1611,8 +1619,9 @@ pub extern "C" fn tea_util_len(value: TeaValue) -> c_longlong {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_util_to_string(value: TeaValue) -> *mut TeaString {
+pub extern "C" fn tea_util_to_string(value_ptr: *const TeaValue) -> *mut TeaString {
     unsafe {
+        let value = *value_ptr;
         let text = tea_value_to_string(value);
         let bytes = text.into_bytes();
         tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
@@ -1768,7 +1777,7 @@ pub extern "C" fn tea_fs_write_bytes(path: *const TeaString, data: *const TeaLis
     let mut buffer = Vec::with_capacity(len as usize);
     for index in 0..len {
         let value = tea_list_get(data, index);
-        let byte = tea_value_as_int(value);
+        let byte = tea_value_as_int(&value);
         if byte < 0 || byte > 255 {
             panic!("write_bytes expects values between 0 and 255");
         }
@@ -1789,7 +1798,7 @@ pub extern "C" fn tea_fs_write_bytes_atomic(path: *const TeaString, data: *const
     let mut buffer = Vec::with_capacity(len as usize);
     for index in 0..len {
         let value = tea_list_get(data, index);
-        let byte = tea_value_as_int(value);
+        let byte = tea_value_as_int(&value);
         if byte < 0 || byte > 255 {
             panic!("write_bytes_atomic expects values between 0 and 255");
         }
@@ -3133,8 +3142,9 @@ pub extern "C" fn tea_list_equal(left: *const TeaList, right: *const TeaList) ->
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_int(value: TeaValue) -> c_longlong {
+pub extern "C" fn tea_value_as_int(value_ptr: *const TeaValue) -> c_longlong {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Int => value.payload.int_value,
             TeaValueTag::Nil => 0,
@@ -3144,8 +3154,9 @@ pub extern "C" fn tea_value_as_int(value: TeaValue) -> c_longlong {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_float(value: TeaValue) -> c_double {
+pub extern "C" fn tea_value_as_float(value_ptr: *const TeaValue) -> c_double {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Float => value.payload.float_value,
             TeaValueTag::Int => value.payload.int_value as c_double,
@@ -3155,8 +3166,9 @@ pub extern "C" fn tea_value_as_float(value: TeaValue) -> c_double {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_bool(value: TeaValue) -> c_int {
+pub extern "C" fn tea_value_as_bool(value_ptr: *const TeaValue) -> c_int {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Bool => value.payload.bool_value,
             TeaValueTag::Nil => 0,
@@ -3166,8 +3178,9 @@ pub extern "C" fn tea_value_as_bool(value: TeaValue) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_string(value: TeaValue) -> *const TeaString {
+pub extern "C" fn tea_value_as_string(value_ptr: *const TeaValue) -> *const TeaString {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::String => value.payload.string_value,
             _ => panic!("tea_value_as_string: value is not a String"),
@@ -3176,8 +3189,9 @@ pub extern "C" fn tea_value_as_string(value: TeaValue) -> *const TeaString {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_list(value: TeaValue) -> *const TeaList {
+pub extern "C" fn tea_value_as_list(value_ptr: *const TeaValue) -> *const TeaList {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::List => value.payload.list_value,
             _ => panic!("tea_value_as_list: value is not a List"),
@@ -3186,8 +3200,9 @@ pub extern "C" fn tea_value_as_list(value: TeaValue) -> *const TeaList {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_dict(value: TeaValue) -> *const TeaDict {
+pub extern "C" fn tea_value_as_dict(value_ptr: *const TeaValue) -> *const TeaDict {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Dict => value.payload.dict_value,
             _ => panic!("tea_value_as_dict: value is not a Dict"),
@@ -3196,8 +3211,9 @@ pub extern "C" fn tea_value_as_dict(value: TeaValue) -> *const TeaDict {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_struct(value: TeaValue) -> *const TeaStructInstance {
+pub extern "C" fn tea_value_as_struct(value_ptr: *const TeaValue) -> *const TeaStructInstance {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Struct => value.payload.struct_value,
             _ => panic!("tea_value_as_struct: value is not a Struct"),
@@ -3206,8 +3222,9 @@ pub extern "C" fn tea_value_as_struct(value: TeaValue) -> *const TeaStructInstan
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_error(value: TeaValue) -> *const TeaErrorInstance {
+pub extern "C" fn tea_value_as_error(value_ptr: *const TeaValue) -> *const TeaErrorInstance {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Error => value.payload.error_value,
             _ => panic!("tea_value_as_error: value is not an Error"),
@@ -3216,8 +3233,9 @@ pub extern "C" fn tea_value_as_error(value: TeaValue) -> *const TeaErrorInstance
 }
 
 #[no_mangle]
-pub extern "C" fn tea_value_as_closure(value: TeaValue) -> *const TeaClosure {
+pub extern "C" fn tea_value_as_closure(value_ptr: *const TeaValue) -> *const TeaClosure {
     unsafe {
+        let value = *value_ptr;
         match value.tag {
             TeaValueTag::Closure => value.payload.closure_value,
             _ => panic!("tea_value_as_closure: value is not a Closure"),

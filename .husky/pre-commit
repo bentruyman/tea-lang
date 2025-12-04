@@ -12,4 +12,4 @@ fi
 git add .beads/issues.jsonl 2>/dev/null || true
 
 cargo fmt --all --check
-npx lint-staged
+bunx lint-staged

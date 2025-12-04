@@ -38,9 +38,10 @@ pub struct TeaString {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeaList {
-    pub len: c_longlong,
-    pub capacity: c_longlong,
-    pub items: *mut TeaValue,
+    pub tag: u8,             // 0=heap, 1=inline
+    pub len: u8,             // length for inline lists (0-7) or padding for heap
+    pub padding: [u8; 6],    // alignment padding
+    pub data: [TeaValue; 8], // inline items OR first 24 bytes hold heap info (len, capacity, items ptr)
 }
 
 #[repr(C)]
@@ -289,12 +290,13 @@ pub extern "C" fn tea_print_list(list: *const TeaList) {
             return;
         }
         let list_ref = &*list;
+        let (items, len) = tea_list_items(list_ref);
         print!("[");
-        for i in 0..list_ref.len {
+        for i in 0..len {
             if i > 0 {
                 print!(", ");
             }
-            let value = *list_ref.items.add(i as usize);
+            let value = *items.add(i as usize);
             print_value(value);
         }
         print!("]");
@@ -404,8 +406,9 @@ fn expect_string_list_from_list(list: *const TeaList, context: &str) -> Vec<Stri
         panic!("{context}");
     }
     let list_ref = unsafe { &*list };
-    let mut values = Vec::with_capacity(list_ref.len as usize);
-    for index in 0..list_ref.len {
+    let len = unsafe { tea_list_len(list_ref) };
+    let mut values = Vec::with_capacity(len as usize);
+    for index in 0..len {
         let value = tea_list_get(list, index);
         let string_ptr = tea_value_as_string(value);
         values.push(expect_string(
@@ -734,15 +737,16 @@ unsafe fn tea_value_to_string(value: TeaValue) -> String {
                 return "[]".to_string();
             }
             let list_ref = &*list_ptr;
-            if list_ref.len <= 0 {
+            let (items, len) = tea_list_items(list_ref);
+            if len <= 0 {
                 return "[]".to_string();
             }
             let mut result = String::from("[");
-            for index in 0..list_ref.len {
+            for index in 0..len {
                 if index > 0 {
                     result.push_str(", ");
                 }
-                let element = *list_ref.items.add(index as usize);
+                let element = *items.add(index as usize);
                 result.push_str(&tea_value_to_string(element));
             }
             result.push(']');
@@ -871,9 +875,10 @@ fn tea_value_to_json(value: TeaValue) -> Result<JsonValue, String> {
                     return Ok(JsonValue::Array(Vec::new()));
                 }
                 let list_ref = &*list_ptr;
-                let mut items = Vec::with_capacity(list_ref.len.max(0) as usize);
-                for index in 0..list_ref.len.max(0) {
-                    let element = *list_ref.items.add(index as usize);
+                let (items_ptr, len) = tea_list_items(list_ref);
+                let mut items = Vec::with_capacity(len.max(0) as usize);
+                for index in 0..len.max(0) {
+                    let element = *items_ptr.add(index as usize);
                     items.push(tea_value_to_json(element)?);
                 }
                 Ok(JsonValue::Array(items))
@@ -1322,12 +1327,13 @@ pub extern "C" fn tea_println_list(list: *const TeaList) {
             return;
         }
         let list_ref = &*list;
+        let (items, len) = tea_list_items(list_ref);
         print!("[");
-        for i in 0..list_ref.len {
+        for i in 0..len {
             if i > 0 {
                 print!(", ");
             }
-            let value = *list_ref.items.add(i as usize);
+            let value = *items.add(i as usize);
             print_value(value);
         }
         println!("]");
@@ -1596,7 +1602,7 @@ pub extern "C" fn tea_util_len(value: TeaValue) -> c_longlong {
                 if list_ptr.is_null() {
                     0
                 } else {
-                    (*list_ptr).len
+                    tea_list_len(&*list_ptr)
                 }
             }
             _ => panic!("len builtin expects a String or List"),
@@ -1758,8 +1764,9 @@ pub extern "C" fn tea_fs_write_bytes(path: *const TeaString, data: *const TeaLis
     }
     let path_str = expect_path(path);
     let list_ref = unsafe { &*data };
-    let mut buffer = Vec::with_capacity(list_ref.len as usize);
-    for index in 0..list_ref.len {
+    let len = unsafe { tea_list_len(list_ref) };
+    let mut buffer = Vec::with_capacity(len as usize);
+    for index in 0..len {
         let value = tea_list_get(data, index);
         let byte = tea_value_as_int(value);
         if byte < 0 || byte > 255 {
@@ -1778,8 +1785,9 @@ pub extern "C" fn tea_fs_write_bytes_atomic(path: *const TeaString, data: *const
     }
     let path_str = expect_path(path);
     let list_ref = unsafe { &*data };
-    let mut buffer = Vec::with_capacity(list_ref.len as usize);
-    for index in 0..list_ref.len {
+    let len = unsafe { tea_list_len(list_ref) };
+    let mut buffer = Vec::with_capacity(len as usize);
+    for index in 0..len {
         let value = tea_list_get(data, index);
         let byte = tea_value_as_int(value);
         if byte < 0 || byte > 255 {
@@ -2052,6 +2060,68 @@ pub extern "C" fn tea_alloc_string(ptr: *const c_char, len: c_longlong) -> *mut 
     }
 }
 
+// Helper function to extract length from a TeaList (inline or heap)
+unsafe fn tea_list_len(list_ref: &TeaList) -> i64 {
+    if list_ref.tag == 1 {
+        // Inline list: length is in len field
+        list_ref.len as i64
+    } else {
+        // Heap list: length is in first 8 bytes of data array
+        let data_ptr = list_ref.data.as_ptr() as *const u8;
+        let mut len_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr, len_bytes.as_mut_ptr(), 8);
+        i64::from_ne_bytes(len_bytes)
+    }
+}
+
+// Helper function to get mutable access to list items
+unsafe fn tea_list_items_mut(list_ref: &mut TeaList) -> (*mut TeaValue, i64, i64) {
+    if list_ref.tag == 1 {
+        // Inline list: items are directly in the data array
+        let len = list_ref.len as i64;
+        (list_ref.data.as_mut_ptr(), len, 8)
+    } else {
+        // Heap list: extract len, capacity, and items pointer from data array
+        let data_ptr = list_ref.data.as_ptr() as *const u8;
+
+        let mut len_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr, len_bytes.as_mut_ptr(), 8);
+        let len = i64::from_ne_bytes(len_bytes);
+
+        let mut capacity_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr.add(8), capacity_bytes.as_mut_ptr(), 8);
+        let capacity = i64::from_ne_bytes(capacity_bytes);
+
+        let mut ptr_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr.add(16), ptr_bytes.as_mut_ptr(), 8);
+        let items = usize::from_ne_bytes(ptr_bytes) as *mut TeaValue;
+
+        (items, len, capacity)
+    }
+}
+
+// Helper function to get immutable access to list items
+unsafe fn tea_list_items(list_ref: &TeaList) -> (*const TeaValue, i64) {
+    if list_ref.tag == 1 {
+        // Inline list: items are directly in the data array
+        let len = list_ref.len as i64;
+        (list_ref.data.as_ptr(), len)
+    } else {
+        // Heap list: extract len and items pointer from data array
+        let data_ptr = list_ref.data.as_ptr() as *const u8;
+
+        let mut len_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr, len_bytes.as_mut_ptr(), 8);
+        let len = i64::from_ne_bytes(len_bytes);
+
+        let mut ptr_bytes = [0u8; 8];
+        std::ptr::copy_nonoverlapping(data_ptr.add(16), ptr_bytes.as_mut_ptr(), 8);
+        let items = usize::from_ne_bytes(ptr_bytes) as *const TeaValue;
+
+        (items, len)
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn tea_alloc_list(len: c_longlong) -> *mut TeaList {
     let capacity = len.max(4);
@@ -2059,14 +2129,36 @@ pub extern "C" fn tea_alloc_list(len: c_longlong) -> *mut TeaList {
     for _ in 0..capacity {
         items.push(tea_value_nil());
     }
-    let list = TeaList {
-        len,
-        capacity,
-        items: items.as_mut_ptr(),
+
+    // Create heap list with tag=0
+    let mut tea_list = TeaList {
+        tag: 0,
+        len: 0, // padding for heap lists
+        padding: [0; 6],
+        data: [tea_value_nil(); 8],
     };
-    let raw = Box::into_raw(Box::new(list));
+
+    // Store heap info in first 24 bytes of data array
+    // We need to encode: len (i64), capacity (i64), items (ptr)
+    unsafe {
+        let data_ptr = tea_list.data.as_mut_ptr() as *mut u8;
+
+        // Store len in bytes 0-7
+        let len_bytes = len.to_ne_bytes();
+        std::ptr::copy_nonoverlapping(len_bytes.as_ptr(), data_ptr, 8);
+
+        // Store capacity in bytes 8-15
+        let capacity_bytes = capacity.to_ne_bytes();
+        std::ptr::copy_nonoverlapping(capacity_bytes.as_ptr(), data_ptr.add(8), 8);
+
+        // Store items pointer in bytes 16-23
+        let items_ptr = items.as_mut_ptr();
+        let ptr_bytes = (items_ptr as usize).to_ne_bytes();
+        std::ptr::copy_nonoverlapping(ptr_bytes.as_ptr(), data_ptr.add(16), 8);
+    }
+
     std::mem::forget(items);
-    raw
+    Box::into_raw(Box::new(tea_list))
 }
 
 #[no_mangle]
@@ -2076,10 +2168,11 @@ pub extern "C" fn tea_list_set(list: *mut TeaList, index: c_longlong, value: Tea
             return;
         }
         let list_ref = &mut *list;
-        if index < 0 || index >= list_ref.len {
+        let (items, len, _capacity) = tea_list_items_mut(list_ref);
+        if index < 0 || index >= len {
             panic!("index out of bounds");
         }
-        *list_ref.items.add(index as usize) = value;
+        *items.add(index as usize) = value;
     }
 }
 
@@ -2090,10 +2183,11 @@ pub extern "C" fn tea_list_get(list: *const TeaList, index: c_longlong) -> TeaVa
             panic!("null list");
         }
         let list_ref = &*list;
-        if index < 0 || index >= list_ref.len {
+        let (items, len) = tea_list_items(list_ref);
+        if index < 0 || index >= len {
             panic!("index out of bounds");
         }
-        *list_ref.items.add(index as usize)
+        *items.add(index as usize)
     }
 }
 
@@ -2127,18 +2221,21 @@ pub extern "C" fn tea_list_concat(left: *const TeaList, right: *const TeaList) -
     unsafe {
         let left_ref = &*left;
         let right_ref = &*right;
-        let combined_len = left_ref.len + right_ref.len;
+        let (left_items, left_len) = tea_list_items(left_ref);
+        let (right_items, right_len) = tea_list_items(right_ref);
+        let combined_len = left_len + right_len;
         let result = tea_alloc_list(combined_len);
         let result_ref = &mut *result;
+        let (result_items, _, _) = tea_list_items_mut(result_ref);
 
         // Copy left list items
-        for i in 0..left_ref.len {
-            *result_ref.items.add(i as usize) = *left_ref.items.add(i as usize);
+        for i in 0..left_len {
+            *result_items.add(i as usize) = *left_items.add(i as usize);
         }
 
         // Copy right list items
-        for i in 0..right_ref.len {
-            *result_ref.items.add((left_ref.len + i) as usize) = *right_ref.items.add(i as usize);
+        for i in 0..right_len {
+            *result_items.add((left_len + i) as usize) = *right_items.add(i as usize);
         }
 
         result
@@ -2199,6 +2296,7 @@ pub extern "C" fn tea_list_slice(
     }
     unsafe {
         let list_ref = &*list;
+        let (items, len) = tea_list_items(list_ref);
         let start_idx = start as usize;
         let mut end_idx = end as usize;
 
@@ -2206,10 +2304,10 @@ pub extern "C" fn tea_list_slice(
             end_idx = end_idx.saturating_add(1);
         }
 
-        if start_idx > list_ref.len as usize {
+        if start_idx > len as usize {
             panic!("slice start index out of bounds");
         }
-        let end_idx = end_idx.min(list_ref.len as usize);
+        let end_idx = end_idx.min(len as usize);
         if start_idx > end_idx {
             panic!("slice start must be <= end");
         }
@@ -2217,10 +2315,10 @@ pub extern "C" fn tea_list_slice(
         let slice_len = (end_idx - start_idx) as c_longlong;
         let result = tea_alloc_list(slice_len);
         let result_ref = &mut *result;
+        let (result_items, _, _) = tea_list_items_mut(result_ref);
 
         for i in 0..slice_len {
-            *result_ref.items.add(i as usize) =
-                *list_ref.items.add((start_idx + i as usize) as usize);
+            *result_items.add(i as usize) = *items.add((start_idx + i as usize) as usize);
         }
 
         result
@@ -2407,9 +2505,10 @@ fn tea_list_to_runtime(list: *const TeaList) -> Result<Vec<RuntimeValue>> {
     }
     unsafe {
         let list_ref = &*list;
-        let mut values = Vec::with_capacity(list_ref.len as usize);
-        for index in 0..list_ref.len {
-            let value = *list_ref.items.add(index as usize);
+        let (items, len) = tea_list_items(list_ref);
+        let mut values = Vec::with_capacity(len as usize);
+        for index in 0..len {
+            let value = *items.add(index as usize);
             values.push(runtime_value_from_tea(value)?);
         }
         Ok(values)
@@ -2577,9 +2676,10 @@ fn tea_value_list_to_strings(value: TeaValue) -> Result<Vec<String>> {
             TeaValueTag::List => {
                 let list = value.payload.list_value;
                 let list_ref = &*list;
-                let mut strings = Vec::with_capacity(list_ref.len as usize);
-                for index in 0..list_ref.len {
-                    let element = *list_ref.items.add(index as usize);
+                let (items, len) = tea_list_items(list_ref);
+                let mut strings = Vec::with_capacity(len as usize);
+                for index in 0..len {
+                    let element = *items.add(index as usize);
                     match element.tag {
                         TeaValueTag::String => {
                             strings.push(expect_string(

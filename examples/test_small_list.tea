@@ -1,0 +1,26 @@
+# Test small list optimization
+# Lists < 8 elements should use inline storage
+# Lists >= 8 elements should use heap storage
+
+# Small lists (inline)
+var small1 = [1, 2, 3]
+var small2 = [10, 20, 30, 40]
+var small3 = ["a", "b", "c", "d", "e"]
+var single = [42]
+
+# Large list (heap)
+var large = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+@println("Small lists (inline):")
+@println(small1)
+@println(small2)
+@println(small3)
+@println(single)
+
+@println("\nLarge list (heap):")
+@println(large)
+
+@println("\nList operations:")
+@println(small1[0])
+@println(small2[2])
+@println(large[5])

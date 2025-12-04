@@ -928,7 +928,20 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let value_payload = context.i64_type();
         tea_value.set_body(&[context.i32_type().into(), value_payload.into()], false);
 
-        tea_list.set_body(&[i64.into(), i64.into(), ptr_type.into()], false);
+        // Small list optimization: 136-byte struct
+        // tag (i8): 0=heap, 1=inline
+        // len (i8): length for inline lists (0-7) or padding for heap
+        // padding ([6 x i8]): alignment
+        // data ([8 x TeaValue]): inline items OR first 24 bytes hold heap info
+        tea_list.set_body(
+            &[
+                i8.into(),                      // tag
+                i8.into(),                      // len (for inline) or padding (for heap)
+                i8.array_type(6).into(),        // padding for alignment
+                tea_value.array_type(8).into(), // inline items or heap storage
+            ],
+            false,
+        );
         tea_struct_template.set_body(&[ptr_type.into(), i64.into(), ptr_type.into()], false);
         tea_struct_instance.set_body(&[ptr_type.into(), ptr_type.into()], false);
         tea_error_template.set_body(
@@ -3333,6 +3346,120 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     }
 
     fn compile_list_literal(
+        &mut self,
+        list: &crate::ast::ListLiteral,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Route to inline or heap based on element count
+        if list.elements.len() < 8 {
+            self.compile_small_list_literal(list, function, locals)
+        } else {
+            self.compile_heap_list_literal(list, function, locals)
+        }
+    }
+
+    fn compile_small_list_literal(
+        &mut self,
+        list: &crate::ast::ListLiteral,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        let len = list.elements.len();
+
+        // Get TeaList struct type from the context
+        let list_type = self
+            .context
+            .get_struct_type("TeaList")
+            .ok_or_else(|| anyhow!("TeaList type not found"))?;
+
+        // Allocate SmallList on heap using malloc (136 bytes)
+        let malloc_fn = self.ensure_malloc_fn();
+        let size = self.context.i64_type().const_int(136, false); // sizeof(TeaList)
+        let call = self.call_function(malloc_fn, &[size.into()], "malloc_small_list")?;
+        let list_ptr = call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("malloc returned no value"))?
+            .into_pointer_value();
+
+        // Set tag = 1 (inline)
+        let tag_ptr = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_struct_gep(list_type, list_ptr, 0, "tag_ptr"),
+            )?
+        };
+        map_builder_error(
+            self.builder
+                .build_store(tag_ptr, self.context.i8_type().const_int(1, false)),
+        )?;
+
+        // Set length
+        let len_ptr = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_struct_gep(list_type, list_ptr, 1, "len_ptr"),
+            )?
+        };
+        map_builder_error(
+            self.builder
+                .build_store(len_ptr, self.context.i8_type().const_int(len as u64, false)),
+        )?;
+
+        // Get pointer to data array (field index 3)
+        let data_ptr = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_struct_gep(list_type, list_ptr, 3, "data_ptr"),
+            )?
+        };
+
+        // Compile and store each element
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+        let mut element_type: Option<ValueType> = None;
+
+        for (i, element) in list.elements.iter().enumerate() {
+            let expr = self.compile_expression(element, function, locals)?;
+            let expr_type = expr.ty();
+            if let Some(existing) = &element_type {
+                if *existing != expr_type {
+                    bail!("list literal elements must share a type");
+                }
+            } else {
+                element_type = Some(expr_type.clone());
+            }
+
+            let tea_value = self.expr_to_tea_value(expr)?;
+
+            // Get pointer to array element
+            let elem_ptr = unsafe {
+                map_builder_error(self.builder.build_in_bounds_gep(
+                    tea_value_type.array_type(8),
+                    data_ptr,
+                    &[
+                        self.context.i32_type().const_zero(),
+                        self.context.i32_type().const_int(i as u64, false),
+                    ],
+                    &format!("elem_{}", i),
+                ))?
+            };
+
+            // Store the TeaValue
+            map_builder_error(self.builder.build_store(elem_ptr, tea_value))?;
+        }
+
+        let element_type = element_type.unwrap_or(ValueType::Void);
+        Ok(ExprValue::List {
+            pointer: list_ptr,
+            element_type: Box::new(element_type),
+        })
+    }
+
+    fn compile_heap_list_literal(
         &mut self,
         list: &crate::ast::ListLiteral,
         function: FunctionValue<'ctx>,

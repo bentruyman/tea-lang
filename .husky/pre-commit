@@ -11,5 +11,10 @@ fi
 
 git add .beads/issues.jsonl 2>/dev/null || true
 
-cargo fmt --all --check
+STAGED_RS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+if [ -n "$STAGED_RS_FILES" ]; then
+  cargo fmt --all
+  echo "$STAGED_RS_FILES" | xargs git add
+fi
+
 bunx lint-staged

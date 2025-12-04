@@ -1,8 +1,10 @@
 # Tea Language Documentation
 
-This directory contains all documentation for the Tea programming language, organized using the [Diátaxis](https://diataxis.fr/) framework.
+This directory contains all documentation for the Tea programming language.
 
-## Structure
+## 📖 Language Documentation
+
+Organized using the [Diátaxis](https://diataxis.fr/) framework for clarity.
 
 ### Tutorials
 
@@ -25,7 +27,6 @@ Technical specifications and API documentation.
 - [Tea Stdlib Design](reference/language/tea-stdlib-design.md)
 - [Standard Library Reference](stdlib-reference.md)
 - [Intrinsics Reference](intrinsics-reference.md)
-- [Maintainer Guide](maintainer-guide.md) - How to extend Tea with new intrinsics and stdlib functions
 
 ### Explanation
 
@@ -35,27 +36,21 @@ Architecture decisions, design rationale, and deep dives.
 - [LLVM Implementation](explanation/aot-llvm-implementation.md)
 - [Compiler Code Generation](explanation/compiler-codegen.md)
 
-## Contributing to Documentation
+## 🤝 Project Documentation
 
-### File Naming Conventions
+Documentation for contributors and maintainers.
 
-- Use `kebab-case` for all filenames: `lsp-setup.md`, not `LSP_SETUP.md`
-- Match the H1 heading to the filename in Title Case
-- First paragraph should state the document's scope and purpose
+### [`project/`](project/) - Project Management
 
-### Organization Guidelines
+- [Contributing Guide](project/CONTRIBUTING.md) - How to contribute to Tea
+- [Changelog](project/CHANGELOG.md) - Version history and release notes
 
-- **Tutorials**: Learning-oriented, step-by-step, safe to follow
-- **How-To**: Problem-oriented, practical steps, assumes knowledge
-- **Reference**: Information-oriented, accurate, complete
-- **Explanation**: Understanding-oriented, context, alternatives
+### [`maintenance/`](maintenance/) - Maintainer Resources
 
-### Writing Style
-
-- Keep "why" explanations in Explanation docs
-- Keep "what" specifications in Reference docs
-- Keep "how" instructions in How-To and Tutorial docs
-- Link between docs when referencing related concepts
+- [Release Checklist](maintenance/RELEASE_CHECKLIST.md) - Release process steps
+- [Beta Release TODO](maintenance/BETA_RELEASE_TODO.md) - Current release status
+- [Maintainer Guide](maintenance/maintainer-guide.md) - Extending Tea with intrinsics/stdlib
+- [New Stdlib](maintenance/new-stdlib.md) - Standard library development
 
 ## External Resources
 

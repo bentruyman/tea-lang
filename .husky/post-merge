@@ -3,7 +3,7 @@ if ! command -v bd >/dev/null 2>&1; then
   exit 0
 fi
 
-if ! bd import -i .beads/issues.jsonl --resolve-collisions >/dev/null 2>&1; then
+if ! bd import -i .beads/issues.jsonl >/dev/null 2>&1; then
   echo "Warning: Failed to import bd changes after merge" >&2
   echo "Run 'bd import -i .beads/issues.jsonl --resolve-collisions' manually" >&2
 fi

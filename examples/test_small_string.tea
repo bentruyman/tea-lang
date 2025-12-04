@@ -1,0 +1,15 @@
+# Test small string optimization
+# Strings < 23 bytes should be stack-allocated (inline)
+# Strings >= 23 bytes should be heap-allocated
+
+@println("hello")           # 5 bytes - inline
+@println("world")           # 5 bytes - inline
+@println("Tea Language")    # 12 bytes - inline
+@println("short")           # 5 bytes - inline
+@println("This is a test")  # 16 bytes - inline
+@println("This is a longer string that exceeds 22 bytes") # >22 bytes - heap
+
+var small = "test"
+var large = "This is definitely more than twenty two bytes long"
+@println(small)
+@println(large)

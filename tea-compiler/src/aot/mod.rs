@@ -823,6 +823,7 @@ struct LlvmCodeGenerator<'ctx> {
     list_get_fn: Option<FunctionValue<'ctx>>,
     string_index_fn: Option<FunctionValue<'ctx>>,
     list_concat_fn: Option<FunctionValue<'ctx>>,
+    string_concat_fn: Option<FunctionValue<'ctx>>,
     string_slice_fn: Option<FunctionValue<'ctx>>,
     list_slice_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
@@ -908,8 +909,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let tea_closure = context.opaque_struct_type("TeaClosure");
 
         let i64 = context.i64_type();
+        let i8 = context.i8_type();
         let ptr_type = context.ptr_type(AddressSpace::default());
-        tea_string.set_body(&[i64.into(), ptr_type.into()], false);
+
+        // Small string optimization: 24-byte struct
+        // tag (i8): 0=heap, 1=inline
+        // len (i8): length for inline strings (0-22)
+        // data ([22 x i8]): inline string data OR heap pointer in first 8 bytes
+        tea_string.set_body(
+            &[
+                i8.into(),                // tag
+                i8.into(),                // len (for inline) or padding (for heap)
+                i8.array_type(22).into(), // inline data or pointer storage
+            ],
+            false,
+        );
 
         let value_payload = context.i64_type();
         tea_value.set_body(&[context.i32_type().into(), value_payload.into()], false);
@@ -1073,6 +1087,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_get_fn: None,
             string_index_fn: None,
             list_concat_fn: None,
+            string_concat_fn: None,
             string_slice_fn: None,
             list_slice_fn: None,
             struct_set_fn: None,
@@ -4380,6 +4395,92 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn compile_string_literal(&mut self, value: &str) -> Result<ExprValue<'ctx>> {
         let bytes = value.as_bytes();
+        let len = bytes.len();
+
+        // Small string optimization: inline strings < 23 bytes
+        if len < 23 {
+            return self.compile_small_string_literal(bytes);
+        }
+
+        // Large string: heap allocation with tag=0
+        self.compile_heap_string_literal(bytes)
+    }
+
+    fn compile_small_string_literal(&mut self, bytes: &[u8]) -> Result<ExprValue<'ctx>> {
+        let len = bytes.len();
+
+        // Get TeaString struct type from the context
+        let string_type = self
+            .context
+            .get_struct_type("TeaString")
+            .ok_or_else(|| anyhow!("TeaString type not found"))?;
+
+        // Allocate SmallString on heap using malloc (24 bytes)
+        let malloc_fn = self.ensure_malloc_fn();
+        let size = self.context.i64_type().const_int(24, false); // sizeof(TeaString)
+        let call = self.call_function(malloc_fn, &[size.into()], "malloc_small_str")?;
+        let string_ptr = call
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("malloc returned no value"))?
+            .into_pointer_value();
+
+        // Set tag = 1 (inline)
+        let tag_ptr = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_struct_gep(string_type, string_ptr, 0, "tag_ptr"),
+            )?
+        };
+        map_builder_error(
+            self.builder
+                .build_store(tag_ptr, self.context.i8_type().const_int(1, false)),
+        )?;
+
+        // Set length
+        let len_ptr = unsafe {
+            map_builder_error(
+                self.builder
+                    .build_struct_gep(string_type, string_ptr, 1, "len_ptr"),
+            )?
+        };
+        map_builder_error(
+            self.builder
+                .build_store(len_ptr, self.context.i8_type().const_int(len as u64, false)),
+        )?;
+
+        // Copy bytes into inline data array
+        let data_ptr = unsafe {
+            map_builder_error(self.builder.build_struct_gep(
+                string_type,
+                string_ptr,
+                2,
+                "data_ptr",
+            ))?
+        };
+
+        for (i, &byte) in bytes.iter().enumerate() {
+            let elem_ptr = unsafe {
+                map_builder_error(self.builder.build_in_bounds_gep(
+                    self.context.i8_type().array_type(22),
+                    data_ptr,
+                    &[
+                        self.context.i32_type().const_zero(),
+                        self.context.i32_type().const_int(i as u64, false),
+                    ],
+                    &format!("byte_{}", i),
+                ))?
+            };
+            map_builder_error(self.builder.build_store(
+                elem_ptr,
+                self.context.i8_type().const_int(byte as u64, false),
+            ))?;
+        }
+
+        Ok(ExprValue::String(string_ptr))
+    }
+
+    fn compile_heap_string_literal(&mut self, bytes: &[u8]) -> Result<ExprValue<'ctx>> {
         let total_len = bytes.len() + 1;
         let array_type = self.context.i8_type().array_type(total_len as u32);
         let mut elems = Vec::with_capacity(total_len);
@@ -9012,115 +9113,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         left: PointerValue<'ctx>,
         right: PointerValue<'ctx>,
     ) -> Result<PointerValue<'ctx>> {
-        // Inline string concatenation for better performance
-        // struct TeaString { len: i64, data: *const c_char }
-
-        let i64_type = self.int_type();
-        let i8_type = self.context.i8_type();
-        let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
-
-        // Create struct type for TeaString: { i64, ptr }
-        let tea_string_type = self
-            .context
-            .struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
-
-        // Load left length and data
-        let left_len_ptr = map_builder_error(self.builder.build_struct_gep(
-            tea_string_type,
-            left,
-            0,
-            "left_len_ptr",
-        ))?;
-        let left_len =
-            map_builder_error(self.builder.build_load(i64_type, left_len_ptr, "left_len"))?
-                .into_int_value();
-
-        let left_data_ptr = map_builder_error(self.builder.build_struct_gep(
-            tea_string_type,
-            left,
-            1,
-            "left_data_ptr",
-        ))?;
-        let left_data = map_builder_error(self.builder.build_load(
-            i8_ptr_type,
-            left_data_ptr,
-            "left_data",
-        ))?
-        .into_pointer_value();
-
-        // Load right length and data
-        let right_len_ptr = map_builder_error(self.builder.build_struct_gep(
-            tea_string_type,
-            right,
-            0,
-            "right_len_ptr",
-        ))?;
-        let right_len = map_builder_error(self.builder.build_load(
-            i64_type,
-            right_len_ptr,
-            "right_len",
-        ))?
-        .into_int_value();
-
-        let right_data_ptr = map_builder_error(self.builder.build_struct_gep(
-            tea_string_type,
-            right,
-            1,
-            "right_data_ptr",
-        ))?;
-        let right_data = map_builder_error(self.builder.build_load(
-            i8_ptr_type,
-            right_data_ptr,
-            "right_data",
-        ))?
-        .into_pointer_value();
-
-        // Calculate combined length
-        let combined_len = map_builder_error(self.builder.build_int_add(
-            left_len,
-            right_len,
-            "combined_len",
-        ))?;
-
-        // Allocate new buffer for combined string (using malloc)
-        let malloc_fn = self.ensure_malloc_fn();
-        let buffer = self
-            .call_function(malloc_fn, &[combined_len.into()], "malloc")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("malloc returned no value"))?
-            .into_pointer_value();
-
-        // Copy left string into buffer using memcpy
-        let memcpy_fn = self.ensure_memcpy_fn();
-        self.call_function(
-            memcpy_fn,
-            &[buffer.into(), left_data.into(), left_len.into()],
-            "memcpy_left",
-        )?;
-
-        // Calculate destination for right string (buffer + left_len)
-        let right_dest = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_gep(i8_type, buffer, &[left_len], "right_dest"),
-            )?
-        };
-
-        // Copy right string into buffer
-        self.call_function(
-            memcpy_fn,
-            &[right_dest.into(), right_data.into(), right_len.into()],
-            "memcpy_right",
-        )?;
-
-        // Allocate TeaString struct
-        let alloc_fn = self.ensure_alloc_string();
+        // Call runtime tea_string_concat which handles the new tagged union structure
+        let concat_fn = self.ensure_string_concat_fn();
         let result = self
-            .call_function(alloc_fn, &[buffer.into(), combined_len.into()], "alloc_str")?
+            .call_function(concat_fn, &[left.into(), right.into()], "concat_str")?
             .try_as_basic_value()
             .left()
-            .ok_or_else(|| anyhow!("tea_alloc_string returned no value"))?
+            .ok_or_else(|| anyhow!("tea_string_concat returned no value"))?
             .into_pointer_value();
 
         Ok(result)
@@ -10861,6 +10860,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_alloc_string", fn_type, Some(Linkage::External));
         self.alloc_string_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_concat_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_concat_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_string_concat", fn_type, Some(Linkage::External));
+        self.string_concat_fn = Some(func);
         func
     }
 

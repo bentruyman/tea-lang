@@ -30,8 +30,9 @@ use std::os::windows::fs::MetadataExt;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeaString {
-    pub len: c_longlong,
-    pub data: *const c_char,
+    pub tag: u8,        // 0=heap, 1=inline
+    pub len: u8,        // length for inline strings (0-22) or padding for heap
+    pub data: [u8; 22], // inline data OR first 8 bytes hold heap pointer
 }
 
 #[repr(C)]
@@ -258,8 +259,8 @@ pub extern "C" fn tea_print_string(value: *const TeaString) {
             return;
         }
         let string_ref = &*value;
-        let bytes =
-            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let bytes = tea_string_as_bytes(string_ref);
+
         match std::str::from_utf8(bytes) {
             Ok(text) => print!("{text}"),
             Err(_) => print!("<invalid utf8>"),
@@ -346,17 +347,46 @@ fn tea_cstr_to_rust(ptr: *const c_char) -> Option<String> {
     unsafe { CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string()) }
 }
 
+// Helper function to get the length of a TeaString (inline or heap)
+unsafe fn tea_string_len(string_ref: &TeaString) -> usize {
+    if string_ref.tag == 1 {
+        // Inline string: length is in the len field
+        string_ref.len as usize
+    } else {
+        // Heap string: length is in bytes 8-16 of data array
+        let mut len_bytes = [0u8; 8];
+        len_bytes.copy_from_slice(&string_ref.data[8..16]);
+        i64::from_ne_bytes(len_bytes) as usize
+    }
+}
+
+// Helper function to extract bytes from a TeaString (inline or heap)
+unsafe fn tea_string_as_bytes<'a>(string_ref: &'a TeaString) -> &'a [u8] {
+    if string_ref.tag == 1 {
+        // Inline string: data is directly in the array
+        let len = string_ref.len as usize;
+        &string_ref.data[0..len]
+    } else {
+        // Heap string: pointer and length are in data array
+        let mut ptr_bytes = [0u8; 8];
+        ptr_bytes.copy_from_slice(&string_ref.data[0..8]);
+        let data_ptr = usize::from_ne_bytes(ptr_bytes) as *const u8;
+
+        let mut len_bytes = [0u8; 8];
+        len_bytes.copy_from_slice(&string_ref.data[8..16]);
+        let len = i64::from_ne_bytes(len_bytes);
+
+        std::slice::from_raw_parts(data_ptr, len as usize)
+    }
+}
+
 fn tea_string_to_rust(ptr: *const TeaString) -> Option<String> {
     unsafe {
         if ptr.is_null() {
             return None;
         }
         let string_ref = &*ptr;
-        if string_ref.data.is_null() || string_ref.len < 0 {
-            return None;
-        }
-        let bytes =
-            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let bytes = tea_string_as_bytes(string_ref);
         Some(String::from_utf8_lossy(bytes).to_string())
     }
 }
@@ -1276,8 +1306,7 @@ pub extern "C" fn tea_println_string(value: *const TeaString) {
             return;
         }
         let string_ref = &*value;
-        let bytes =
-            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let bytes = tea_string_as_bytes(string_ref);
         match std::str::from_utf8(bytes) {
             Ok(text) => println!("{text}"),
             Err(_) => println!("<invalid utf8>"),
@@ -2004,10 +2033,22 @@ pub extern "C" fn tea_alloc_string(ptr: *const c_char, len: c_longlong) -> *mut 
         buffer.push(0);
         let data_ptr = buffer.as_ptr() as *const c_char;
         std::mem::forget(buffer);
-        Box::into_raw(Box::new(TeaString {
-            len,
-            data: data_ptr,
-        }))
+
+        // Create heap string with tag=0
+        let mut tea_string = TeaString {
+            tag: 0,
+            len: 0, // padding for heap strings
+            data: [0; 22],
+        };
+
+        // Store heap pointer in first 8 bytes of data array
+        // Also store the actual length in second 8 bytes for heap strings
+        let ptr_bytes = (data_ptr as usize).to_ne_bytes();
+        let len_bytes = (len as i64).to_ne_bytes();
+        tea_string.data[0..8].copy_from_slice(&ptr_bytes);
+        tea_string.data[8..16].copy_from_slice(&len_bytes);
+
+        Box::into_raw(Box::new(tea_string))
     }
 }
 
@@ -2066,8 +2107,7 @@ pub extern "C" fn tea_string_index(string: *const TeaString, index: c_longlong) 
     }
     unsafe {
         let string_ref = &*string;
-        let bytes =
-            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let bytes = tea_string_as_bytes(string_ref);
         let text = std::str::from_utf8(bytes).unwrap_or_else(|_| panic!("invalid UTF-8 in string"));
         let chars: Vec<char> = text.chars().collect();
         let idx = index as usize;
@@ -2120,8 +2160,7 @@ pub extern "C" fn tea_string_slice(
     }
     unsafe {
         let string_ref = &*string;
-        let bytes =
-            std::slice::from_raw_parts(string_ref.data as *const u8, string_ref.len as usize);
+        let bytes = tea_string_as_bytes(string_ref);
         let text = std::str::from_utf8(bytes).unwrap_or_else(|_| panic!("invalid UTF-8 in string"));
         let chars: Vec<char> = text.chars().collect();
 
@@ -2970,14 +3009,12 @@ pub extern "C" fn tea_string_equal(left: *const TeaString, right: *const TeaStri
 
         let left_ref = &*left;
         let right_ref = &*right;
-        if left_ref.len != right_ref.len {
+        if tea_string_len(left_ref) != tea_string_len(right_ref) {
             return 0;
         }
 
-        let left_bytes =
-            std::slice::from_raw_parts(left_ref.data as *const u8, left_ref.len as usize);
-        let right_bytes =
-            std::slice::from_raw_parts(right_ref.data as *const u8, right_ref.len as usize);
+        let left_bytes = tea_string_as_bytes(left_ref);
+        let right_bytes = tea_string_as_bytes(right_ref);
         if left_bytes == right_bytes {
             1
         } else {

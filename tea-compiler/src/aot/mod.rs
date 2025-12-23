@@ -3575,36 +3575,30 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .into_pointer_value();
 
         // Set tag = 1 (inline)
-        let tag_ptr = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_struct_gep(list_type, list_ptr, 0, "tag_ptr"),
-            )?
-        };
+        let tag_ptr = map_builder_error(
+            self.builder
+                .build_struct_gep(list_type, list_ptr, 0, "tag_ptr"),
+        )?;
         map_builder_error(
             self.builder
                 .build_store(tag_ptr, self.context.i8_type().const_int(1, false)),
         )?;
 
         // Set length
-        let len_ptr = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_struct_gep(list_type, list_ptr, 1, "len_ptr"),
-            )?
-        };
+        let len_ptr = map_builder_error(
+            self.builder
+                .build_struct_gep(list_type, list_ptr, 1, "len_ptr"),
+        )?;
         map_builder_error(
             self.builder
                 .build_store(len_ptr, self.context.i8_type().const_int(len as u64, false)),
         )?;
 
         // Get pointer to data array (field index 3)
-        let data_ptr = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_struct_gep(list_type, list_ptr, 3, "data_ptr"),
-            )?
-        };
+        let data_ptr = map_builder_error(
+            self.builder
+                .build_struct_gep(list_type, list_ptr, 3, "data_ptr"),
+        )?;
 
         // Compile and store each element
         let tea_value_type = self
@@ -3966,14 +3960,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .ok_or_else(|| anyhow!("TeaValue type not found"))?;
 
                 // Get pointer to fields field (index 1)
-                let fields_ptr_ptr = unsafe {
-                    map_builder_error(self.builder.build_struct_gep(
-                        struct_instance_type,
-                        pointer,
-                        1,
-                        "fields_ptr_ptr",
-                    ))?
-                };
+                let fields_ptr_ptr = map_builder_error(self.builder.build_struct_gep(
+                    struct_instance_type,
+                    pointer,
+                    1,
+                    "fields_ptr_ptr",
+                ))?;
 
                 // Load the fields pointer
                 let fields_ptr = map_builder_error(self.builder.build_load(
@@ -3995,14 +3987,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
                 // Get pointer to payload field within TeaValue (field 2 is payload)
                 // TeaValue: { tag: i32 (field 0), padding: i32 (field 1), payload: i64 (field 2) }
-                let payload_ptr = unsafe {
-                    map_builder_error(self.builder.build_struct_gep(
-                        tea_value_type,
-                        field_ptr,
-                        2,
-                        "field_payload_ptr",
-                    ))?
-                };
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    field_ptr,
+                    2,
+                    "field_payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_load(
                     self.context.i64_type(),
                     payload_ptr,
@@ -4822,38 +4812,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .into_pointer_value();
 
         // Set tag = 1 (inline)
-        let tag_ptr = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_struct_gep(string_type, string_ptr, 0, "tag_ptr"),
-            )?
-        };
+        let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+            string_type,
+            string_ptr,
+            0,
+            "tag_ptr",
+        ))?;
         map_builder_error(
             self.builder
                 .build_store(tag_ptr, self.context.i8_type().const_int(1, false)),
         )?;
 
         // Set length
-        let len_ptr = unsafe {
-            map_builder_error(
-                self.builder
-                    .build_struct_gep(string_type, string_ptr, 1, "len_ptr"),
-            )?
-        };
+        let len_ptr = map_builder_error(self.builder.build_struct_gep(
+            string_type,
+            string_ptr,
+            1,
+            "len_ptr",
+        ))?;
         map_builder_error(
             self.builder
                 .build_store(len_ptr, self.context.i8_type().const_int(len as u64, false)),
         )?;
 
         // Copy bytes into inline data array
-        let data_ptr = unsafe {
-            map_builder_error(self.builder.build_struct_gep(
-                string_type,
-                string_ptr,
-                2,
-                "data_ptr",
-            ))?
-        };
+        let data_ptr = map_builder_error(self.builder.build_struct_gep(
+            string_type,
+            string_ptr,
+            2,
+            "data_ptr",
+        ))?;
 
         for (i, &byte) in bytes.iter().enumerate() {
             let elem_ptr = unsafe {

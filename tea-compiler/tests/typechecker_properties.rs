@@ -56,8 +56,8 @@ impl TestType {
     }
 }
 
-/// Strategy to generate leaf types (non-recursive).
-fn leaf_type() -> impl Strategy<Value = TestType> {
+/// Strategy to generate concrete leaf types (no generics).
+fn concrete_leaf_type() -> impl Strategy<Value = TestType> {
     prop_oneof![
         Just(TestType::Bool),
         Just(TestType::Int),
@@ -65,6 +65,13 @@ fn leaf_type() -> impl Strategy<Value = TestType> {
         Just(TestType::String),
         Just(TestType::Nil),
         Just(TestType::Void),
+    ]
+}
+
+/// Strategy to generate leaf types (non-recursive), including generics.
+fn leaf_type() -> impl Strategy<Value = TestType> {
+    prop_oneof![
+        concrete_leaf_type(),
         "[A-Z]".prop_map(TestType::GenericParameter),
     ]
 }
@@ -185,12 +192,12 @@ fn unify_types(
 // =============================================================================
 
 proptest! {
-    /// Property: substitute_type is idempotent when the mapping doesn't contain
-    /// types with generic parameters (applying it twice gives the same result).
+    /// Property: substitute_type is idempotent when the mapping contains only
+    /// concrete types (applying it twice gives the same result).
     #[test]
     fn substitute_idempotent_with_concrete_mapping(
         ty in arb_type(),
-        mapping in prop::collection::hash_map("[A-Z]", leaf_type(), 0..5)
+        mapping in prop::collection::hash_map("[A-Z]", concrete_leaf_type(), 0..5)
     ) {
         let once = substitute_type(&ty, &mapping);
         let twice = substitute_type(&once, &mapping);

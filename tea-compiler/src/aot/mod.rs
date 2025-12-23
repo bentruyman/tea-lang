@@ -887,6 +887,179 @@ macro_rules! define_ffi_print_fn {
     };
 }
 
+/// Macro for no-arg builtin calls that return a string
+macro_rules! compile_noarg_string_call {
+    ($fn_name:ident, $ensure_fn:ident, $ffi_name:literal, $builtin_name:literal) => {
+        fn $fn_name(
+            &mut self,
+            arguments: &[crate::ast::CallArgument],
+            _function: FunctionValue<'ctx>,
+            _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        ) -> Result<ExprValue<'ctx>> {
+            if !arguments.is_empty() {
+                bail!(concat!($builtin_name, " expects no arguments"));
+            }
+            let func = self.$ensure_fn();
+            let pointer = self
+                .call_function(func, &[], $ffi_name)?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!(concat!($ffi_name, " returned no value")))?
+                .into_pointer_value();
+            Ok(ExprValue::String(pointer))
+        }
+    };
+}
+
+/// Macro for single-string-arg builtin calls that return a string
+macro_rules! compile_string_to_string_call {
+    ($fn_name:ident, $ensure_fn:ident, $ffi_name:literal, $builtin_name:literal) => {
+        fn $fn_name(
+            &mut self,
+            arguments: &[crate::ast::CallArgument],
+            function: FunctionValue<'ctx>,
+            locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        ) -> Result<ExprValue<'ctx>> {
+            if arguments.len() != 1 {
+                bail!(concat!($builtin_name, " expects exactly 1 argument"));
+            }
+            if arguments[0].name.is_some() {
+                bail!(concat!(
+                    "named arguments are not supported for ",
+                    $builtin_name
+                ));
+            }
+            let arg_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+            let arg_ptr = match arg_expr {
+                ExprValue::String(ptr) => ptr,
+                _ => bail!(concat!($builtin_name, " expects a String argument")),
+            };
+            let func = self.$ensure_fn();
+            let pointer = self
+                .call_function(func, &[arg_ptr.into()], $ffi_name)?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!(concat!($ffi_name, " returned no value")))?
+                .into_pointer_value();
+            Ok(ExprValue::String(pointer))
+        }
+    };
+}
+
+/// Macro for single-string-arg builtin calls that return a list
+macro_rules! compile_string_to_list_call {
+    ($fn_name:ident, $ensure_fn:ident, $ffi_name:literal, $builtin_name:literal) => {
+        fn $fn_name(
+            &mut self,
+            arguments: &[crate::ast::CallArgument],
+            function: FunctionValue<'ctx>,
+            locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        ) -> Result<ExprValue<'ctx>> {
+            if arguments.len() != 1 {
+                bail!(concat!($builtin_name, " expects exactly 1 argument"));
+            }
+            if arguments[0].name.is_some() {
+                bail!(concat!(
+                    "named arguments are not supported for ",
+                    $builtin_name
+                ));
+            }
+            let arg_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+            let arg_ptr = match arg_expr {
+                ExprValue::String(ptr) => ptr,
+                _ => bail!(concat!($builtin_name, " expects a String argument")),
+            };
+            let func = self.$ensure_fn();
+            let pointer = self
+                .call_function(func, &[arg_ptr.into()], $ffi_name)?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!(concat!($ffi_name, " returned no value")))?
+                .into_pointer_value();
+            Ok(ExprValue::List {
+                pointer,
+                element_type: ValueType::String,
+            })
+        }
+    };
+}
+
+/// Macro for single-string-arg builtin calls that return an int
+macro_rules! compile_string_to_int_call {
+    ($fn_name:ident, $ensure_fn:ident, $ffi_name:literal, $builtin_name:literal) => {
+        fn $fn_name(
+            &mut self,
+            arguments: &[crate::ast::CallArgument],
+            function: FunctionValue<'ctx>,
+            locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        ) -> Result<ExprValue<'ctx>> {
+            if arguments.len() != 1 {
+                bail!(concat!($builtin_name, " expects exactly 1 argument"));
+            }
+            if arguments[0].name.is_some() {
+                bail!(concat!(
+                    "named arguments are not supported for ",
+                    $builtin_name
+                ));
+            }
+            let arg_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+            let arg_ptr = match arg_expr {
+                ExprValue::String(ptr) => ptr,
+                _ => bail!(concat!($builtin_name, " expects a String argument")),
+            };
+            let func = self.$ensure_fn();
+            let value = self
+                .call_function(func, &[arg_ptr.into()], $ffi_name)?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!(concat!($ffi_name, " returned no value")))?
+                .into_int_value();
+            Ok(ExprValue::Int(value))
+        }
+    };
+}
+
+/// Macro for single-string-arg builtin calls that return a bool (i32)
+macro_rules! compile_string_to_bool_call {
+    ($fn_name:ident, $ensure_fn:ident, $ffi_name:literal, $builtin_name:literal) => {
+        fn $fn_name(
+            &mut self,
+            arguments: &[crate::ast::CallArgument],
+            function: FunctionValue<'ctx>,
+            locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        ) -> Result<ExprValue<'ctx>> {
+            if arguments.len() != 1 {
+                bail!(concat!($builtin_name, " expects exactly 1 argument"));
+            }
+            if arguments[0].name.is_some() {
+                bail!(concat!(
+                    "named arguments are not supported for ",
+                    $builtin_name
+                ));
+            }
+            let arg_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+            let arg_ptr = match arg_expr {
+                ExprValue::String(ptr) => ptr,
+                _ => bail!(concat!($builtin_name, " expects a String argument")),
+            };
+            let func = self.$ensure_fn();
+            let raw = self
+                .call_function(func, &[arg_ptr.into()], $ffi_name)?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!(concat!($ffi_name, " returned no value")))?
+                .into_int_value();
+            let bool_val = self.builder.build_int_compare(
+                IntPredicate::NE,
+                raw,
+                self.context.i32_type().const_zero(),
+                "bool_result",
+            )?;
+            Ok(ExprValue::Bool(bool_val))
+        }
+    };
+}
+
 // Many methods are for removed functionality but kept for potential future use
 #[allow(dead_code)]
 impl<'ctx> LlvmCodeGenerator<'ctx> {
@@ -6338,24 +6511,31 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::String)))
     }
 
-    fn compile_env_cwd_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("env.cwd expects no arguments");
-        }
-        let func = self.ensure_env_cwd_fn();
-        let pointer = self
-            .call_function(func, &[], "tea_env_cwd")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_env_cwd returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
+    // Environment directory getters (no-arg -> string)
+    compile_noarg_string_call!(
+        compile_env_cwd_call,
+        ensure_env_cwd_fn,
+        "tea_env_cwd",
+        "env.cwd"
+    );
+    compile_noarg_string_call!(
+        compile_env_temp_dir_call,
+        ensure_env_temp_dir_fn,
+        "tea_env_temp_dir",
+        "env.temp_dir"
+    );
+    compile_noarg_string_call!(
+        compile_env_home_dir_call,
+        ensure_env_home_dir_fn,
+        "tea_env_home_dir",
+        "env.home_dir"
+    );
+    compile_noarg_string_call!(
+        compile_env_config_dir_call,
+        ensure_env_config_dir_fn,
+        "tea_env_config_dir",
+        "env.config_dir"
+    );
 
     fn compile_env_set_cwd_call(
         &mut self,
@@ -6377,63 +6557,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let func = self.ensure_env_set_cwd_fn();
         self.call_function(func, &[path_ptr.into()], "tea_env_set_cwd")?;
         Ok(ExprValue::Void)
-    }
-
-    fn compile_env_temp_dir_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("env.temp_dir expects no arguments");
-        }
-        let func = self.ensure_env_temp_dir_fn();
-        let pointer = self
-            .call_function(func, &[], "tea_env_temp_dir")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_env_temp_dir returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
-
-    fn compile_env_home_dir_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("env.home_dir expects no arguments");
-        }
-        let func = self.ensure_env_home_dir_fn();
-        let pointer = self
-            .call_function(func, &[], "tea_env_home_dir")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_env_home_dir returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
-
-    fn compile_env_config_dir_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if !arguments.is_empty() {
-            bail!("env.config_dir expects no arguments");
-        }
-        let func = self.ensure_env_config_dir_fn();
-        let pointer = self
-            .call_function(func, &[], "tea_env_config_dir")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_env_config_dir returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
     }
 
     fn compile_path_join_call(
@@ -6493,86 +6616,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         })
     }
 
-    fn compile_path_dirname_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("path.dirname expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for path.dirname");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("path.dirname expects the argument to be a String"),
-        };
-        let func = self.ensure_path_dirname_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_path_dirname")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_path_dirname returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
-
-    fn compile_path_basename_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("path.basename expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for path.basename");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("path.basename expects the argument to be a String"),
-        };
-        let func = self.ensure_path_basename_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_path_basename")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_path_basename returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
-
-    fn compile_path_extension_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("path.extension expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for path.extension");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("path.extension expects the argument to be a String"),
-        };
-        let func = self.ensure_path_extension_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_path_extension")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_path_extension returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
+    // Path string transforms (string -> string)
+    compile_string_to_string_call!(
+        compile_path_dirname_call,
+        ensure_path_dirname_fn,
+        "tea_path_dirname",
+        "path.dirname"
+    );
+    compile_string_to_string_call!(
+        compile_path_basename_call,
+        ensure_path_basename_fn,
+        "tea_path_basename",
+        "path.basename"
+    );
+    compile_string_to_string_call!(
+        compile_path_extension_call,
+        ensure_path_extension_fn,
+        "tea_path_extension",
+        "path.extension"
+    );
 
     fn compile_path_set_extension_call(
         &mut self,
@@ -6612,59 +6674,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
-    fn compile_path_strip_extension_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("path.strip_extension expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for path.strip_extension");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("path.strip_extension expects the argument to be a String"),
-        };
-        let func = self.ensure_path_strip_extension_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_path_strip_extension")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_path_strip_extension returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
-
-    fn compile_path_normalize_call(
-        &mut self,
-        arguments: &[crate::ast::CallArgument],
-        function: FunctionValue<'ctx>,
-        locals: &mut HashMap<String, LocalVariable<'ctx>>,
-    ) -> Result<ExprValue<'ctx>> {
-        if arguments.len() != 1 {
-            bail!("path.normalize expects exactly 1 argument");
-        }
-        if arguments[0].name.is_some() {
-            bail!("named arguments are not supported for path.normalize");
-        }
-        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
-        let path_ptr = match path_expr {
-            ExprValue::String(ptr) => ptr,
-            _ => bail!("path.normalize expects the argument to be a String"),
-        };
-        let func = self.ensure_path_normalize_fn();
-        let pointer = self
-            .call_function(func, &[path_ptr.into()], "tea_path_normalize")?
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("tea_path_normalize returned no value"))?
-            .into_pointer_value();
-        Ok(ExprValue::String(pointer))
-    }
+    compile_string_to_string_call!(
+        compile_path_strip_extension_call,
+        ensure_path_strip_extension_fn,
+        "tea_path_strip_extension",
+        "path.strip_extension"
+    );
+    compile_string_to_string_call!(
+        compile_path_normalize_call,
+        ensure_path_normalize_fn,
+        "tea_path_normalize",
+        "path.normalize"
+    );
 
     fn compile_path_absolute_call(
         &mut self,

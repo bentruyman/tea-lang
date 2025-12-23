@@ -563,6 +563,330 @@ struct LlvmCodeGenerator<'ctx> {
     function_can_throw_stack: Vec<bool>,
 }
 
+/// Macros to generate FFI helper functions.
+/// Each invocation generates a method that lazily initializes an external function declaration.
+
+/// FFI for type checking utilities: (value) -> i32
+macro_rules! define_ffi_typecheck_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .i32_type()
+                .fn_type(&[self.value_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for no-param string getters: () -> string
+macro_rules! define_ffi_string_getter_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self.string_ptr_type().fn_type(&[], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for string transforms: (string) -> string
+macro_rules! define_ffi_string_transform_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .string_ptr_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for string predicates: (string) -> i32 (bool)
+macro_rules! define_ffi_string_predicate_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .i32_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for string setters: (string) -> void
+macro_rules! define_ffi_string_setter_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for two-string functions: (string, string) -> string
+macro_rules! define_ffi_string2_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self.string_ptr_type().fn_type(
+                &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+                false,
+            );
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for list to string: (list) -> string
+macro_rules! define_ffi_list_to_string_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .string_ptr_type()
+                .fn_type(&[self.list_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for string to list: (string) -> list
+macro_rules! define_ffi_string_to_list_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .list_ptr_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for string to int functions: (string) -> int
+macro_rules! define_ffi_string_to_int_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .int_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
+/// FFI for print operations with various types
+macro_rules! define_ffi_print_fn {
+    ($fn_name:ident, $field:ident, $ffi_name:literal, int) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.int_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, float) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.float_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, bool) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.context.i32_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, string) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.string_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, list) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.list_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, dict) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.dict_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, struct) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.struct_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, error) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.error_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+    ($fn_name:ident, $field:ident, $ffi_name:literal, closure) => {
+        fn $fn_name(&mut self) -> FunctionValue<'ctx> {
+            if let Some(func) = self.$field {
+                return func;
+            }
+            let fn_type = self
+                .context
+                .void_type()
+                .fn_type(&[self.closure_ptr_type().into()], false);
+            let func = self
+                .module
+                .add_function($ffi_name, fn_type, Some(Linkage::External));
+            self.$field = Some(func);
+            func
+        }
+    };
+}
+
 // Many methods are for removed functionality but kept for potential future use
 #[allow(dead_code)]
 impl<'ctx> LlvmCodeGenerator<'ctx> {
@@ -9815,275 +10139,112 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         map_builder_error(builder.build_alloca(ty, name))
     }
 
-    fn ensure_print_int(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_int {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.int_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_int", fn_type, Some(Linkage::External));
-        self.builtin_print_int = Some(func);
-        func
-    }
+    // Print functions (print without newline)
+    define_ffi_print_fn!(ensure_print_int, builtin_print_int, "tea_print_int", int);
+    define_ffi_print_fn!(
+        ensure_print_float,
+        builtin_print_float,
+        "tea_print_float",
+        float
+    );
+    define_ffi_print_fn!(
+        ensure_print_bool,
+        builtin_print_bool,
+        "tea_print_bool",
+        bool
+    );
+    define_ffi_print_fn!(
+        ensure_print_string,
+        builtin_print_string,
+        "tea_print_string",
+        string
+    );
+    define_ffi_print_fn!(
+        ensure_print_list,
+        builtin_print_list,
+        "tea_print_list",
+        list
+    );
+    define_ffi_print_fn!(
+        ensure_print_dict,
+        builtin_print_dict,
+        "tea_print_dict",
+        dict
+    );
+    define_ffi_print_fn!(
+        ensure_print_struct,
+        builtin_print_struct,
+        "tea_print_struct",
+        struct
+    );
+    define_ffi_print_fn!(
+        ensure_print_error,
+        builtin_print_error,
+        "tea_print_error",
+        error
+    );
+    define_ffi_print_fn!(
+        ensure_print_closure,
+        builtin_print_closure,
+        "tea_print_closure",
+        closure
+    );
 
-    fn ensure_print_float(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_float {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.float_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_float", fn_type, Some(Linkage::External));
-        self.builtin_print_float = Some(func);
-        func
-    }
-
-    fn ensure_print_bool(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_bool {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.context.i32_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_bool", fn_type, Some(Linkage::External));
-        self.builtin_print_bool = Some(func);
-        func
-    }
-
-    fn ensure_print_string(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_string {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_string", fn_type, Some(Linkage::External));
-        self.builtin_print_string = Some(func);
-        func
-    }
-
-    fn ensure_print_list(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_list {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.list_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_list", fn_type, Some(Linkage::External));
-        self.builtin_print_list = Some(func);
-        func
-    }
-
-    fn ensure_print_dict(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_dict {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.dict_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_dict", fn_type, Some(Linkage::External));
-        self.builtin_print_dict = Some(func);
-        func
-    }
-
-    fn ensure_print_struct(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_struct {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.struct_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_struct", fn_type, Some(Linkage::External));
-        self.builtin_print_struct = Some(func);
-        func
-    }
-
-    fn ensure_print_error(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_error {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.error_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_error", fn_type, Some(Linkage::External));
-        self.builtin_print_error = Some(func);
-        func
-    }
-
-    fn ensure_print_closure(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_print_closure {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.closure_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_print_closure", fn_type, Some(Linkage::External));
-        self.builtin_print_closure = Some(func);
-        func
-    }
-
-    fn ensure_println_int(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_int {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.int_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_int", fn_type, Some(Linkage::External));
-        self.builtin_println_int = Some(func);
-        func
-    }
-
-    fn ensure_println_float(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_float {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.float_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_float", fn_type, Some(Linkage::External));
-        self.builtin_println_float = Some(func);
-        func
-    }
-
-    fn ensure_println_bool(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_bool {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.context.i32_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_bool", fn_type, Some(Linkage::External));
-        self.builtin_println_bool = Some(func);
-        func
-    }
-
-    fn ensure_println_string(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_string {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_string", fn_type, Some(Linkage::External));
-        self.builtin_println_string = Some(func);
-        func
-    }
-
-    fn ensure_println_list(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_list {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.list_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_list", fn_type, Some(Linkage::External));
-        self.builtin_println_list = Some(func);
-        func
-    }
-
-    fn ensure_println_dict(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_dict {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.dict_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_dict", fn_type, Some(Linkage::External));
-        self.builtin_println_dict = Some(func);
-        func
-    }
-
-    fn ensure_println_struct(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_struct {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.struct_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_struct", fn_type, Some(Linkage::External));
-        self.builtin_println_struct = Some(func);
-        func
-    }
-
-    fn ensure_println_error(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_error {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.error_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_println_error", fn_type, Some(Linkage::External));
-        self.builtin_println_error = Some(func);
-        func
-    }
-
-    fn ensure_println_closure(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.builtin_println_closure {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.closure_ptr_type().into()], false);
-        let func =
-            self.module
-                .add_function("tea_println_closure", fn_type, Some(Linkage::External));
-        self.builtin_println_closure = Some(func);
-        func
-    }
+    // Println functions (print with newline)
+    define_ffi_print_fn!(
+        ensure_println_int,
+        builtin_println_int,
+        "tea_println_int",
+        int
+    );
+    define_ffi_print_fn!(
+        ensure_println_float,
+        builtin_println_float,
+        "tea_println_float",
+        float
+    );
+    define_ffi_print_fn!(
+        ensure_println_bool,
+        builtin_println_bool,
+        "tea_println_bool",
+        bool
+    );
+    define_ffi_print_fn!(
+        ensure_println_string,
+        builtin_println_string,
+        "tea_println_string",
+        string
+    );
+    define_ffi_print_fn!(
+        ensure_println_list,
+        builtin_println_list,
+        "tea_println_list",
+        list
+    );
+    define_ffi_print_fn!(
+        ensure_println_dict,
+        builtin_println_dict,
+        "tea_println_dict",
+        dict
+    );
+    define_ffi_print_fn!(
+        ensure_println_struct,
+        builtin_println_struct,
+        "tea_println_struct",
+        struct
+    );
+    define_ffi_print_fn!(
+        ensure_println_error,
+        builtin_println_error,
+        "tea_println_error",
+        error
+    );
+    define_ffi_print_fn!(
+        ensure_println_closure,
+        builtin_println_closure,
+        "tea_println_closure",
+        closure
+    );
 
     fn ensure_type_of_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.builtin_type_of_fn {
@@ -10342,125 +10503,31 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
-    fn ensure_util_is_nil_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_nil_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_nil", fn_type, Some(Linkage::External));
-        self.util_is_nil_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_bool_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_bool_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_bool", fn_type, Some(Linkage::External));
-        self.util_is_bool_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_int_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_int_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_int", fn_type, Some(Linkage::External));
-        self.util_is_int_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_float_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_float_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_float", fn_type, Some(Linkage::External));
-        self.util_is_float_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_string_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_string_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_string", fn_type, Some(Linkage::External));
-        self.util_is_string_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_list_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_list_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_list", fn_type, Some(Linkage::External));
-        self.util_is_list_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_struct_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_struct_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_struct", fn_type, Some(Linkage::External));
-        self.util_is_struct_fn = Some(func);
-        func
-    }
-
-    fn ensure_util_is_error_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.util_is_error_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.value_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_util_is_error", fn_type, Some(Linkage::External));
-        self.util_is_error_fn = Some(func);
-        func
-    }
+    // Type checking utilities
+    define_ffi_typecheck_fn!(ensure_util_is_nil_fn, util_is_nil_fn, "tea_util_is_nil");
+    define_ffi_typecheck_fn!(ensure_util_is_bool_fn, util_is_bool_fn, "tea_util_is_bool");
+    define_ffi_typecheck_fn!(ensure_util_is_int_fn, util_is_int_fn, "tea_util_is_int");
+    define_ffi_typecheck_fn!(
+        ensure_util_is_float_fn,
+        util_is_float_fn,
+        "tea_util_is_float"
+    );
+    define_ffi_typecheck_fn!(
+        ensure_util_is_string_fn,
+        util_is_string_fn,
+        "tea_util_is_string"
+    );
+    define_ffi_typecheck_fn!(ensure_util_is_list_fn, util_is_list_fn, "tea_util_is_list");
+    define_ffi_typecheck_fn!(
+        ensure_util_is_struct_fn,
+        util_is_struct_fn,
+        "tea_util_is_struct"
+    );
+    define_ffi_typecheck_fn!(
+        ensure_util_is_error_fn,
+        util_is_error_fn,
+        "tea_util_is_error"
+    );
 
     fn ensure_env_get_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.env_get_fn {
@@ -10558,179 +10625,68 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
-    fn ensure_env_cwd_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.env_cwd_fn {
-            return func;
-        }
-        let fn_type = self.string_ptr_type().fn_type(&[], false);
-        let func = self
-            .module
-            .add_function("tea_env_cwd", fn_type, Some(Linkage::External));
-        self.env_cwd_fn = Some(func);
-        func
-    }
+    // Environment directory getters
+    define_ffi_string_getter_fn!(ensure_env_cwd_fn, env_cwd_fn, "tea_env_cwd");
+    define_ffi_string_getter_fn!(ensure_env_temp_dir_fn, env_temp_dir_fn, "tea_env_temp_dir");
+    define_ffi_string_getter_fn!(ensure_env_home_dir_fn, env_home_dir_fn, "tea_env_home_dir");
+    define_ffi_string_getter_fn!(
+        ensure_env_config_dir_fn,
+        env_config_dir_fn,
+        "tea_env_config_dir"
+    );
 
-    fn ensure_env_set_cwd_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.env_set_cwd_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_env_set_cwd", fn_type, Some(Linkage::External));
-        self.env_set_cwd_fn = Some(func);
-        func
-    }
+    // Environment setters
+    define_ffi_string_setter_fn!(ensure_env_set_cwd_fn, env_set_cwd_fn, "tea_env_set_cwd");
 
-    fn ensure_env_temp_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.env_temp_dir_fn {
-            return func;
-        }
-        let fn_type = self.string_ptr_type().fn_type(&[], false);
-        let func = self
-            .module
-            .add_function("tea_env_temp_dir", fn_type, Some(Linkage::External));
-        self.env_temp_dir_fn = Some(func);
-        func
-    }
+    // Path functions
+    define_ffi_list_to_string_fn!(ensure_path_join_fn, path_join_fn, "tea_path_join");
+    define_ffi_string_to_list_fn!(
+        ensure_path_components_fn,
+        path_components_fn,
+        "tea_path_components"
+    );
+    define_ffi_string_transform_fn!(ensure_path_dirname_fn, path_dirname_fn, "tea_path_dirname");
+    define_ffi_string_transform_fn!(
+        ensure_path_basename_fn,
+        path_basename_fn,
+        "tea_path_basename"
+    );
+    define_ffi_string_transform_fn!(
+        ensure_path_extension_fn,
+        path_extension_fn,
+        "tea_path_extension"
+    );
 
-    fn ensure_env_home_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.env_home_dir_fn {
-            return func;
-        }
-        let fn_type = self.string_ptr_type().fn_type(&[], false);
-        let func = self
-            .module
-            .add_function("tea_env_home_dir", fn_type, Some(Linkage::External));
-        self.env_home_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_env_config_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.env_config_dir_fn {
-            return func;
-        }
-        let fn_type = self.string_ptr_type().fn_type(&[], false);
-        let func = self
-            .module
-            .add_function("tea_env_config_dir", fn_type, Some(Linkage::External));
-        self.env_config_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_join_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_join_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.list_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_path_join", fn_type, Some(Linkage::External));
-        self.path_join_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_components_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_components_fn {
-            return func;
-        }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func =
-            self.module
-                .add_function("tea_path_components", fn_type, Some(Linkage::External));
-        self.path_components_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_dirname_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_dirname_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_path_dirname", fn_type, Some(Linkage::External));
-        self.path_dirname_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_basename_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_basename_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_path_basename", fn_type, Some(Linkage::External));
-        self.path_basename_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_extension_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_extension_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_path_extension", fn_type, Some(Linkage::External));
-        self.path_extension_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_set_extension_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_set_extension_fn {
-            return func;
-        }
-        let param_types = [self.string_ptr_type().into(), self.string_ptr_type().into()];
-        let fn_type = self.string_ptr_type().fn_type(&param_types, false);
-        let func =
-            self.module
-                .add_function("tea_path_set_extension", fn_type, Some(Linkage::External));
-        self.path_set_extension_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_strip_extension_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_strip_extension_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func =
-            self.module
-                .add_function("tea_path_strip_extension", fn_type, Some(Linkage::External));
-        self.path_strip_extension_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_normalize_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_normalize_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_path_normalize", fn_type, Some(Linkage::External));
-        self.path_normalize_fn = Some(func);
-        func
-    }
+    define_ffi_string2_fn!(
+        ensure_path_set_extension_fn,
+        path_set_extension_fn,
+        "tea_path_set_extension"
+    );
+    define_ffi_string_transform_fn!(
+        ensure_path_strip_extension_fn,
+        path_strip_extension_fn,
+        "tea_path_strip_extension"
+    );
+    define_ffi_string_transform_fn!(
+        ensure_path_normalize_fn,
+        path_normalize_fn,
+        "tea_path_normalize"
+    );
+    define_ffi_string2_fn!(
+        ensure_path_relative_fn,
+        path_relative_fn,
+        "tea_path_relative"
+    );
+    define_ffi_string_predicate_fn!(
+        ensure_path_is_absolute_fn,
+        path_is_absolute_fn,
+        "tea_path_is_absolute"
+    );
+    define_ffi_string_getter_fn!(
+        ensure_path_separator_fn,
+        path_separator_fn,
+        "tea_path_separator"
+    );
 
     fn ensure_path_absolute_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.path_absolute_fn {
@@ -10749,59 +10705,41 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
-    fn ensure_path_relative_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_relative_fn {
-            return func;
-        }
-        let param_types = [self.string_ptr_type().into(), self.string_ptr_type().into()];
-        let fn_type = self.string_ptr_type().fn_type(&param_types, false);
-        let func = self
-            .module
-            .add_function("tea_path_relative", fn_type, Some(Linkage::External));
-        self.path_relative_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_is_absolute_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_is_absolute_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func =
-            self.module
-                .add_function("tea_path_is_absolute", fn_type, Some(Linkage::External));
-        self.path_is_absolute_fn = Some(func);
-        func
-    }
-
-    fn ensure_path_separator_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.path_separator_fn {
-            return func;
-        }
-        let fn_type = self.string_ptr_type().fn_type(&[], false);
-        let func = self
-            .module
-            .add_function("tea_path_separator", fn_type, Some(Linkage::External));
-        self.path_separator_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_read_text_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_read_text_fn {
-            return func;
-        }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_read_text", fn_type, Some(Linkage::External));
-        self.fs_read_text_fn = Some(func);
-        func
-    }
+    // Filesystem functions
+    define_ffi_string_transform_fn!(ensure_fs_read_text_fn, fs_read_text_fn, "tea_fs_read_text");
+    define_ffi_string_to_list_fn!(
+        ensure_fs_read_bytes_fn,
+        fs_read_bytes_fn,
+        "tea_fs_read_bytes"
+    );
+    define_ffi_string_setter_fn!(
+        ensure_fs_ensure_dir_fn,
+        fs_ensure_dir_fn,
+        "tea_fs_ensure_dir"
+    );
+    define_ffi_string_setter_fn!(
+        ensure_fs_ensure_parent_fn,
+        fs_ensure_parent_fn,
+        "tea_fs_ensure_parent"
+    );
+    define_ffi_string_setter_fn!(ensure_fs_remove_fn, fs_remove_fn, "tea_fs_remove");
+    define_ffi_string_predicate_fn!(ensure_fs_exists_fn, fs_exists_fn, "tea_fs_exists");
+    define_ffi_string_predicate_fn!(ensure_fs_is_dir_fn, fs_is_dir_fn, "tea_fs_is_dir");
+    define_ffi_string_predicate_fn!(
+        ensure_fs_is_symlink_fn,
+        fs_is_symlink_fn,
+        "tea_fs_is_symlink"
+    );
+    define_ffi_string_to_list_fn!(ensure_fs_list_dir_fn, fs_list_dir_fn, "tea_fs_list_dir");
+    define_ffi_string_to_list_fn!(ensure_fs_walk_fn, fs_walk_fn, "tea_fs_walk");
+    define_ffi_string_to_list_fn!(ensure_fs_glob_fn, fs_glob_fn, "tea_fs_glob");
+    define_ffi_string_to_int_fn!(ensure_fs_size_fn, fs_size_fn, "tea_fs_size");
+    define_ffi_string_to_int_fn!(ensure_fs_modified_fn, fs_modified_fn, "tea_fs_modified");
+    define_ffi_string_to_int_fn!(
+        ensure_fs_permissions_fn,
+        fs_permissions_fn,
+        "tea_fs_permissions"
+    );
 
     fn ensure_fs_write_text_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.fs_write_text_fn {
@@ -10826,20 +10764,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_fs_write_text_atomic", fn_type, Some(Linkage::External));
         self.fs_write_text_atomic_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_read_bytes_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_read_bytes_fn {
-            return func;
-        }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_read_bytes", fn_type, Some(Linkage::External));
-        self.fs_read_bytes_fn = Some(func);
         func
     }
 
@@ -10884,180 +10808,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_fs_create_dir", fn_type, Some(Linkage::External));
         self.fs_create_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_ensure_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_ensure_dir_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_ensure_dir", fn_type, Some(Linkage::External));
-        self.fs_ensure_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_ensure_parent_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_ensure_parent_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func =
-            self.module
-                .add_function("tea_fs_ensure_parent", fn_type, Some(Linkage::External));
-        self.fs_ensure_parent_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_remove_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_remove_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .void_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_remove", fn_type, Some(Linkage::External));
-        self.fs_remove_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_exists_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_exists_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_exists", fn_type, Some(Linkage::External));
-        self.fs_exists_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_is_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_is_dir_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_is_dir", fn_type, Some(Linkage::External));
-        self.fs_is_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_is_symlink_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_is_symlink_fn {
-            return func;
-        }
-        let fn_type = self
-            .context
-            .i32_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_is_symlink", fn_type, Some(Linkage::External));
-        self.fs_is_symlink_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_list_dir_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_list_dir_fn {
-            return func;
-        }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_list_dir", fn_type, Some(Linkage::External));
-        self.fs_list_dir_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_walk_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_walk_fn {
-            return func;
-        }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_walk", fn_type, Some(Linkage::External));
-        self.fs_walk_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_glob_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_glob_fn {
-            return func;
-        }
-        let fn_type = self
-            .list_ptr_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_glob", fn_type, Some(Linkage::External));
-        self.fs_glob_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_size_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_size_fn {
-            return func;
-        }
-        let fn_type = self
-            .int_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_size", fn_type, Some(Linkage::External));
-        self.fs_size_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_modified_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_modified_fn {
-            return func;
-        }
-        let fn_type = self
-            .int_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_modified", fn_type, Some(Linkage::External));
-        self.fs_modified_fn = Some(func);
-        func
-    }
-
-    fn ensure_fs_permissions_fn(&mut self) -> FunctionValue<'ctx> {
-        if let Some(func) = self.fs_permissions_fn {
-            return func;
-        }
-        let fn_type = self
-            .int_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
-        let func = self
-            .module
-            .add_function("tea_fs_permissions", fn_type, Some(Linkage::External));
-        self.fs_permissions_fn = Some(func);
         func
     }
 

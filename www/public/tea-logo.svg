@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="260px" height="260px" viewBox="0 0 260 260" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>tea</title>
+    <defs>
+        <path d="M0,0 L260,0 L260,260 L0,260 L0,0 Z" id="path-1"></path>
+    </defs>
+    <g id="tea" stroke="none" fill="none" xlink:href="#path-1">
+        <!-- Updated colors to use emerald palette (#5EE9B5, #00BC7D, #006045) -->
+        <path d="M171.5,84 C176.27167,40.7930161 200.543468,16.1263495 244.315393,10 C246.885807,47.914944 222.614009,72.5816107 171.5,84 Z" id="Path" stroke="#006045" stroke-width="18" fill="#5EE9B5" fill-rule="evenodd" stroke-linejoin="round"></path>
+        <path d="M130.800849,250 C83.4571888,250 8.77609963,236.94477 13.734905,78 L245.054441,78 C254.639823,189.904753 216.555293,247.238087 130.800849,250 Z" id="Path" fill="#5EE9B5" fill-rule="evenodd"></path>
+        <path d="M62.5,137 C64.8709503,210.333333 86.5368673,247 127.497751,247 C188.939076,247 241.31972,221.281549 244.5,137 C180.19569,137 119.529024,137 62.5,137 Z" id="Path" fill="#00BC7D" fill-rule="evenodd"></path>
+        <path d="M130.800849,250 C83.4571888,250 8.77609963,236.94477 13.734905,78 L245.054441,78 C254.639823,189.904753 216.555293,247.238087 130.800849,250 Z" id="Path" stroke="#006045" stroke-width="20" stroke-linejoin="round"></path>
+        <line x1="16.5" y1="137.5" x2="244.5" y2="137.5" id="Path" stroke="#006045" stroke-width="15"></line>
+    </g>
+</svg>

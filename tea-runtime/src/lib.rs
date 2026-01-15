@@ -269,6 +269,190 @@ pub extern "C" fn tea_print_string(value: *const TeaString) {
     }
 }
 
+/// Heap string layout (tag=0):
+/// - data[0..8]: pointer to null-terminated buffer
+/// - data[8..16]: length (number of valid bytes, excluding null terminator)
+/// - data[16..22]: capacity (only 6 bytes, but sufficient for reasonable strings)
+///
+/// When capacity > length, there's room to append without reallocation.
+
+/// Get capacity from a heap string (returns 0 for inline strings)
+unsafe fn tea_string_capacity(string_ref: &TeaString) -> usize {
+    if string_ref.tag == 1 {
+        // Inline strings have no extra capacity
+        0
+    } else {
+        // Read capacity from bytes 16-22 (6 bytes, little-endian)
+        let mut cap_bytes = [0u8; 8];
+        cap_bytes[0..6].copy_from_slice(&string_ref.data[16..22]);
+        u64::from_le_bytes(cap_bytes) as usize
+    }
+}
+
+/// Set capacity on a heap string
+unsafe fn tea_string_set_capacity(string_ref: &mut TeaString, capacity: usize) {
+    debug_assert!(string_ref.tag == 0, "cannot set capacity on inline string");
+    let cap_bytes = (capacity as u64).to_le_bytes();
+    string_ref.data[16..22].copy_from_slice(&cap_bytes[0..6]);
+}
+
+/// Set length on a heap string
+unsafe fn tea_string_set_len(string_ref: &mut TeaString, len: usize) {
+    debug_assert!(string_ref.tag == 0, "cannot set len on inline heap string");
+    let len_bytes = (len as i64).to_ne_bytes();
+    string_ref.data[8..16].copy_from_slice(&len_bytes);
+}
+
+/// Get mutable pointer to heap string data
+unsafe fn tea_string_data_ptr_mut(string_ref: &TeaString) -> *mut u8 {
+    debug_assert!(
+        string_ref.tag == 0,
+        "cannot get mutable ptr for inline string"
+    );
+    let mut ptr_bytes = [0u8; 8];
+    ptr_bytes.copy_from_slice(&string_ref.data[0..8]);
+    usize::from_ne_bytes(ptr_bytes) as *mut u8
+}
+
+/// Set heap data pointer
+unsafe fn tea_string_set_data_ptr(string_ref: &mut TeaString, ptr: *mut u8) {
+    debug_assert!(string_ref.tag == 0, "cannot set data ptr on inline string");
+    let ptr_bytes = (ptr as usize).to_ne_bytes();
+    string_ref.data[0..8].copy_from_slice(&ptr_bytes);
+}
+
+/// Allocate a string with extra capacity for efficient appending.
+/// The returned string has the given content but room to grow.
+#[no_mangle]
+pub extern "C" fn tea_string_with_capacity(
+    ptr: *const c_char,
+    len: c_longlong,
+    capacity: c_longlong,
+) -> *mut TeaString {
+    unsafe {
+        let len = len as usize;
+        let capacity = (capacity as usize).max(len);
+
+        // Allocate buffer with capacity + 1 for null terminator
+        let mut buffer = Vec::with_capacity(capacity + 1);
+        if len > 0 {
+            let bytes = std::slice::from_raw_parts(ptr as *const u8, len);
+            buffer.extend_from_slice(bytes);
+        }
+        // Pad to capacity and add null terminator
+        buffer.resize(capacity + 1, 0);
+        let data_ptr = buffer.as_mut_ptr();
+        std::mem::forget(buffer);
+
+        // Create heap string
+        let mut tea_string = TeaString {
+            tag: 0,
+            len: 0,
+            data: [0; 22],
+        };
+
+        tea_string_set_data_ptr(&mut tea_string, data_ptr);
+        tea_string_set_len(&mut tea_string, len);
+        tea_string_set_capacity(&mut tea_string, capacity);
+
+        Box::into_raw(Box::new(tea_string))
+    }
+}
+
+/// Push bytes onto a string, growing capacity if needed.
+/// This mutates the string in place and returns it (possibly reallocated).
+#[no_mangle]
+pub extern "C" fn tea_string_push_str(
+    target: *mut TeaString,
+    src: *const TeaString,
+) -> *mut TeaString {
+    unsafe {
+        if target.is_null() {
+            // If target is null, just clone src
+            let src_bytes = if src.is_null() {
+                &[]
+            } else {
+                tea_string_as_bytes(&*src)
+            };
+            return alloc_tea_string(std::str::from_utf8_unchecked(src_bytes));
+        }
+
+        let target_ref = &mut *target;
+        let src_bytes = if src.is_null() {
+            &[]
+        } else {
+            tea_string_as_bytes(&*src)
+        };
+
+        if src_bytes.is_empty() {
+            return target;
+        }
+
+        let target_len = tea_string_len(target_ref);
+        let src_len = src_bytes.len();
+        let new_len = target_len + src_len;
+
+        // If target is inline, convert to heap with capacity
+        if target_ref.tag == 1 {
+            // Convert inline to heap with growth capacity
+            let target_bytes = tea_string_as_bytes(target_ref);
+            let new_capacity = (new_len * 2).max(32);
+            let mut buffer = Vec::with_capacity(new_capacity + 1);
+            buffer.extend_from_slice(target_bytes);
+            buffer.extend_from_slice(src_bytes);
+            buffer.resize(new_capacity + 1, 0);
+            let data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            target_ref.tag = 0;
+            target_ref.len = 0;
+            tea_string_set_data_ptr(target_ref, data_ptr);
+            tea_string_set_len(target_ref, new_len);
+            tea_string_set_capacity(target_ref, new_capacity);
+            return target;
+        }
+
+        // Target is heap string
+        let capacity = tea_string_capacity(target_ref);
+
+        if new_len <= capacity {
+            // Enough capacity, just append in place
+            let data_ptr = tea_string_data_ptr_mut(target_ref);
+            std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), data_ptr.add(target_len), src_len);
+            *data_ptr.add(new_len) = 0; // null terminator
+            tea_string_set_len(target_ref, new_len);
+            target
+        } else {
+            // Need to grow - double capacity or fit new_len, whichever is larger
+            let new_capacity = (capacity * 2).max(new_len).max(32);
+            let old_data_ptr = tea_string_data_ptr_mut(target_ref);
+
+            // Allocate new buffer
+            let mut buffer = Vec::with_capacity(new_capacity + 1);
+            let old_bytes = std::slice::from_raw_parts(old_data_ptr, target_len);
+            buffer.extend_from_slice(old_bytes);
+            buffer.extend_from_slice(src_bytes);
+            buffer.resize(new_capacity + 1, 0);
+            let new_data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            // Free old buffer (it was allocated as Vec, so use Vec to free)
+            // The old buffer had capacity + 1 bytes
+            let old_capacity = capacity;
+            drop(Vec::from_raw_parts(
+                old_data_ptr,
+                target_len + 1,
+                old_capacity + 1,
+            ));
+
+            tea_string_set_data_ptr(target_ref, new_data_ptr);
+            tea_string_set_len(target_ref, new_len);
+            tea_string_set_capacity(target_ref, new_capacity);
+            target
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn tea_string_concat(
     left: *const TeaString,

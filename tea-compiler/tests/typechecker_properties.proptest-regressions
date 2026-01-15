@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 8b6862c239ff0ad00b72f06fc4ff83304cd4081c3f926f5b6dd984b5f6779773 # shrinks to ty = Optional(GenericParameter("E")), mapping = {"J": Bool, "E": GenericParameter("J")}

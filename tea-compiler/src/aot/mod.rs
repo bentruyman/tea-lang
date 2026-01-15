@@ -509,6 +509,7 @@ struct LlvmCodeGenerator<'ctx> {
     string_index_fn: Option<FunctionValue<'ctx>>,
     list_concat_fn: Option<FunctionValue<'ctx>>,
     string_concat_fn: Option<FunctionValue<'ctx>>,
+    string_push_str_fn: Option<FunctionValue<'ctx>>,
     string_slice_fn: Option<FunctionValue<'ctx>>,
     list_slice_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
@@ -1178,6 +1179,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             string_index_fn: None,
             list_concat_fn: None,
             string_concat_fn: None,
+            string_push_str_fn: None,
             string_slice_fn: None,
             list_slice_fn: None,
             struct_set_fn: None,
@@ -3246,6 +3248,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     }
 
                     let var_ty = variable.ty.clone();
+
+                    // Optimization: detect `var = var + expr` pattern for strings
+                    // and use efficient push_str instead of concat
+                    if let ValueType::String = &var_ty {
+                        if let Some(optimized) = self.try_compile_string_push_assignment(
+                            &identifier.name,
+                            &assignment.value,
+                            function,
+                            locals,
+                            &variable,
+                        )? {
+                            return Ok(optimized);
+                        }
+                    }
+
                     let value = self.compile_expression(&assignment.value, function, locals)?;
                     let converted_value = self.convert_expr_to_type(value, &var_ty)?;
 
@@ -3315,6 +3332,64 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             _ => bail!("only identifier and indexed assignment supported"),
         }
+    }
+
+    /// Try to optimize `var = var + expr` into a push_str operation for strings.
+    /// Returns Some(ExprValue::Void) if the optimization was applied, None otherwise.
+    fn try_compile_string_push_assignment(
+        &mut self,
+        target_name: &str,
+        value_expr: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        variable: &LocalVariable<'ctx>,
+    ) -> Result<Option<ExprValue<'ctx>>> {
+        // Check if value is a binary Add expression where the left side is the target variable
+        if let ExpressionKind::Binary(binary) = &value_expr.kind {
+            if matches!(binary.operator, BinaryOperator::Add) {
+                if let ExpressionKind::Identifier(left_id) = &binary.left.kind {
+                    if left_id.name == target_name {
+                        // This is `var = var + expr` - use push_str optimization
+                        // Compile the right-hand side (the part being appended)
+                        let rhs = self.compile_expression(&binary.right, function, locals)?;
+                        let rhs_ptr = rhs.into_string()?;
+
+                        // Load current string value
+                        let current_ptr = if let Some(pointer) = variable.pointer {
+                            let loaded =
+                                self.load_from_pointer(pointer, &ValueType::String, "current_str")?;
+                            loaded.into_string()?
+                        } else if let Some(value) = variable.value {
+                            value.into_pointer_value()
+                        } else {
+                            return Ok(None);
+                        };
+
+                        // Call push_str which mutates in place
+                        let new_ptr = self.push_string_value(current_ptr, rhs_ptr)?;
+
+                        // Store the (possibly reallocated) result back
+                        if let Some(pointer) = variable.pointer {
+                            map_builder_error(self.builder.build_store(pointer, new_ptr))?;
+                        } else if variable.value.is_some() && variable.mutable {
+                            // SSA value - update local
+                            locals.insert(
+                                target_name.to_string(),
+                                LocalVariable {
+                                    pointer: None,
+                                    value: Some(new_ptr.into()),
+                                    ty: ValueType::String,
+                                    mutable: true,
+                                },
+                            );
+                        }
+
+                        return Ok(Some(ExprValue::Void));
+                    }
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn compile_indexed_assignment(
@@ -9614,6 +9689,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(result)
     }
 
+    /// Push string onto target, mutating in place. Returns possibly reallocated target.
+    fn push_string_value(
+        &mut self,
+        target: PointerValue<'ctx>,
+        src: PointerValue<'ctx>,
+    ) -> Result<PointerValue<'ctx>> {
+        let push_fn = self.ensure_string_push_str_fn();
+        let result = self
+            .call_function(push_fn, &[target.into(), src.into()], "push_str")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_push_str returned no value"))?
+            .into_pointer_value();
+        Ok(result)
+    }
+
     fn concat_list_values(
         &mut self,
         left: PointerValue<'ctx>,
@@ -10803,6 +10894,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_string_concat", fn_type, Some(Linkage::External));
         self.string_concat_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_push_str_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_push_str_fn {
+            return func;
+        }
+        // tea_string_push_str(target: *TeaString, src: *TeaString) -> *TeaString
+        let fn_type = self.string_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_push_str", fn_type, Some(Linkage::External));
+        self.string_push_str_fn = Some(func);
         func
     }
 

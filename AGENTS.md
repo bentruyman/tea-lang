@@ -1,4 +1,4 @@
-# Agent Guidelines for tea-lang
+# Agent Guidelines for tea-lanmg
 
 ## Development Commands
 
@@ -29,6 +29,14 @@
 - **All codegen**: `make codegen` — Runs both
 
 **Important**: AST and tree-sitter files are code-generated. Edit `spec/ast.yaml` or `spec/tokens.toml`, then run codegen.
+
+### Benchmarking
+
+- **Run all benchmarks**: `./scripts/bench.sh` — Compares Tea vs Rust implementations
+- **Single benchmark**: `./scripts/bench.sh <name> [warmup] [runs]` (e.g., `./scripts/bench.sh strings 3 10`)
+- **With JS comparison**: `./scripts/bench.sh --include-js all`
+
+Compiled binaries are cached in `~/.local/state/tea/cache`. Delete to force rebuild.
 
 ## Architecture Overview
 

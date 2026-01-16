@@ -106,7 +106,7 @@ var maybe_name: String? = nil
 
 # Check before use
 if maybe_name != nil
-  print(maybe_name!)
+  @println(maybe_name!)
 end
 
 # Or use nil coalescing
@@ -172,7 +172,7 @@ use env = "std.env"
 var args = env.args()
 if @len(args) > 1
   var first_arg = args[1]
-  print(first_arg)
+  @println(first_arg)
 end
 ```
 
@@ -202,8 +202,8 @@ Use `@println` and `@type_of` for debugging:
 
 ```tea
 var value = compute_something()
-@println("Value: ${value}")
-@println("Type: ${@type_of(value)}")
+@println(`Value: ${value}`)
+@println(`Type: ${@type_of(value)}`)
 ```
 
 You can also use the `--emit ast` flag to inspect the AST:

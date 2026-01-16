@@ -13,7 +13,7 @@ Use `var` to declare variables that can change:
 ```tea
 var count = 0
 count = count + 1
-print(count)  # Output: 1
+@println(count)  # Output: 1
 ```
 
 ### Constants
@@ -108,9 +108,9 @@ Embed expressions in strings using `${}`:
 var name = "Alice"
 var age = 30
 
-print("Name: ${name}")           # Output: Name: Alice
-print("Age: ${age}")             # Output: Age: 30
-print("Next year: ${age + 1}")   # Output: Next year: 31
+@println(`Name: ${name}`)           # Output: Name: Alice
+@println(`Age: ${age}`)             # Output: Age: 30
+@println(`Next year: ${age + 1}`)   # Output: Next year: 31
 ```
 
 Any expression can go inside `${}`:
@@ -118,8 +118,8 @@ Any expression can go inside `${}`:
 ```tea
 var x = 5
 var y = 10
-print("Sum: ${x + y}")           # Output: Sum: 15
-print("Product: ${x * y}")       # Output: Product: 50
+@println(`Sum: ${x + y}`)           # Output: Sum: 15
+@println(`Product: ${x * y}`)       # Output: Product: 50
 ```
 
 ### Escape Sequences
@@ -127,10 +127,10 @@ print("Product: ${x * y}")       # Output: Product: 50
 Use backslashes for special characters:
 
 ```tea
-print("Line 1\nLine 2")          # Newline
-print("Tab\tseparated")          # Tab
-print("Quote: \"Hello\"")        # Escaped quotes
-print("Backslash: \\")           # Backslash
+@println("Line 1\nLine 2")          # Newline
+@println("Tab\tseparated")          # Tab
+@println("Quote: \"Hello\"")        # Escaped quotes
+@println("Backslash: \\")           # Backslash
 ```
 
 ## Numbers
@@ -204,9 +204,9 @@ Logical operators work with booleans:
 var a = true
 var b = false
 
-print(a && b)    # false (logical AND)
-print(a || b)    # true (logical OR)
-print(!a)        # false (logical NOT)
+@println(a && b)    # false (logical AND)
+@println(a || b)    # true (logical OR)
+@println(!a)        # false (logical NOT)
 ```
 
 ### Comparisons
@@ -217,12 +217,12 @@ Comparison operators produce booleans:
 var x = 5
 var y = 10
 
-print(x == y)    # false (equal)
-print(x != y)    # true (not equal)
-print(x < y)     # true (less than)
-print(x <= y)    # true (less than or equal)
-print(x > y)     # false (greater than)
-print(x >= y)    # false (greater than or equal)
+@println(x == y)    # false (equal)
+@println(x != y)    # true (not equal)
+@println(x < y)     # true (less than)
+@println(x <= y)    # true (less than or equal)
+@println(x > y)     # false (greater than)
+@println(x >= y)    # false (greater than or equal)
 ```
 
 ## Functions
@@ -233,7 +233,7 @@ Functions encapsulate reusable code. They're defined with the `def` keyword.
 
 ```tea
 def greet()
-  print("Hello, Tea!")
+  @println("Hello, Tea!")
 end
 
 greet()  # Call the function
@@ -245,7 +245,7 @@ Functions can accept parameters:
 
 ```tea
 def greet(name: String)
-  print("Hello, ${name}!")
+  @println(`Hello, ${name}!`)
 end
 
 greet("Alice")  # Output: Hello, Alice!
@@ -255,7 +255,7 @@ Multiple parameters:
 
 ```tea
 def introduce(name: String, age: Int)
-  print("${name} is ${age} years old")
+  @println(`${name} is ${age} years old`)
 end
 
 introduce("Bob", 25)  # Output: Bob is 25 years old
@@ -271,7 +271,7 @@ def add(a: Int, b: Int) -> Int
 end
 
 var result = add(5, 3)
-print(result)  # Output: 8
+@println(result)  # Output: 8
 ```
 
 The last expression in a function is automatically returned. You can also use `return` explicitly:
@@ -289,7 +289,7 @@ Use `return` to exit early:
 ```tea
 def divide(a: Int, b: Int) -> Float
   if b == 0
-    print("Error: division by zero")
+    @println("Error: division by zero")
     return 0.0
   end
 
@@ -303,7 +303,7 @@ Functions without a return type return nothing:
 
 ```tea
 def log_message(message: String)
-  print("LOG: ${message}")
+  @println(`LOG: ${message}`)
 end
 
 log_message("Application started")
@@ -348,7 +348,7 @@ Optional values must be checked before use:
 var value: Int? = 42
 
 if value != nil
-  print("Value: ${value!}")  # Use ! to unwrap
+  @println(`Value: ${value!}`)  # Use ! to unwrap
 end
 ```
 
@@ -359,7 +359,7 @@ Use `??` to provide a default value:
 ```tea
 var maybe_count: Int? = nil
 var count = maybe_count ?? 0  # Use 0 if nil
-print(count)  # Output: 0
+@println(count)  # Output: 0
 ```
 
 ### Force Unwrap
@@ -368,10 +368,10 @@ Use `!` to unwrap an optional (be careful - this crashes if the value is nil):
 
 ```tea
 var name: String? = "Alice"
-print(name!)  # Output: Alice
+@println(name!)  # Output: Alice
 
 var empty: String? = nil
-# print(empty!)  # Would crash!
+# @println(empty!)  # Would crash!
 ```
 
 Only use `!` when you're certain the value is not nil.
@@ -388,7 +388,7 @@ end
 
 ## Format a measurement with units
 def format_measurement(value: Float, unit: String) -> String
-  "${value} ${unit}"
+  `${value} ${unit}`
 end
 
 # Constants
@@ -399,10 +399,10 @@ const room_height = 10.0
 var area = calculate_area(room_width, room_height)
 
 # Display result
-print("Room dimensions:")
-print("  Width: ${format_measurement(room_width, "feet")}")
-print("  Height: ${format_measurement(room_height, "feet")}")
-print("  Area: ${format_measurement(area, "square feet")}")
+@println("Room dimensions:")
+@println(`  Width: ${format_measurement(room_width, "feet")}`)
+@println(`  Height: ${format_measurement(room_height, "feet")}`)
+@println(`  Area: ${format_measurement(area, "square feet")}`)
 ```
 
 ## Next Steps

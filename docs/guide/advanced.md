@@ -33,8 +33,8 @@ struct Box[T] {
 var int_box = Box[Int](value: 42)
 var string_box = Box[String](value: "hello")
 
-print(int_box.value)     # Output: 42
-print(string_box.value)  # Output: hello
+@println(int_box.value)     # Output: 42
+@println(string_box.value)  # Output: hello
 ```
 
 ### Multiple Type Parameters
@@ -48,7 +48,7 @@ struct Pair[A, B] {
 }
 
 var pair = Pair[String, Int](first: "age", second: 30)
-print("${pair.first}: ${pair.second}")  # Output: age: 30
+@println(`${pair.first}: ${pair.second}`)  # Output: age: 30
 ```
 
 ### Generic Functions with Constraints
@@ -84,7 +84,7 @@ end
 
 def add_item[T](container: Container[T], item: T)
   # Note: Actual implementation would use stdlib list methods
-  print("Adding item to container")
+  @println("Adding item to container")
 end
 
 var int_container = create_container[Int]()
@@ -109,7 +109,7 @@ var files = fs.read_dir(current_dir)
 
 for file in files
   var full_path = path.join([current_dir, file])
-  print(full_path)
+  @println(full_path)
 end
 ```
 
@@ -154,7 +154,7 @@ Import your own modules:
 use helpers = "./helpers"
 
 var result = helpers.double(5)
-print(result)  # Output: 10
+@println(result)  # Output: 10
 ```
 
 ### Module Organization
@@ -189,7 +189,7 @@ Lambdas (anonymous functions) let you create inline functions.
 var add = |a: Int, b: Int| => a + b
 
 var result = add(5, 3)
-print(result)  # Output: 8
+@println(result)  # Output: 8
 ```
 
 The syntax is: `|parameters| => expression`
@@ -225,7 +225,7 @@ end
 
 var increment = |x: Int| => x + 1
 var result = apply_twice(increment, 5)
-print(result)  # Output: 7
+@println(result)  # Output: 7
 ```
 
 ### Closures
@@ -238,8 +238,8 @@ def make_adder(base: Int) -> Func(Int) -> Int
 end
 
 var add_10 = make_adder(10)
-print(add_10(5))   # Output: 15
-print(add_10(20))  # Output: 30
+@println(add_10(5))   # Output: 15
+@println(add_10(20))  # Output: 30
 ```
 
 ### Practical Example: Filtering
@@ -465,8 +465,8 @@ use calc = "./math/calculator"
 var sum = calc.add(5, 3)
 var product = calc.multiply(4, 7)
 
-print("Sum: ${sum}")
-print("Product: ${product}")
+@println(`Sum: ${sum}`)
+@println(`Product: ${product}`)
 ```
 
 Build it:

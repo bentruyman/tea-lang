@@ -88,7 +88,7 @@ Create a file called `hello.tea`:
 
 ```tea
 var greeting = "Hello, Tea!"
-print(greeting)
+@println(greeting)
 ```
 
 Run it:
@@ -106,7 +106,7 @@ Hello, Tea!
 ### What's Happening?
 
 - `var greeting = "Hello, Tea!"` declares a variable. Tea infers that `greeting` is a `String`.
-- `print(greeting)` outputs the string to the console.
+- `@println(greeting)` outputs the string to the console.
 
 ## A Quick Tour
 
@@ -120,8 +120,8 @@ var name = "Alice"
 var age = 30
 var score = 95.5
 
-print("Name: ${name}")
-print("Age: ${age}")
+@println(`Name: ${name}`)
+@println(`Age: ${age}`)
 
 # Lists
 var numbers = [1, 2, 3, 4, 5]
@@ -131,14 +131,14 @@ for n in numbers
   sum = sum + n
 end
 
-print("Sum: ${sum}")
+@println(`Sum: ${sum}`)
 
 # Functions with types
 def greet(person: String) -> String
-  "Hello, ${person}!"
+  `Hello, ${person}!`
 end
 
-print(greet(name))
+@println(greet(name))
 
 # Structs
 struct Point {
@@ -147,7 +147,7 @@ struct Point {
 }
 
 var origin = Point(x: 0, y: 0)
-print("Origin: (${origin.x}, ${origin.y})")
+@println(`Origin: (${origin.x}, ${origin.y})`)
 ```
 
 Run it:
@@ -162,7 +162,7 @@ tea quickstart.tea
 
 ```tea
 var count = 5
-print("Count: ${count}")  # Output: Count: 5
+@println(`Count: ${count}`)  # Output: Count: 5
 ```
 
 **Type Annotations:** While Tea infers types, you can be explicit:

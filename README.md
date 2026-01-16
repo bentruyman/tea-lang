@@ -7,13 +7,13 @@ A strongly typed scripting language with Ruby-inspired syntax that compiles to n
 
 ```tea
 def greet(name: String) -> String
-  "Hello, ${name}!"
+  `Hello, ${name}!`
 end
 
 var names = ["Alice", "Bob", "Charlie"]
 
 for person in names
-  print(greet(person))
+  @println(greet(person))
 end
 ```
 
@@ -38,12 +38,12 @@ use string = "std.string"
 var root = env.cwd()
 var entries = fs.read_dir(root)
 
-@print(`Tea files in {root}:`)
+@print(`Tea files in ${root}:`)
 
 for entry in entries
   if string.ends_with(entry, ".tea")
     var absolute = path.join([root, entry])
-    @print(`• {absolute}`)
+    @print(`• ${absolute}`)
   end
 end
 ```
@@ -108,7 +108,7 @@ Create `hello.tea`:
 
 ```tea
 var greeting = "Hello, Tea!"
-print(greeting)
+@println(greeting)
 
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
@@ -117,7 +117,7 @@ for n in numbers
   sum = sum + n
 end
 
-print("Sum: ${sum}")
+@println(`Sum: ${sum}`)
 ```
 
 Run it:

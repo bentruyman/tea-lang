@@ -168,10 +168,10 @@ var name = "Alice"
 var age = 30
 
 def greet(person: String) -> String
-  "Hello, ${person}!"
+  `Hello, ${person}!`
 end
 
-print(greet(name))
+@println(greet(name))
 ```
 
 **Lists and Loops:**
@@ -184,7 +184,7 @@ for num in numbers
   sum = sum + num
 end
 
-print("Sum: ${sum}")
+@println(`Sum: ${sum}`)
 ```
 
 **Structs and Types:**
@@ -196,7 +196,7 @@ struct Point {
 }
 
 var origin = Point(x: 0, y: 0)
-print("Point: (${origin.x}, ${origin.y})")
+@println(`Point: (${origin.x}, ${origin.y})`)
 ```
 
 **Error Handling:**
@@ -234,7 +234,7 @@ var entries = fs.read_dir(root)
 
 for entry in entries
   var full_path = path.join([root, entry])
-  print(full_path)
+  @println(full_path)
 end
 ```
 

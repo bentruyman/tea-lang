@@ -39,9 +39,9 @@ Use zero-based indexing:
 ```tea
 var colors = ["red", "green", "blue"]
 
-print(colors[0])  # Output: red
-print(colors[1])  # Output: green
-print(colors[2])  # Output: blue
+@println(colors[0])  # Output: red
+@println(colors[1])  # Output: green
+@println(colors[2])  # Output: blue
 ```
 
 ### Nested Lists
@@ -51,9 +51,9 @@ Lists can contain other lists:
 ```tea
 var matrix = [[1, 2], [3, 4], [5, 6]]
 
-print(matrix[0])     # Output: [1, 2]
-print(matrix[0][0])  # Output: 1
-print(matrix[1][1])  # Output: 4
+@println(matrix[0])     # Output: [1, 2]
+@println(matrix[0][0])  # Output: 1
+@println(matrix[1][1])  # Output: 4
 ```
 
 ### List Slicing
@@ -65,7 +65,7 @@ Extract a portion of a list using range syntax:
 ```tea
 var numbers = [1, 2, 3, 4, 5]
 var slice = numbers[1..4]
-print(slice)  # Output: [2, 3, 4]
+@println(slice)  # Output: [2, 3, 4]
 ```
 
 **Inclusive Range (`...`)** - Includes the end index:
@@ -73,7 +73,7 @@ print(slice)  # Output: [2, 3, 4]
 ```tea
 var numbers = [10, 20, 30, 40]
 var slice = numbers[1...2]
-print(slice)  # Output: [20, 30]
+@println(slice)  # Output: [20, 30]
 ```
 
 ### Modifying Lists
@@ -83,7 +83,7 @@ Update elements by index:
 ```tea
 var fruits = ["apple", "banana", "cherry"]
 fruits[1] = "blueberry"
-print(fruits)  # Output: [apple, blueberry, cherry]
+@println(fruits)  # Output: [apple, blueberry, cherry]
 ```
 
 ### List Length
@@ -92,7 +92,7 @@ Get the number of elements with `@len`:
 
 ```tea
 var items = [1, 2, 3, 4, 5]
-print(@len(items))  # Output: 5
+@println(@len(items))  # Output: 5
 ```
 
 ### Iterating Over Lists
@@ -103,7 +103,7 @@ Use a `for` loop:
 var scores = [85, 90, 78, 92]
 
 for score in scores
-  print("Score: ${score}")
+  @println(`Score: ${score}`)
 end
 ```
 
@@ -119,7 +119,7 @@ for num in numbers
   sum = sum + num
 end
 
-print("Sum: ${sum}")  # Output: Sum: 15
+@println(`Sum: ${sum}`)  # Output: Sum: 15
 ```
 
 **Find maximum:**
@@ -134,7 +134,7 @@ for num in numbers
   end
 end
 
-print("Max: ${max}")  # Output: Max: 89
+@println(`Max: ${max}`)  # Output: Max: 89
 ```
 
 **Filter elements:**
@@ -210,8 +210,8 @@ struct User {
 
 var user = User(name: "Alice", age: 30)
 
-print(user.name)  # Output: Alice
-print(user.age)   # Output: 30
+@println(user.name)  # Output: Alice
+@println(user.age)   # Output: 30
 ```
 
 ### Modifying Fields
@@ -222,7 +222,7 @@ Update fields of mutable structs:
 var point = Point(x: 0, y: 0)
 point.x = 10
 point.y = 20
-print("Point: (${point.x}, ${point.y})")  # Output: Point: (10, 20)
+@println(`Point: (${point.x}, ${point.y})`)  # Output: Point: (10, 20)
 ```
 
 ### Structs in Functions
@@ -241,7 +241,7 @@ end
 
 var room = Rectangle(width: 12.5, height: 10.0)
 var area = calculate_area(room)
-print("Area: ${area}")  # Output: Area: 125.0
+@println(`Area: ${area}`)  # Output: Area: 125.0
 ```
 
 Return structs from functions:
@@ -252,7 +252,7 @@ def create_point(x: Int, y: Int) -> Point
 end
 
 var p = create_point(5, 10)
-print("${p.x}, ${p.y}")  # Output: 5, 10
+@println(`${p.x}, ${p.y}`)  # Output: 5, 10
 ```
 
 ### Lists of Structs
@@ -272,7 +272,7 @@ var people = [
 ]
 
 for person in people
-  print("${person.name} is ${person.age} years old")
+  @println(`${person.name} is ${person.age} years old`)
 end
 ```
 
@@ -301,7 +301,7 @@ var contact = Contact(
   )
 )
 
-print(contact.address.city)  # Output: Springfield
+@println(contact.address.city)  # Output: Springfield
 ```
 
 ### Documentation Comments
@@ -339,10 +339,10 @@ Use dot notation:
 
 ```tea
 var scores = { "alice": 95, "bob": 87 }
-print(scores.bob)  # Output: 87
+@println(scores.bob)  # Output: 87
 
 var point = { x: 10, y: 20 }
-print(point.x)     # Output: 10
+@println(point.x)     # Output: 10
 ```
 
 ### Dictionary Types
@@ -415,7 +415,7 @@ def print_tasks(tasks: List[Task])
 
   for task in tasks
     var status = if(task.completed) "✓" else "○"
-    print("${index}. ${status} ${task.description}")
+    @println(`${index}. ${status} ${task.description}`)
     index = index + 1
   end
 end
@@ -460,7 +460,7 @@ var p1 = Point(x: 0.0, y: 0.0)
 var p2 = Point(x: 10.0, y: 10.0)
 var mid = midpoint(p1, p2)
 
-print("Midpoint: (${mid.x}, ${mid.y})")  # Output: Midpoint: (5.0, 5.0)
+@println(`Midpoint: (${mid.x}, ${mid.y})`)  # Output: Midpoint: (5.0, 5.0)
 ```
 
 ## Next Steps

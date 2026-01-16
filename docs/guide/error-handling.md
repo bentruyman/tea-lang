@@ -84,7 +84,7 @@ end
 def load_config() -> String
   var content = read_config("config.json") catch err
     case is FileError.NotFound
-      print("Config not found: ${err.path}")
+      @println(`Config not found: ${err.path}`)
       return "default config"
     case _
       return "error"
@@ -151,16 +151,16 @@ end
 def execute_query(sql: String) -> String
   var result = query_database(sql) catch err
     case is DatabaseError.ConnectionFailed
-      print("Connection failed: ${err.reason}")
+      @println(`Connection failed: ${err.reason}`)
       return ""
     case is DatabaseError.QueryFailed
-      print("Query failed: ${err.query}")
+      @println(`Query failed: ${err.query}`)
       return ""
     case is DatabaseError.TimeoutExpired
-      print("Database timeout")
+      @println("Database timeout")
       return ""
     case _
-      print("Unknown database error")
+      @println("Unknown database error")
       return ""
   end
 
@@ -193,13 +193,13 @@ end
 def load_document(path: String) -> String
   var contents = read_file(path) catch err
     case is FileError.NotFound
-      print("File not found: ${err.path}")
+      @println(`File not found: ${err.path}`)
       return "default content"
     case is FileError.PermissionDenied
-      print("Permission denied: ${err.path}")
+      @println(`Permission denied: ${err.path}`)
       return ""
     case _
-      print("Error reading file")
+      @println("Error reading file")
       return ""
   end
 
@@ -233,17 +233,17 @@ end
 def create_user(name: String)
   var valid = validate_username(name) catch err
     case is ValidationError.TooShort
-      print("Username too short: ${err.actual} chars (minimum: ${err.min})")
+      @println(`Username too short: ${err.actual} chars (minimum: ${err.min})`)
       return
     case is ValidationError.TooLong
-      print("Username too long: ${err.actual} chars (maximum: ${err.max})")
+      @println(`Username too long: ${err.actual} chars (maximum: ${err.max})`)
       return
     case _
-      print("Invalid username")
+      @println("Invalid username")
       return
   end
 
-  print("User created: ${name}")
+  @println(`User created: ${name}`)
 end
 ```
 
@@ -264,16 +264,16 @@ end
 def get_data(url: String) -> String
   var response = fetch(url) catch err
     case is HttpError.Timeout
-      print("Request timed out: ${err.url}")
+      @println(`Request timed out: ${err.url}`)
       return ""
     case is HttpError.NotFound
-      print("Resource not found: ${err.url}")
+      @println(`Resource not found: ${err.url}`)
       return ""
     case is HttpError.ServerError
-      print("Server error: ${err.code}")
+      @println(`Server error: ${err.code}`)
       return ""
     case _
-      print("Network error")
+      @println("Network error")
       return ""
   end
 
@@ -287,11 +287,11 @@ Sometimes you want to catch an error, do something, and then re-throw it:
 
 ```tea
 def process_file(path: String) -> String ! FileError
-  print("Processing: ${path}")
+  @println(`Processing: ${path}`)
 
   var content = read_file(path) catch err
     case is FileError.NotFound
-      print("Logging error: file not found")
+      @println("Logging error: file not found")
       throw err  # Re-throw the error
     case _
       throw err
@@ -431,6 +431,6 @@ end
 
 ```tea
 case is ErrorType.Variant
-  print(err.field)  # Access variant fields
+  @println(err.field)  # Access variant fields
 end
 ```

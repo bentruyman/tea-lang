@@ -5960,6 +5960,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::TypeOf => self.compile_type_of_call(&call.arguments, function, locals),
             StdFunctionKind::Panic => self.compile_panic_call(&call.arguments, function, locals),
             StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
+            StdFunctionKind::Args => self.compile_args_call(),
             StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
             StdFunctionKind::Assert => self.compile_assert_call(&call.arguments, function, locals),
             StdFunctionKind::AssertEq => {
@@ -6330,25 +6331,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             ExprValue::List { pointer: ptr, .. } => {
                 // TeaList: { tag: i8, len: i8, padding: [6 x i8], data: [8 x TeaValue] }
-                // Length is in field 1 as i8
-                let list_type = self
-                    .context
-                    .get_struct_type("TeaList")
-                    .ok_or_else(|| anyhow!("TeaList type not found"))?;
-                let len_ptr = map_builder_error(
-                    self.builder.build_struct_gep(list_type, *ptr, 1, "len_ptr"),
-                )?;
-                let len_i8 = map_builder_error(self.builder.build_load(
-                    self.context.i8_type(),
-                    len_ptr,
-                    "len_i8",
-                ))?
-                .into_int_value();
-                let length = map_builder_error(self.builder.build_int_z_extend(
-                    len_i8,
-                    self.int_type(),
-                    "len",
-                ))?;
+                // For inline lists (tag=1): length is in field 1 as i8
+                // For heap lists (tag=0): length is in first 8 bytes of data array
+                // Use FFI to handle both cases correctly
+                let func = self.ensure_list_len_ffi_fn();
+                let length = self
+                    .call_function(func, &[(*ptr).into()], "tea_list_len_ffi")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_list_len_ffi returned no value"))?
+                    .into_int_value();
                 return Ok(ExprValue::Int(length));
             }
             _ => {
@@ -8876,6 +8868,20 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let func = self.ensure_exit_fn();
         self.call_function(func, &[code.into()], "tea_exit")?;
         Ok(ExprValue::Void)
+    }
+
+    fn compile_args_call(&mut self) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_cli_args_fn();
+        let pointer = self
+            .call_function(func, &[], "tea_cli_args")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_cli_args returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::String),
+        })
     }
 
     fn compile_length_call(

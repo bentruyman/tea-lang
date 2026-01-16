@@ -1,0 +1,35 @@
+## Example: CLI Argument Access
+##
+## Build with: tea build cli_args.tea
+## Run with:   ./bin/cli_args hello world --flag value
+
+const args = @args()
+const count = @len(args)
+
+@println("Command-line Arguments Demo")
+@println("===========================")
+@println("")
+@println("Number of arguments: " + @to_string(count))
+@println("")
+
+if count == 0
+  @println("No arguments provided.")
+  @println("Try running with: ./bin/cli_args hello world")
+else
+  @println("Arguments:")
+
+  for arg in args
+    @println("  - " + arg)
+  end
+end
+
+@println("")
+@println("Access individual arguments:")
+
+if count > 0
+  @println("  First:  " + args[0])
+end
+
+if count > 1
+  @println("  Second: " + args[1])
+end

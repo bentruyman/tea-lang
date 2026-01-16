@@ -24,6 +24,7 @@ pub enum StdFunctionKind {
     TypeOf,
     Panic,
     Exit,
+    Args,
     StringIndexOf,
     StringSplit,
     StringContains,

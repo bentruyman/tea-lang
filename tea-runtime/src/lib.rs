@@ -2993,14 +2993,33 @@ fn build_process_result_struct(
 #[no_mangle]
 pub extern "C" fn tea_cli_args() -> *mut TeaList {
     let args = collect_cli_args();
-    let list = tea_alloc_list(args.len() as c_longlong);
-    for (index, arg) in args.iter().enumerate() {
-        let bytes = arg.as_bytes();
-        let string_ptr =
-            tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong);
-        tea_list_set(list, index as c_longlong, tea_value_from_string(string_ptr));
+
+    // Use inline storage for up to 8 args (the inline data array size)
+    if args.len() <= 8 {
+        let mut tea_list = TeaList {
+            tag: 1, // inline list
+            len: args.len() as u8,
+            padding: [0; 6],
+            data: [tea_value_nil(); 8],
+        };
+        for (index, arg) in args.iter().enumerate() {
+            let bytes = arg.as_bytes();
+            let string_ptr =
+                tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong);
+            tea_list.data[index] = tea_value_from_string(string_ptr);
+        }
+        Box::into_raw(Box::new(tea_list))
+    } else {
+        // Use heap storage for larger lists
+        let list = tea_alloc_list(args.len() as c_longlong);
+        for (index, arg) in args.iter().enumerate() {
+            let bytes = arg.as_bytes();
+            let string_ptr =
+                tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong);
+            tea_list_set(list, index as c_longlong, tea_value_from_string(string_ptr));
+        }
+        list
     }
-    list
 }
 
 #[no_mangle]

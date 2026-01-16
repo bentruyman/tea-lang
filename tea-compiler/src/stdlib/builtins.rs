@@ -45,6 +45,13 @@ pub const BUILTINS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "args",
+        StdFunctionKind::Args,
+        StdArity::Exact(0),
+        &[],
+        StdType::List,
+    ),
+    std_function(
         "len",
         StdFunctionKind::Length,
         StdArity::Exact(1),

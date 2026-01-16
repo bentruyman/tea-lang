@@ -2630,6 +2630,9 @@ impl TypeChecker {
             StdFunctionKind::FsListDir => {
                 return_type = Type::List(Box::new(Type::String));
             }
+            StdFunctionKind::Args => {
+                return_type = Type::List(Box::new(Type::String));
+            }
             StdFunctionKind::EnvVars => {
                 return_type = Type::Dict(Box::new(Type::String));
             }

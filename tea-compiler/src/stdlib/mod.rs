@@ -56,6 +56,12 @@ pub enum StdFunctionKind {
     FsStat,
     AssertSnapshot,
     AssertEmpty,
+    // Standard I/O
+    ReadLine,
+    ReadAll,
+    Eprint,
+    Eprintln,
+    IsTty,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

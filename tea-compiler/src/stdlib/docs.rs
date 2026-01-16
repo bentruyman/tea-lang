@@ -58,5 +58,11 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
             "Compare actual text against a stored snapshot, with optional hint."
         }
         StdFunctionKind::AssertEmpty => "Assert that a string or collection is empty.",
+        // Standard I/O
+        StdFunctionKind::ReadLine => "Read a single line from stdin (without trailing newline).",
+        StdFunctionKind::ReadAll => "Read all content from stdin as a string.",
+        StdFunctionKind::Eprint => "Print a value to stderr without a trailing newline.",
+        StdFunctionKind::Eprintln => "Print a value to stderr with a trailing newline.",
+        StdFunctionKind::IsTty => "Return true if stdin is connected to an interactive terminal.",
     }
 }

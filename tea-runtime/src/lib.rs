@@ -504,6 +504,32 @@ fn print_value(value: TeaValue) {
     }
 }
 
+fn eprint_value(value: TeaValue) {
+    use std::io::Write;
+    unsafe {
+        match value.tag {
+            TeaValueTag::Int => {
+                let _ = write!(std::io::stderr(), "{}", value.payload.int_value);
+            }
+            TeaValueTag::Float => {
+                let _ = write!(std::io::stderr(), "{}", value.payload.float_value);
+            }
+            TeaValueTag::Bool => {
+                let _ = write!(std::io::stderr(), "{}", value.payload.bool_value != 0);
+            }
+            TeaValueTag::Nil => {
+                let _ = write!(std::io::stderr(), "nil");
+            }
+            TeaValueTag::String => tea_eprint_string(value.payload.string_value),
+            TeaValueTag::List => tea_eprint_list(value.payload.list_value),
+            TeaValueTag::Dict => tea_eprint_dict(value.payload.dict_value),
+            TeaValueTag::Struct => tea_eprint_struct(value.payload.struct_value),
+            TeaValueTag::Error => tea_eprint_error(value.payload.error_value),
+            TeaValueTag::Closure => tea_eprint_closure(value.payload.closure_value),
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn tea_print_dict(dict: *const TeaDict) {
     unsafe {
@@ -3562,4 +3588,333 @@ pub extern "C" fn tea_value_nil() -> TeaValue {
         tag: TeaValueTag::Nil,
         payload: TeaValuePayload { int_value: 0 },
     }
+}
+
+// ============================================================================
+// Standard I/O intrinsics
+// ============================================================================
+
+/// Read a single line from stdin (without trailing newline)
+#[no_mangle]
+pub extern "C" fn tea_read_line() -> *mut TeaString {
+    use std::io::BufRead;
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    match stdin.lock().read_line(&mut line) {
+        Ok(0) => {
+            // EOF - return empty string
+            alloc_tea_string("")
+        }
+        Ok(_) => {
+            // Remove trailing newline
+            if line.ends_with('\n') {
+                line.pop();
+                if line.ends_with('\r') {
+                    line.pop();
+                }
+            }
+            alloc_tea_string(&line)
+        }
+        Err(_) => {
+            // Error - return empty string
+            alloc_tea_string("")
+        }
+    }
+}
+
+/// Read all content from stdin
+#[no_mangle]
+pub extern "C" fn tea_read_all() -> *mut TeaString {
+    use std::io::Read;
+    let mut stdin = std::io::stdin();
+    let mut content = String::new();
+    match stdin.read_to_string(&mut content) {
+        Ok(_) => alloc_tea_string(&content),
+        Err(_) => alloc_tea_string(""),
+    }
+}
+
+/// Check if stdin is connected to a TTY (interactive terminal)
+#[no_mangle]
+pub extern "C" fn tea_is_tty() -> c_int {
+    use std::io::IsTerminal;
+    if std::io::stdin().is_terminal() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Print string to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_string(value: *const TeaString) {
+    use std::io::Write;
+    unsafe {
+        if value.is_null() {
+            let _ = write!(std::io::stderr(), "(null)");
+            return;
+        }
+        let string_ref = &*value;
+        let bytes = tea_string_as_bytes(string_ref);
+        match std::str::from_utf8(bytes) {
+            Ok(text) => {
+                let _ = write!(std::io::stderr(), "{text}");
+            }
+            Err(_) => {
+                let _ = write!(std::io::stderr(), "<invalid utf8>");
+            }
+        }
+        let _ = std::io::stderr().flush();
+    }
+}
+
+/// Print string to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_string(value: *const TeaString) {
+    unsafe {
+        if value.is_null() {
+            eprintln!("(null)");
+            return;
+        }
+        let string_ref = &*value;
+        let bytes = tea_string_as_bytes(string_ref);
+        match std::str::from_utf8(bytes) {
+            Ok(text) => eprintln!("{text}"),
+            Err(_) => eprintln!("<invalid utf8>"),
+        }
+    }
+}
+
+/// Print int to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_int(value: c_longlong) {
+    use std::io::Write;
+    let _ = write!(std::io::stderr(), "{value}");
+    let _ = std::io::stderr().flush();
+}
+
+/// Print int to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_int(value: c_longlong) {
+    eprintln!("{value}");
+}
+
+/// Print float to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_float(value: c_double) {
+    use std::io::Write;
+    let _ = write!(std::io::stderr(), "{value}");
+    let _ = std::io::stderr().flush();
+}
+
+/// Print float to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_float(value: c_double) {
+    eprintln!("{value}");
+}
+
+/// Print bool to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_bool(value: c_int) {
+    use std::io::Write;
+    let _ = write!(std::io::stderr(), "{}", value != 0);
+    let _ = std::io::stderr().flush();
+}
+
+/// Print bool to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_bool(value: c_int) {
+    eprintln!("{}", value != 0);
+}
+
+/// Print list to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_list(list: *const TeaList) {
+    use std::io::Write;
+    unsafe {
+        if list.is_null() {
+            let _ = write!(std::io::stderr(), "[]");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let list_ref = &*list;
+        let (items, len) = tea_list_items(list_ref);
+        let _ = write!(std::io::stderr(), "[");
+        for i in 0..len {
+            if i > 0 {
+                let _ = write!(std::io::stderr(), ", ");
+            }
+            let value = *items.add(i as usize);
+            eprint_value(value);
+        }
+        let _ = write!(std::io::stderr(), "]");
+        let _ = std::io::stderr().flush();
+    }
+}
+
+/// Print list to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_list(list: *const TeaList) {
+    tea_eprint_list(list);
+    eprintln!();
+}
+
+/// Print dict to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_dict(dict: *const TeaDict) {
+    use std::io::Write;
+    unsafe {
+        if dict.is_null() {
+            let _ = write!(std::io::stderr(), "{{}}");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let dict_ref = &*dict;
+        let _ = write!(std::io::stderr(), "{{");
+        let mut first = true;
+        for (key, value) in dict_ref.entries.iter() {
+            if !first {
+                let _ = write!(std::io::stderr(), ", ");
+            }
+            first = false;
+            let _ = write!(std::io::stderr(), "\"{key}\": ");
+            eprint_value(*value);
+        }
+        let _ = write!(std::io::stderr(), "}}");
+        let _ = std::io::stderr().flush();
+    }
+}
+
+/// Print dict to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_dict(dict: *const TeaDict) {
+    tea_eprint_dict(dict);
+    eprintln!();
+}
+
+/// Print struct to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_struct(instance: *const TeaStructInstance) {
+    use std::ffi::CStr;
+    use std::io::Write;
+    unsafe {
+        if instance.is_null() {
+            let _ = write!(std::io::stderr(), "<struct nil>");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            let _ = write!(std::io::stderr(), "<struct ?>");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let template_ref = &*instance_ref.template;
+        let struct_name = if template_ref.name.is_null() {
+            "<anonymous>"
+        } else {
+            CStr::from_ptr(template_ref.name)
+                .to_str()
+                .unwrap_or("<invalid utf8>")
+        };
+
+        let _ = write!(std::io::stderr(), "{struct_name}(");
+        for i in 0..template_ref.field_count {
+            if i > 0 {
+                let _ = write!(std::io::stderr(), ", ");
+            }
+            let field_name_ptr = tea_struct_template_field_name(instance_ref.template, i);
+            let field_name = if field_name_ptr.is_null() {
+                "<field>"
+            } else {
+                CStr::from_ptr(field_name_ptr)
+                    .to_str()
+                    .unwrap_or("<invalid utf8>")
+            };
+            let _ = write!(std::io::stderr(), "{field_name}: ");
+            let value = *instance_ref.fields.add(i as usize);
+            eprint_value(value);
+        }
+        let _ = write!(std::io::stderr(), ")");
+        let _ = std::io::stderr().flush();
+    }
+}
+
+/// Print struct to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_struct(instance: *const TeaStructInstance) {
+    tea_eprint_struct(instance);
+    eprintln!();
+}
+
+/// Print error to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_error(instance: *const TeaErrorInstance) {
+    use std::io::Write;
+    unsafe {
+        if instance.is_null() {
+            let _ = write!(std::io::stderr(), "<error nil>");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let instance_ref = &*instance;
+        if instance_ref.template.is_null() {
+            let _ = write!(std::io::stderr(), "<error nil>");
+            let _ = std::io::stderr().flush();
+            return;
+        }
+        let template = &*instance_ref.template;
+        let error_name =
+            tea_cstr_to_rust(template.error_name).unwrap_or_else(|| "Error".to_string());
+        let variant_name =
+            tea_cstr_to_rust(template.variant_name).unwrap_or_else(|| "Variant".to_string());
+        let _ = write!(std::io::stderr(), "{}.{}(", error_name, variant_name);
+        let count = template.field_count.max(0) as usize;
+        for index in 0..count {
+            if index > 0 {
+                let _ = write!(std::io::stderr(), ", ");
+            }
+            let field_name_ptr = if template.field_names.is_null() {
+                std::ptr::null()
+            } else {
+                *template.field_names.add(index)
+            };
+            let field_name =
+                tea_cstr_to_rust(field_name_ptr).unwrap_or_else(|| format!("field{index}"));
+            let field_value = *instance_ref.fields.add(index);
+            let _ = write!(
+                std::io::stderr(),
+                "{field_name}: {}",
+                tea_value_to_string(field_value)
+            );
+        }
+        let _ = write!(std::io::stderr(), ")");
+        let _ = std::io::stderr().flush();
+    }
+}
+
+/// Print error to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_error(instance: *const TeaErrorInstance) {
+    tea_eprint_error(instance);
+    eprintln!();
+}
+
+/// Print closure to stderr without newline
+#[no_mangle]
+pub extern "C" fn tea_eprint_closure(closure: *const TeaClosure) {
+    use std::io::Write;
+    if closure.is_null() {
+        let _ = write!(std::io::stderr(), "<closure nil>");
+    } else {
+        let _ = write!(std::io::stderr(), "<closure>");
+    }
+    let _ = std::io::stderr().flush();
+}
+
+/// Print closure to stderr with newline
+#[no_mangle]
+pub extern "C" fn tea_eprintln_closure(closure: *const TeaClosure) {
+    tea_eprint_closure(closure);
+    eprintln!();
 }

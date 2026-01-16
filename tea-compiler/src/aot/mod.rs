@@ -476,6 +476,27 @@ struct LlvmCodeGenerator<'ctx> {
     path_is_absolute_fn: Option<FunctionValue<'ctx>>,
     path_separator_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
+    read_line_fn: Option<FunctionValue<'ctx>>,
+    read_all_fn: Option<FunctionValue<'ctx>>,
+    eprint_int_fn: Option<FunctionValue<'ctx>>,
+    eprint_float_fn: Option<FunctionValue<'ctx>>,
+    eprint_bool_fn: Option<FunctionValue<'ctx>>,
+    eprint_string_fn: Option<FunctionValue<'ctx>>,
+    eprint_list_fn: Option<FunctionValue<'ctx>>,
+    eprint_dict_fn: Option<FunctionValue<'ctx>>,
+    eprint_struct_fn: Option<FunctionValue<'ctx>>,
+    eprint_error_fn: Option<FunctionValue<'ctx>>,
+    eprint_closure_fn: Option<FunctionValue<'ctx>>,
+    eprintln_int_fn: Option<FunctionValue<'ctx>>,
+    eprintln_float_fn: Option<FunctionValue<'ctx>>,
+    eprintln_bool_fn: Option<FunctionValue<'ctx>>,
+    eprintln_string_fn: Option<FunctionValue<'ctx>>,
+    eprintln_list_fn: Option<FunctionValue<'ctx>>,
+    eprintln_dict_fn: Option<FunctionValue<'ctx>>,
+    eprintln_struct_fn: Option<FunctionValue<'ctx>>,
+    eprintln_error_fn: Option<FunctionValue<'ctx>>,
+    eprintln_closure_fn: Option<FunctionValue<'ctx>>,
+    is_tty_fn: Option<FunctionValue<'ctx>>,
     cli_parse_fn: Option<FunctionValue<'ctx>>,
     process_run_fn: Option<FunctionValue<'ctx>>,
     process_spawn_fn: Option<FunctionValue<'ctx>>,
@@ -1149,6 +1170,27 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_is_absolute_fn: None,
             path_separator_fn: None,
             cli_args_fn: None,
+            read_line_fn: None,
+            read_all_fn: None,
+            eprint_int_fn: None,
+            eprint_float_fn: None,
+            eprint_bool_fn: None,
+            eprint_string_fn: None,
+            eprint_list_fn: None,
+            eprint_dict_fn: None,
+            eprint_struct_fn: None,
+            eprint_error_fn: None,
+            eprint_closure_fn: None,
+            eprintln_int_fn: None,
+            eprintln_float_fn: None,
+            eprintln_bool_fn: None,
+            eprintln_string_fn: None,
+            eprintln_list_fn: None,
+            eprintln_dict_fn: None,
+            eprintln_struct_fn: None,
+            eprintln_error_fn: None,
+            eprintln_closure_fn: None,
+            is_tty_fn: None,
             cli_parse_fn: None,
             process_run_fn: None,
             process_spawn_fn: None,
@@ -5961,6 +6003,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::Panic => self.compile_panic_call(&call.arguments, function, locals),
             StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
             StdFunctionKind::Args => self.compile_args_call(),
+            StdFunctionKind::ReadLine => self.compile_read_line_call(),
+            StdFunctionKind::ReadAll => self.compile_read_all_call(),
+            StdFunctionKind::Eprint => self.compile_eprint_call(&call.arguments, function, locals),
+            StdFunctionKind::Eprintln => {
+                self.compile_eprintln_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::IsTty => self.compile_is_tty_call(),
             StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
             StdFunctionKind::Assert => self.compile_assert_call(&call.arguments, function, locals),
             StdFunctionKind::AssertEq => {
@@ -8884,6 +8933,161 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         })
     }
 
+    fn compile_read_line_call(&mut self) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_read_line_fn();
+        let pointer = self
+            .call_function(func, &[], "tea_read_line")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_read_line returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_read_all_call(&mut self) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_read_all_fn();
+        let pointer = self
+            .call_function(func, &[], "tea_read_all")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_read_all returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_eprint_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported by the LLVM backend yet");
+            }
+            let value = self.compile_expression(&argument.expression, function, locals)?;
+            match value {
+                ExprValue::Int(v) => {
+                    let func = self.ensure_eprint_int();
+                    self.call_function(func, &[v.into()], "eprint_int")?;
+                }
+                ExprValue::Float(v) => {
+                    let func = self.ensure_eprint_float();
+                    self.call_function(func, &[v.into()], "eprint_float")?;
+                }
+                ExprValue::Bool(v) => {
+                    let cast = self.bool_to_i32(v, "eprint_bool")?;
+                    let func = self.ensure_eprint_bool();
+                    self.call_function(func, &[cast.into()], "eprint_bool")?;
+                }
+                ExprValue::String(ptr) => {
+                    let func = self.ensure_eprint_string();
+                    self.call_function(func, &[ptr.into()], "eprint_string")?;
+                }
+                ExprValue::List { pointer, .. } => {
+                    let func = self.ensure_eprint_list();
+                    self.call_function(func, &[pointer.into()], "eprint_list")?;
+                }
+                ExprValue::Dict { pointer, .. } => {
+                    let func = self.ensure_eprint_dict();
+                    self.call_function(func, &[pointer.into()], "eprint_dict")?;
+                }
+                ExprValue::Struct { pointer, .. } => {
+                    let func = self.ensure_eprint_struct();
+                    self.call_function(func, &[pointer.into()], "eprint_struct")?;
+                }
+                ExprValue::Error { pointer, .. } => {
+                    let func = self.ensure_eprint_error();
+                    self.call_function(func, &[pointer.into()], "eprint_error")?;
+                }
+                ExprValue::Closure { pointer, .. } => {
+                    let func = self.ensure_eprint_closure();
+                    self.call_function(func, &[pointer.into()], "eprint_closure")?;
+                }
+                ExprValue::Void | ExprValue::Optional { .. } => {
+                    bail!("cannot eprint void or optional values");
+                }
+            }
+        }
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_eprintln_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported by the LLVM backend yet");
+            }
+            let value = self.compile_expression(&argument.expression, function, locals)?;
+            match value {
+                ExprValue::Int(v) => {
+                    let func = self.ensure_eprintln_int();
+                    self.call_function(func, &[v.into()], "eprintln_int")?;
+                }
+                ExprValue::Float(v) => {
+                    let func = self.ensure_eprintln_float();
+                    self.call_function(func, &[v.into()], "eprintln_float")?;
+                }
+                ExprValue::Bool(v) => {
+                    let cast = self.bool_to_i32(v, "eprintln_bool")?;
+                    let func = self.ensure_eprintln_bool();
+                    self.call_function(func, &[cast.into()], "eprintln_bool")?;
+                }
+                ExprValue::String(ptr) => {
+                    let func = self.ensure_eprintln_string();
+                    self.call_function(func, &[ptr.into()], "eprintln_string")?;
+                }
+                ExprValue::List { pointer, .. } => {
+                    let func = self.ensure_eprintln_list();
+                    self.call_function(func, &[pointer.into()], "eprintln_list")?;
+                }
+                ExprValue::Dict { pointer, .. } => {
+                    let func = self.ensure_eprintln_dict();
+                    self.call_function(func, &[pointer.into()], "eprintln_dict")?;
+                }
+                ExprValue::Struct { pointer, .. } => {
+                    let func = self.ensure_eprintln_struct();
+                    self.call_function(func, &[pointer.into()], "eprintln_struct")?;
+                }
+                ExprValue::Error { pointer, .. } => {
+                    let func = self.ensure_eprintln_error();
+                    self.call_function(func, &[pointer.into()], "eprintln_error")?;
+                }
+                ExprValue::Closure { pointer, .. } => {
+                    let func = self.ensure_eprintln_closure();
+                    self.call_function(func, &[pointer.into()], "eprintln_closure")?;
+                }
+                ExprValue::Void | ExprValue::Optional { .. } => {
+                    bail!("cannot eprintln void or optional values");
+                }
+            }
+        }
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_is_tty_call(&mut self) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_is_tty_fn();
+        let result = self
+            .call_function(func, &[], "tea_is_tty")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_is_tty returned no value"))?
+            .into_int_value();
+        // Convert i32 (0 or 1) to bool
+        let zero = self.context.i32_type().const_int(0, false);
+        let bool_val = map_builder_error(self.builder.build_int_compare(
+            inkwell::IntPredicate::NE,
+            result,
+            zero,
+            "is_tty_bool",
+        ))?;
+        Ok(ExprValue::Bool(bool_val))
+    }
+
     fn compile_length_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -10752,6 +10956,98 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         closure
     );
 
+    // Eprint functions (print to stderr without newline)
+    define_ffi_print_fn!(ensure_eprint_int, eprint_int_fn, "tea_eprint_int", int);
+    define_ffi_print_fn!(
+        ensure_eprint_float,
+        eprint_float_fn,
+        "tea_eprint_float",
+        float
+    );
+    define_ffi_print_fn!(ensure_eprint_bool, eprint_bool_fn, "tea_eprint_bool", bool);
+    define_ffi_print_fn!(
+        ensure_eprint_string,
+        eprint_string_fn,
+        "tea_eprint_string",
+        string
+    );
+    define_ffi_print_fn!(ensure_eprint_list, eprint_list_fn, "tea_eprint_list", list);
+    define_ffi_print_fn!(ensure_eprint_dict, eprint_dict_fn, "tea_eprint_dict", dict);
+    define_ffi_print_fn!(
+        ensure_eprint_struct,
+        eprint_struct_fn,
+        "tea_eprint_struct",
+        struct
+    );
+    define_ffi_print_fn!(
+        ensure_eprint_error,
+        eprint_error_fn,
+        "tea_eprint_error",
+        error
+    );
+    define_ffi_print_fn!(
+        ensure_eprint_closure,
+        eprint_closure_fn,
+        "tea_eprint_closure",
+        closure
+    );
+
+    // Eprintln functions (print to stderr with newline)
+    define_ffi_print_fn!(
+        ensure_eprintln_int,
+        eprintln_int_fn,
+        "tea_eprintln_int",
+        int
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_float,
+        eprintln_float_fn,
+        "tea_eprintln_float",
+        float
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_bool,
+        eprintln_bool_fn,
+        "tea_eprintln_bool",
+        bool
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_string,
+        eprintln_string_fn,
+        "tea_eprintln_string",
+        string
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_list,
+        eprintln_list_fn,
+        "tea_eprintln_list",
+        list
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_dict,
+        eprintln_dict_fn,
+        "tea_eprintln_dict",
+        dict
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_struct,
+        eprintln_struct_fn,
+        "tea_eprintln_struct",
+        struct
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_error,
+        eprintln_error_fn,
+        "tea_eprintln_error",
+        error
+    );
+    define_ffi_print_fn!(
+        ensure_eprintln_closure,
+        eprintln_closure_fn,
+        "tea_eprintln_closure",
+        closure
+    );
+
     fn ensure_type_of_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.builtin_type_of_fn {
             return func;
@@ -12235,6 +12531,42 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_cli_args", fn_type, Some(Linkage::External));
         self.cli_args_fn = Some(func);
+        func
+    }
+
+    fn ensure_read_line_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.read_line_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(&[], false);
+        let func = self
+            .module
+            .add_function("tea_read_line", fn_type, Some(Linkage::External));
+        self.read_line_fn = Some(func);
+        func
+    }
+
+    fn ensure_read_all_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.read_all_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(&[], false);
+        let func = self
+            .module
+            .add_function("tea_read_all", fn_type, Some(Linkage::External));
+        self.read_all_fn = Some(func);
+        func
+    }
+
+    fn ensure_is_tty_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.is_tty_fn {
+            return func;
+        }
+        let fn_type = self.context.i32_type().fn_type(&[], false);
+        let func = self
+            .module
+            .add_function("tea_is_tty", fn_type, Some(Linkage::External));
+        self.is_tty_fn = Some(func);
         func
     }
 

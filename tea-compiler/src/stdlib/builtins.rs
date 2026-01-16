@@ -51,6 +51,42 @@ pub const BUILTINS: &[StdFunction] = &[
         &[],
         StdType::List,
     ),
+    // Standard I/O
+    std_function(
+        "read_line",
+        StdFunctionKind::ReadLine,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "read_all",
+        StdFunctionKind::ReadAll,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "eprint",
+        StdFunctionKind::Eprint,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Void,
+    ),
+    std_function(
+        "eprintln",
+        StdFunctionKind::Eprintln,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::Void,
+    ),
+    std_function(
+        "is_tty",
+        StdFunctionKind::IsTty,
+        StdArity::Exact(0),
+        &[],
+        StdType::Bool,
+    ),
     std_function(
         "len",
         StdFunctionKind::Length,

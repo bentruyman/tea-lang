@@ -1,0 +1,30 @@
+# Expect: A, B, C, D, F, done
+
+def grade(score: Int) -> String
+  if score >= 90
+    return "A"
+  else if score >= 80
+    return "B"
+  else if score >= 70
+    return "C"
+  else if score >= 60
+    return "D"
+  else
+    return "F"
+  end
+end
+
+@println(grade(95))
+@println(grade(85))
+@println(grade(75))
+@println(grade(65))
+@println(grade(55))
+
+# Test without trailing else
+var x = 5
+
+if x == 1
+  @println("one")
+else if x == 5
+  @println("done")
+end

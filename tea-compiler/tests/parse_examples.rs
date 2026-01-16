@@ -43,6 +43,11 @@ fn parse_loops_example() -> anyhow::Result<()> {
 }
 
 #[test]
+fn parse_else_if_example() -> anyhow::Result<()> {
+    compile_example("examples/language/control_flow/else_if.tea")
+}
+
+#[test]
 fn parse_lists_example() -> anyhow::Result<()> {
     compile_example("examples/language/collections/lists.tea")
 }

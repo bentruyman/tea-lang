@@ -1193,6 +1193,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_conditional(&mut self, kind: ConditionalKind) -> Result<Statement> {
+        self.parse_conditional_inner(kind, true)
+    }
+
+    fn parse_conditional_inner(
+        &mut self,
+        kind: ConditionalKind,
+        expect_end: bool,
+    ) -> Result<Statement> {
         self.advance(); // consume keyword
         let condition = self.parse_expression_with(default_expression_terminator)?;
 
@@ -1201,15 +1209,27 @@ impl<'a> Parser<'a> {
 
         let alternative = if self.check_keyword(Keyword::Else) {
             self.advance(); // consume 'else'
-            self.expect_newline("expected newline after else")?;
-            let block = self.parse_block_until(&[Keyword::End])?;
-            Some(block)
+
+            // Check for 'else if' - parse as nested conditional
+            if self.check_keyword(Keyword::If) {
+                let nested = self.parse_conditional_inner(ConditionalKind::If, false)?;
+                Some(Block {
+                    statements: vec![nested],
+                })
+            } else {
+                // Plain 'else' block
+                self.expect_newline("expected newline after else")?;
+                let block = self.parse_block_until(&[Keyword::End])?;
+                Some(block)
+            }
         } else {
             None
         };
 
-        self.expect_keyword(Keyword::End, "expected 'end' to close conditional")?;
-        self.expect_newline("expected newline after conditional end")?;
+        if expect_end {
+            self.expect_keyword(Keyword::End, "expected 'end' to close conditional")?;
+            self.expect_newline("expected newline after conditional end")?;
+        }
 
         Ok(Statement::Conditional(ConditionalStatement {
             kind,

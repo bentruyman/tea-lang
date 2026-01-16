@@ -38,6 +38,13 @@ pub const BUILTINS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "exit",
+        StdFunctionKind::Exit,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Void,
+    ),
+    std_function(
         "len",
         StdFunctionKind::Length,
         StdArity::Exact(1),

@@ -1783,6 +1783,11 @@ pub extern "C" fn tea_panic(message: *const TeaString) {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_exit(code: c_longlong) {
+    std::process::exit(code as i32);
+}
+
+#[no_mangle]
 pub extern "C" fn tea_util_len(value: TeaValue) -> c_longlong {
     unsafe {
         match value.tag {

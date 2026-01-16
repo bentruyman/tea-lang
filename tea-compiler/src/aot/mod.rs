@@ -3059,6 +3059,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         };
 
         if then_terminated && else_terminated {
+            // Both branches terminated, but the merge block still exists and needs a terminator
+            self.builder.position_at_end(merge_block);
+            map_builder_error(self.builder.build_unreachable())?;
             Ok(true)
         } else {
             self.builder.position_at_end(merge_block);
@@ -5956,6 +5959,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             StdFunctionKind::TypeOf => self.compile_type_of_call(&call.arguments, function, locals),
             StdFunctionKind::Panic => self.compile_panic_call(&call.arguments, function, locals),
+            StdFunctionKind::Exit => self.compile_exit_call(&call.arguments, function, locals),
             StdFunctionKind::Length => self.compile_length_call(&call.arguments, function, locals),
             StdFunctionKind::Assert => self.compile_assert_call(&call.arguments, function, locals),
             StdFunctionKind::AssertEq => {
@@ -8849,6 +8853,28 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         };
         let func = self.ensure_panic_fn();
         self.call_function(func, &[message_ptr.into()], "tea_panic")?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_exit_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("exit expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for exit");
+        }
+        let code_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let code = match code_expr {
+            ExprValue::Int(val) => val,
+            _ => bail!("exit expects an Int argument"),
+        };
+        let func = self.ensure_exit_fn();
+        self.call_function(func, &[code.into()], "tea_exit")?;
         Ok(ExprValue::Void)
     }
 

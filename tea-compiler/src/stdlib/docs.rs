@@ -9,6 +9,7 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::ToString => "Convert any value to its string representation.",
         StdFunctionKind::TypeOf => "Return the runtime type name of a value as a string.",
         StdFunctionKind::Panic => "Terminate the program immediately with an error message.",
+        StdFunctionKind::Exit => "Exit the program with the specified exit code.",
         StdFunctionKind::Length => "Return the number of elements in a String, List, or Dict.",
         StdFunctionKind::Assert => {
             "Assert that a condition holds; optionally provide a failure message."

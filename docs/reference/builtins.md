@@ -192,7 +192,7 @@ Find minimum in a list:
 var numbers = [7.5, 3.2, 9.1, 1.8, 6.4]
 var min = numbers[0]
 
-for num of numbers
+for num in numbers
   min = @min(min, num)
 end
 
@@ -214,7 +214,7 @@ Find maximum in a list:
 var numbers = [7.5, 3.2, 9.1, 1.8, 6.4]
 var max = numbers[0]
 
-for num of numbers
+for num in numbers
   max = @max(max, num)
 end
 
@@ -278,7 +278,7 @@ def calculate_stats(numbers: List[Float])
   var min_val = numbers[0]
   var max_val = numbers[0]
 
-  for num of numbers
+  for num in numbers
     sum = sum + num
     min_val = @min(min_val, num)
     max_val = @max(max_val, num)
@@ -395,7 +395,7 @@ def bounding_box(numbers: List[Float]) -> String
   var min_val = numbers[0]
   var max_val = numbers[0]
 
-  for num of numbers
+  for num in numbers
     min_val = @min(min_val, num)
     max_val = @max(max_val, num)
   end

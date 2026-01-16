@@ -20,10 +20,11 @@ pub type OptimizationLevel = inkwell::OptimizationLevel;
 
 use crate::ast::{
     BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind,
-    ConditionalExpression, ConditionalStatement, Expression, ExpressionKind, FunctionStatement,
-    InterpolatedStringExpression, InterpolatedStringPart, LambdaBody, LambdaExpression, Literal,
-    LoopHeader, LoopStatement, MatchPattern, Module as AstModule, ReturnStatement, SourceSpan,
-    Statement, ThrowStatement, TryExpression, TypeExpression, UseStatement, VarStatement,
+    ConditionalExpression, ConditionalStatement, Expression, ExpressionKind, ForPattern,
+    FunctionStatement, InterpolatedStringExpression, InterpolatedStringPart, LambdaBody,
+    LambdaExpression, Literal, LoopHeader, LoopStatement, MatchPattern, Module as AstModule,
+    ReturnStatement, SourceSpan, Statement, ThrowStatement, TryExpression, TypeExpression,
+    UseStatement, VarStatement,
 };
 use crate::resolver::{Resolver, ResolverOutput};
 use crate::stdlib::{self, StdFunctionKind};
@@ -366,6 +367,14 @@ pub fn compile_module_to_object(
         .map_err(|e| anyhow!(format!("failed to write object file: {e}")))
 }
 
+/// Context for compiling break/continue within loops
+struct LoopContext<'ctx> {
+    /// Block to jump to for `continue` (increment/condition block)
+    continue_block: inkwell::basic_block::BasicBlock<'ctx>,
+    /// Block to jump to for `break` (exit block)
+    exit_block: inkwell::basic_block::BasicBlock<'ctx>,
+}
+
 // Many fields are for removed functionality but kept for potential future use
 #[allow(dead_code)]
 struct LlvmCodeGenerator<'ctx> {
@@ -562,6 +571,9 @@ struct LlvmCodeGenerator<'ctx> {
     error_mode_stack: Vec<ErrorHandlingMode>,
     function_return_stack: Vec<ValueType>,
     function_can_throw_stack: Vec<bool>,
+    loop_context: Option<LoopContext<'ctx>>,
+    list_len_ffi_fn: Option<FunctionValue<'ctx>>,
+    dict_keys_fn: Option<FunctionValue<'ctx>>,
 }
 
 /// Macros to generate FFI helper functions.
@@ -1233,6 +1245,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             function_return_stack: Vec::new(),
             function_can_throw_stack: Vec::new(),
             global_slots: HashMap::new(),
+            loop_context: None,
+            list_len_ffi_fn: None,
+            dict_keys_fn: None,
         }
     }
 
@@ -2696,11 +2711,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_throw(throw_stmt, function, locals, return_type)?;
                 Ok(true)
             }
-            Statement::Break(_) | Statement::Continue(_) => {
-                // TODO: Implement break/continue for AOT compiler
-                Err(anyhow!(
-                    "break/continue not yet supported in AOT compilation"
-                ))
+            Statement::Break(_) => {
+                if let Some(ctx) = &self.loop_context {
+                    map_builder_error(self.builder.build_unconditional_branch(ctx.exit_block))?;
+                    Ok(true) // terminated
+                } else {
+                    bail!("break outside of loop")
+                }
+            }
+            Statement::Continue(_) => {
+                if let Some(ctx) = &self.loop_context {
+                    map_builder_error(self.builder.build_unconditional_branch(ctx.continue_block))?;
+                    Ok(true) // terminated
+                } else {
+                    bail!("continue outside of loop")
+                }
             }
         }
     }
@@ -3048,6 +3073,24 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
         return_type: &ValueType,
     ) -> Result<bool> {
+        match &statement.header {
+            LoopHeader::Condition(expr) => {
+                self.compile_while_loop(statement, expr, function, locals, return_type)
+            }
+            LoopHeader::For { pattern, iterator } => {
+                self.compile_for_loop(statement, pattern, iterator, function, locals, return_type)
+            }
+        }
+    }
+
+    fn compile_while_loop(
+        &mut self,
+        statement: &LoopStatement,
+        cond_expr: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        return_type: &ValueType,
+    ) -> Result<bool> {
         let current_block = self
             .builder
             .get_insert_block()
@@ -3123,10 +3166,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         // Compile the loop condition
-        let cond_expr = match &statement.header {
-            LoopHeader::Condition(expr) => expr,
-            LoopHeader::For { .. } => bail!("for loops unsupported"),
-        };
         let cond_value = self
             .compile_expression(cond_expr, function, locals)?
             .into_bool()?;
@@ -3137,6 +3176,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         )?;
 
         self.builder.position_at_end(body_block);
+
+        // Set loop context for break/continue (continue goes to condition for while loops)
+        let old_loop_context = self.loop_context.take();
+        self.loop_context = Some(LoopContext {
+            continue_block: cond_block,
+            exit_block,
+        });
 
         // Create a map to track the "next" values for PHI variables
         // Start with the PHI values themselves
@@ -3174,6 +3220,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 break;
             }
         }
+
+        // Restore loop context
+        self.loop_context = old_loop_context;
 
         let body_terminated = self
             .builder
@@ -3228,6 +3277,445 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         Ok(false)
+    }
+
+    fn compile_for_loop(
+        &mut self,
+        statement: &LoopStatement,
+        pattern: &ForPattern,
+        iterator: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        return_type: &ValueType,
+    ) -> Result<bool> {
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+
+        // Create blocks for for-loop structure
+        let cond_block = self.context.append_basic_block(function, "for_cond");
+        let body_block = self.context.append_basic_block(function, "for_body");
+        let inc_block = self.context.append_basic_block(function, "for_inc");
+        let exit_block = self.context.append_basic_block(function, "for_exit");
+
+        // Compile the iterator expression to get the collection
+        let iterator_value = self.compile_expression(iterator, function, locals)?;
+
+        // Get the list pointer and element type, or dict info
+        let (list_ptr, element_type, is_dict, dict_ptr, value_type) = match &iterator_value {
+            ExprValue::List {
+                pointer,
+                element_type,
+            } => (*pointer, *element_type.clone(), false, None, None),
+            ExprValue::Dict {
+                pointer,
+                value_type,
+            } => {
+                // For dict iteration, get the keys list
+                let dict_keys_fn = self.ensure_dict_keys_fn();
+                let keys_ptr = map_builder_error(self.builder.build_call(
+                    dict_keys_fn,
+                    &[(*pointer).into()],
+                    "dict_keys",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected pointer from dict_keys"))?
+                .into_pointer_value();
+                (
+                    keys_ptr,
+                    ValueType::String,
+                    true,
+                    Some(*pointer),
+                    Some(*value_type.clone()),
+                )
+            }
+            _ => bail!("for loop iterator must be a List or Dict"),
+        };
+
+        // Get length of the collection
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Identify variables that are mutated in the loop body
+        let mut mutated_vars = std::collections::HashSet::new();
+        self.find_mutated_in_statements(&statement.body.statements, &mut mutated_vars);
+
+        // For for-loops, convert SSA variables to alloca-based storage to handle
+        // continue correctly. When continue is called, it jumps to the increment
+        // block, and we need the current value of mutated variables to be available
+        // regardless of where continue was called from. Using allocas avoids PHI
+        // complexity with multiple paths to the increment block.
+        let mut converted_vars: Vec<(String, ValueType)> = Vec::new();
+        for var_name in &mutated_vars {
+            if let Some(var) = locals.get(var_name) {
+                if var.mutable && var.pointer.is_none() {
+                    // Variable uses SSA value, convert to alloca
+                    if let Some(ssa_value) = var.value {
+                        let alloca = self.create_entry_alloca(
+                            function,
+                            &format!("{}_for_loop", var_name),
+                            self.basic_type(&var.ty)?,
+                        )?;
+                        map_builder_error(self.builder.build_store(alloca, ssa_value))?;
+                        converted_vars.push((var_name.clone(), var.ty.clone()));
+                        locals.insert(
+                            var_name.clone(),
+                            LocalVariable {
+                                pointer: Some(alloca),
+                                value: None,
+                                ty: var.ty.clone(),
+                                mutable: true,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        // Branch to condition block
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // === COND BLOCK ===
+        self.builder.position_at_end(cond_block);
+
+        // Create index PHI node (only need PHI for the index, not for mutated vars)
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index.phi"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        // Condition: index < length
+        let cond = map_builder_error(self.builder.build_int_compare(
+            inkwell::IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "loop_cond",
+        ))?;
+
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // === BODY BLOCK ===
+        self.builder.position_at_end(body_block);
+
+        // Get the element at current index using inline LLVM code (matches compile_index)
+        // TeaList: { tag: i8, len: i8, padding: [6 x i8], data: [8 x TeaValue] }
+        let list_type = self
+            .context
+            .get_struct_type("TeaList")
+            .ok_or_else(|| anyhow!("TeaList type not found"))?;
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+        // Get pointer to data array (field 3)
+        let data_ptr = map_builder_error(
+            self.builder
+                .build_struct_gep(list_type, list_ptr, 3, "data_ptr"),
+        )?;
+        // Index into the data array
+        let elem_ptr = unsafe {
+            map_builder_error(self.builder.build_in_bounds_gep(
+                tea_value_type.array_type(8),
+                data_ptr,
+                &[
+                    self.context.i64_type().const_zero(),
+                    index_phi.as_basic_value().into_int_value(),
+                ],
+                "elem_ptr",
+            ))?
+        };
+        // Load the TeaValue
+        let tea_value = map_builder_error(self.builder.build_load(
+            tea_value_type,
+            elem_ptr,
+            "list_elem",
+        ))?
+        .into_struct_value();
+
+        // Bind loop variable(s) based on pattern
+        match pattern {
+            ForPattern::Single(ident) => {
+                // Convert TeaValue to the element type using the existing function
+                let element_value = self.tea_value_to_expr(tea_value, element_type.clone())?;
+                let basic_value = element_value
+                    .into_basic_value()
+                    .ok_or_else(|| anyhow!("loop variable cannot be void"))?;
+                locals.insert(
+                    ident.name.clone(),
+                    LocalVariable {
+                        pointer: None,
+                        value: Some(basic_value),
+                        ty: element_type.clone(),
+                        mutable: false,
+                    },
+                );
+            }
+            ForPattern::Pair(key_ident, value_ident) => {
+                if !is_dict {
+                    bail!("for loop with two variables requires a Dict iterator");
+                }
+                let dict_ptr = dict_ptr.ok_or_else(|| anyhow!("missing dict pointer"))?;
+                let value_type = value_type.ok_or_else(|| anyhow!("missing dict value type"))?;
+
+                // The key is the string we got from the keys list - use tea_value_to_expr
+                let key_value = self.tea_value_to_expr(tea_value, ValueType::String)?;
+                let key_ptr = key_value.into_string()?;
+
+                // Get the value from dict using this key
+                let dict_get_fn = self.ensure_dict_get();
+                let dict_value = map_builder_error(self.builder.build_call(
+                    dict_get_fn,
+                    &[dict_ptr.into(), key_ptr.into()],
+                    "dict_get",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
+                .into_struct_value();
+
+                let value_expr = self.tea_value_to_expr(dict_value, value_type.clone())?;
+                let value_basic = value_expr
+                    .into_basic_value()
+                    .ok_or_else(|| anyhow!("dict value cannot be void"))?;
+
+                // Bind key (String)
+                locals.insert(
+                    key_ident.name.clone(),
+                    LocalVariable {
+                        pointer: None,
+                        value: Some(key_ptr.into()),
+                        ty: ValueType::String,
+                        mutable: false,
+                    },
+                );
+
+                // Bind value
+                locals.insert(
+                    value_ident.name.clone(),
+                    LocalVariable {
+                        pointer: None,
+                        value: Some(value_basic),
+                        ty: value_type,
+                        mutable: false,
+                    },
+                );
+            }
+        }
+
+        // Set loop context for break/continue (continue goes to increment for for-loops)
+        let old_loop_context = self.loop_context.take();
+        self.loop_context = Some(LoopContext {
+            continue_block: inc_block,
+            exit_block,
+        });
+
+        // Compile loop body
+        // Since mutated variables now use allocas, no PHI tracking is needed
+        for (idx, stmt) in statement.body.statements.iter().enumerate() {
+            let is_last = idx == statement.body.statements.len() - 1;
+            let terminated =
+                self.compile_statement(stmt, function, locals, return_type, is_last)?;
+
+            if terminated {
+                break;
+            }
+        }
+
+        // Restore loop context
+        self.loop_context = old_loop_context;
+
+        // Remove loop variables from locals
+        match pattern {
+            ForPattern::Single(ident) => {
+                locals.remove(&ident.name);
+            }
+            ForPattern::Pair(key_ident, value_ident) => {
+                locals.remove(&key_ident.name);
+                locals.remove(&value_ident.name);
+            }
+        }
+
+        let body_terminated = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing block"))?
+            .get_terminator()
+            .is_some();
+
+        if !body_terminated {
+            // Body is not terminated, so branch to increment block
+            map_builder_error(self.builder.build_unconditional_branch(inc_block))?;
+        }
+
+        // === INCREMENT BLOCK ===
+        self.builder.position_at_end(inc_block);
+
+        // index.next = index + 1
+        let index_next = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "index.next",
+        ))?;
+
+        // Add incoming to index PHI from increment block
+        index_phi.add_incoming(&[(&index_next, inc_block)]);
+
+        let back_edge = map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+        self.add_loop_metadata(back_edge);
+
+        // === EXIT BLOCK ===
+        self.builder.position_at_end(exit_block);
+
+        // Variables that were converted to allocas for the loop remain as allocas
+        // (they're already in locals with pointer set)
+
+        Ok(false)
+    }
+
+    /// Ensure the tea_list_len_ffi FFI function is declared
+    fn ensure_list_len_ffi_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.list_len_ffi_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .i64_type()
+            .fn_type(&[self.list_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_list_len_ffi", fn_type, Some(Linkage::External));
+        self.list_len_ffi_fn = Some(func);
+        func
+    }
+
+    /// Ensure the tea_dict_keys FFI function is declared
+    fn ensure_dict_keys_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_keys_fn {
+            return func;
+        }
+        let fn_type = self
+            .list_ptr_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_dict_keys", fn_type, Some(Linkage::External));
+        self.dict_keys_fn = Some(func);
+        func
+    }
+
+    /// Convert a TeaValue struct to an ExprValue based on expected type
+    fn tea_value_to_expr_value(
+        &mut self,
+        tea_value: inkwell::values::StructValue<'ctx>,
+        expected_type: &ValueType,
+    ) -> Result<ExprValue<'ctx>> {
+        // Allocate the TeaValue on the stack and get a pointer to it
+        // (the tea_value_as_* functions expect a pointer due to ARM64 ABI issues)
+        let value_alloca = map_builder_error(
+            self.builder
+                .build_alloca(self.value_type(), "tea_value_temp"),
+        )?;
+        map_builder_error(self.builder.build_store(value_alloca, tea_value))?;
+
+        match expected_type {
+            ValueType::Int => {
+                let value_as_int = self.ensure_value_as_int();
+                let int_val = map_builder_error(self.builder.build_call(
+                    value_as_int,
+                    &[value_alloca.into()],
+                    "as_int",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected i64"))?
+                .into_int_value();
+                Ok(ExprValue::Int(int_val))
+            }
+            ValueType::Float => {
+                let value_as_float = self.ensure_value_as_float();
+                let float_val = map_builder_error(self.builder.build_call(
+                    value_as_float,
+                    &[value_alloca.into()],
+                    "as_float",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected f64"))?
+                .into_float_value();
+                Ok(ExprValue::Float(float_val))
+            }
+            ValueType::Bool => {
+                let value_as_bool = self.ensure_value_as_bool();
+                let bool_val = map_builder_error(self.builder.build_call(
+                    value_as_bool,
+                    &[value_alloca.into()],
+                    "as_bool",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected i32"))?
+                .into_int_value();
+                Ok(ExprValue::Bool(bool_val))
+            }
+            ValueType::String => {
+                let value_as_string = self.ensure_value_as_string();
+                let str_ptr = map_builder_error(self.builder.build_call(
+                    value_as_string,
+                    &[value_alloca.into()],
+                    "as_string",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected ptr"))?
+                .into_pointer_value();
+                Ok(ExprValue::String(str_ptr))
+            }
+            ValueType::List(element_type) => {
+                let value_as_list = self.ensure_value_as_list();
+                let list_ptr = map_builder_error(self.builder.build_call(
+                    value_as_list,
+                    &[value_alloca.into()],
+                    "as_list",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected ptr"))?
+                .into_pointer_value();
+                Ok(ExprValue::List {
+                    pointer: list_ptr,
+                    element_type: element_type.clone(),
+                })
+            }
+            ValueType::Dict(value_type) => {
+                let value_as_dict = self.ensure_value_as_dict();
+                let dict_ptr = map_builder_error(self.builder.build_call(
+                    value_as_dict,
+                    &[value_alloca.into()],
+                    "as_dict",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected ptr"))?
+                .into_pointer_value();
+                Ok(ExprValue::Dict {
+                    pointer: dict_ptr,
+                    value_type: value_type.clone(),
+                })
+            }
+            _ => bail!("unsupported element type for for-loop: {:?}", expected_type),
+        }
     }
 
     fn compile_assignment(

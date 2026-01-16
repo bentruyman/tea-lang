@@ -127,7 +127,7 @@ print("Age: ${age}")
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
 
-for n of numbers
+for n in numbers
   sum = sum + n
 end
 

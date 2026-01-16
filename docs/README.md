@@ -180,7 +180,7 @@ print(greet(name))
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
 
-for num of numbers
+for num in numbers
   sum = sum + num
 end
 
@@ -232,7 +232,7 @@ use env = "std.env"
 var root = env.cwd()
 var entries = fs.read_dir(root)
 
-for entry of entries
+for entry in entries
   var full_path = path.join([root, entry])
   print(full_path)
 end

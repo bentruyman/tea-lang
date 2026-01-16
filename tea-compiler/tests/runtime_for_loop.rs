@@ -11,7 +11,7 @@ test "for loop iterates over list"
   var sum = 0
   var numbers = [1, 2, 3]
   
-  for num of numbers
+  for num in numbers
     sum = sum + num
   end
   
@@ -55,7 +55,7 @@ test "for loop with empty list"
   var count = 0
   var empty = []
   
-  for item of empty
+  for item in empty
     count = count + 1
   end
   
@@ -99,7 +99,7 @@ test "for loop with string list"
   var count = 0
   var words = ["Hello", "World", "!"]
   
-  for word of words
+  for word in words
     count = count + @len(word)
   end
   
@@ -144,8 +144,8 @@ test "nested for loops"
   var outer = [1, 2]
   var inner = [10, 20]
   
-  for i of outer
-    for j of inner
+  for i in outer
+    for j in inner
       result = result + (i * j)
     end
   end
@@ -191,7 +191,7 @@ test "for loop with break"
   var sum = 0
   var numbers = [1, 2, 3, 4, 5]
   
-  for num of numbers
+  for num in numbers
     if num == 4
       break
     end
@@ -238,7 +238,7 @@ test "for loop with continue"
   var sum = 0
   var numbers = [1, 2, 3, 4, 5]
   
-  for num of numbers
+  for num in numbers
     if num == 3
       continue
     end

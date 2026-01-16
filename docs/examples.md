@@ -32,7 +32,7 @@ def process_log_file(path: String)
   var lines = string.split(content, "\n")
   var error_count = 0
 
-  for line of lines
+  for line in lines
     if string.contains(line, "ERROR")
       error_count = error_count + 1
       @println(`ERROR: ${line}`)
@@ -60,7 +60,7 @@ def convert_all_files(input_dir: String, output_dir: String)
     fs.create_dir(output_dir)
   end
 
-  for file of files
+  for file in files
     if string.ends_with(file, ".txt")
       var input_path = path.join([input_dir, file])
       var content = fs.read_file(input_path)
@@ -93,7 +93,7 @@ def walk_directory(dir: String, extension: String) -> List[String]
   var results: List[String] = []
   var entries = fs.read_dir(dir)
 
-  for entry of entries
+  for entry in entries
     var full_path = path.join([dir, entry])
 
     if string.ends_with(entry, extension)
@@ -160,7 +160,7 @@ def analyze_file(file_path: String) -> FileStats
   var lines = string.split(content, "\n")
 
   var word_count = 0
-  for line of lines
+  for line in lines
     var words = string.split(string.trim(line), " ")
     word_count = word_count + @len(words)
   end
@@ -195,7 +195,7 @@ def filter_even(numbers: List[Int]) -> List[Int]
   var result: List[Int] = []
   var index = 0
 
-  for num of numbers
+  for num in numbers
     if num % 2 == 0
       # In real code, append to result
       @println(num)
@@ -208,7 +208,7 @@ end
 def sum_list(numbers: List[Int]) -> Int
   var total = 0
 
-  for num of numbers
+  for num in numbers
     total = total + num
   end
 
@@ -245,7 +245,7 @@ struct Sale {
 def total_sales(sales: List[Sale]) -> Float
   var total = 0.0
 
-  for sale of sales
+  for sale in sales
     total = total + sale.amount
   end
 
@@ -255,7 +255,7 @@ end
 def total_quantity(sales: List[Sale]) -> Int
   var total = 0
 
-  for sale of sales
+  for sale in sales
     total = total + sale.quantity
   end
 
@@ -433,7 +433,7 @@ def format_report(report: Report) -> String
   var output = `${report.title}\n`
   output = output + "==========\n"
 
-  for item of report.items
+  for item in report.items
     output = output + `- ${item}\n`
   end
 

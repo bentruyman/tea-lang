@@ -281,14 +281,14 @@ end
 def main() -> Void
   var point = { x: 3, y: 4 }
 
-  for key, value of point
+  for key, value in point
     print(key)
     print(value)
   end
 
   var numbers = [1, 2, 3]
 
-  for num of numbers
+  for num in numbers
     print(num)
   end
 end

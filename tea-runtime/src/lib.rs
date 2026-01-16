@@ -2570,6 +2570,33 @@ pub extern "C" fn tea_dict_equal(left: *const TeaDict, right: *const TeaDict) ->
     }
 }
 
+/// Get all keys from a dict as a list of strings (for dict iteration)
+#[no_mangle]
+pub extern "C" fn tea_dict_keys(dict: *const TeaDict) -> *mut TeaList {
+    if dict.is_null() {
+        return tea_alloc_list(0);
+    }
+    unsafe {
+        let dict_ref = &*dict;
+        let keys: Vec<&str> = dict_ref.entries.keys().map(|s| s.as_str()).collect();
+        let list = tea_alloc_list(keys.len() as c_longlong);
+        for (i, key) in keys.into_iter().enumerate() {
+            let key_str = tea_alloc_string(key.as_ptr() as *const c_char, key.len() as c_longlong);
+            tea_list_set(list, i as c_longlong, tea_value_from_string(key_str));
+        }
+        list
+    }
+}
+
+/// Get length of a list (FFI wrapper for iteration)
+#[no_mangle]
+pub extern "C" fn tea_list_len_ffi(list: *const TeaList) -> c_longlong {
+    if list.is_null() {
+        return 0;
+    }
+    unsafe { tea_list_len(&*list) }
+}
+
 #[no_mangle]
 pub extern "C" fn tea_io_read_line() -> TeaValue {
     let mut buffer = String::new();

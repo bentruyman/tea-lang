@@ -109,7 +109,7 @@ Iterate over collections with `for`:
 ```tea
 var numbers = [1, 2, 3, 4, 5]
 
-for num of numbers
+for num in numbers
   print("Number: ${num}")
 end
 ```
@@ -119,7 +119,7 @@ This works with any collection type:
 ```tea
 var names = ["Alice", "Bob", "Charlie"]
 
-for name of names
+for name in names
   print("Hello, ${name}!")
 end
 ```
@@ -370,7 +370,7 @@ var numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 var sum = 0
 var even_count = 0
 
-for num of numbers
+for num in numbers
   sum = sum + num
 
   if num % 2 == 0
@@ -442,7 +442,7 @@ end
 **For Loop:**
 
 ```tea
-for item of collection
+for item in collection
   # code
 end
 ```

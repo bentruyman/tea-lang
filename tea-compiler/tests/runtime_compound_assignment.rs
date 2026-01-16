@@ -146,7 +146,7 @@ fn test_compound_assignment_in_loop() -> anyhow::Result<()> {
 use assert = "std.assert"
 
 var sum = 0
-for i of [1, 2, 3, 4, 5]
+for i in [1, 2, 3, 4, 5]
   sum += i
 end
 assert.eq(sum, 15)

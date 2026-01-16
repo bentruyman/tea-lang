@@ -1273,7 +1273,7 @@ impl<'a> Parser<'a> {
             })
         };
 
-        self.expect_keyword(Keyword::Of, "expected 'of' in for loop")?;
+        self.expect_keyword(Keyword::In, "expected 'in' in for loop")?;
         let iterator = self.parse_expression_with(default_expression_terminator)?;
 
         self.expect_newline("expected newline after for loop header")?;

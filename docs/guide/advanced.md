@@ -107,7 +107,7 @@ use env = "std.env"
 var current_dir = env.cwd()
 var files = fs.read_dir(current_dir)
 
-for file of files
+for file in files
   var full_path = path.join([current_dir, file])
   print(full_path)
 end
@@ -248,7 +248,7 @@ print(add_10(20))  # Output: 30
 def filter[T](list: List[T], predicate: Func(T) -> Bool) -> List[T]
   var result: List[T] = []
 
-  for item of list
+  for item in list
     if predicate(item)
       # Add to result (pseudocode)
     end

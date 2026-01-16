@@ -10,7 +10,7 @@ const SAMPLE_CODE = `def greet(name: String) -> String
 end
 
 var names = ["Alice", "Bob", "Charlie"]
-for person of names
+for person in names
   print(greet(person))
 end`
 

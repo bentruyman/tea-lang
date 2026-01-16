@@ -12,7 +12,7 @@ end
 
 var names = ["Alice", "Bob", "Charlie"]
 
-for person of names
+for person in names
   print(greet(person))
 end
 ```
@@ -40,7 +40,7 @@ var entries = fs.read_dir(root)
 
 @print(`Tea files in {root}:`)
 
-for entry of entries
+for entry in entries
   if string.ends_with(entry, ".tea")
     var absolute = path.join([root, entry])
     @print(`• {absolute}`)
@@ -113,7 +113,7 @@ print(greeting)
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
 
-for n of numbers
+for n in numbers
   sum = sum + n
 end
 

@@ -201,7 +201,7 @@ List all entries in a directory (files and subdirectories).
 
 ```tea
 var entries = fs.read_dir(".")
-for entry of entries
+for entry in entries
   @println(entry)
 end
 ```
@@ -244,7 +244,7 @@ use path = "std.path"
 
 var files = fs.read_dir("docs")
 
-for file of files
+for file in files
   if string.ends_with(file, ".txt")
     var content = fs.read_file(path.join(["docs", file]))
     var lines = @len(string.split(content, "\n"))
@@ -473,7 +473,7 @@ use string = "std.string"
 
 var files = fs.read_dir(".")
 
-for file of files
+for file in files
   if string.ends_with(file, ".tea")
     var content = fs.read_file(file)
     var lines = string.trim(content)
@@ -526,7 +526,7 @@ use string = "std.string"
 def process_directory(dir: String)
   var entries = fs.read_dir(dir)
 
-  for entry of entries
+  for entry in entries
     var full_path = path.join([dir, entry])
 
     if string.ends_with(entry, ".tea")

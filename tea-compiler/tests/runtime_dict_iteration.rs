@@ -11,7 +11,7 @@ test "for loop iterates over dict with key and value"
   var point = { x: 3, y: 4 }
   var sum = 0
   
-  for key, value of point
+  for key, value in point
     sum = sum + value
   end
   
@@ -55,7 +55,7 @@ test "for loop with empty dict"
   var empty = {}
   var count = 0
   
-  for key, value of empty
+  for key, value in empty
     count = count + 1
   end
   
@@ -99,7 +99,7 @@ test "for loop can access dict keys"
   var scores = { "alice": 10, "bob": 8 }
   var key_count = 0
   
-  for key, value of scores
+  for key, value in scores
     key_count = key_count + @len(key)
   end
   
@@ -144,7 +144,7 @@ test "for loop dict with break"
   var numbers = { "a": 1, "b": 2, "c": 3 }
   var sum = 0
   
-  for key, value of numbers
+  for key, value in numbers
     if value == 2
       break
     end
@@ -193,7 +193,7 @@ test "for loop dict with continue"
   var numbers = { "a": 1, "b": 2, "c": 3 }
   var sum = 0
   
-  for key, value of numbers
+  for key, value in numbers
     if value == 2
       continue
     end
@@ -237,7 +237,7 @@ fn for_loop_dict_type_error() -> anyhow::Result<()> {
     let source = r#"
 var numbers = [1, 2, 3]
 
-for key, value of numbers
+for key, value in numbers
   var x = key
 end
 "#;

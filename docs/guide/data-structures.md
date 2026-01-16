@@ -102,7 +102,7 @@ Use a `for` loop:
 ```tea
 var scores = [85, 90, 78, 92]
 
-for score of scores
+for score in scores
   print("Score: ${score}")
 end
 ```
@@ -115,7 +115,7 @@ end
 var numbers = [1, 2, 3, 4, 5]
 var sum = 0
 
-for num of numbers
+for num in numbers
   sum = sum + num
 end
 
@@ -128,7 +128,7 @@ print("Sum: ${sum}")  # Output: Sum: 15
 var numbers = [23, 67, 12, 89, 45]
 var max = numbers[0]
 
-for num of numbers
+for num in numbers
   if num > max
     max = num
   end
@@ -143,7 +143,7 @@ print("Max: ${max}")  # Output: Max: 89
 var numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 var evens: List[Int] = []
 
-for num of numbers
+for num in numbers
   if num % 2 == 0
     # Note: List append methods depend on stdlib
     # This is pseudocode for illustration
@@ -271,7 +271,7 @@ var people = [
   Person(name: "Charlie", age: 35)
 ]
 
-for person of people
+for person in people
   print("${person.name} is ${person.age} years old")
 end
 ```
@@ -413,7 +413,7 @@ end
 def print_tasks(tasks: List[Task])
   var index = 0
 
-  for task of tasks
+  for task in tasks
     var status = if(task.completed) "✓" else "○"
     print("${index}. ${status} ${task.description}")
     index = index + 1
@@ -506,7 +506,7 @@ var value = dict.key
 **Iteration:**
 
 ```tea
-for item of collection
+for item in collection
   # process item
 end
 ```

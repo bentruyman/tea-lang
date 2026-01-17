@@ -321,6 +321,56 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[],
         StdType::String,
     ),
+    // Regex intrinsics
+    std_function(
+        "regex_compile",
+        StdFunctionKind::RegexCompile,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Int,
+    ),
+    std_function(
+        "regex_is_match",
+        StdFunctionKind::RegexIsMatch,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
+        "regex_find_all",
+        StdFunctionKind::RegexFindAll,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::String],
+        StdType::List,
+    ),
+    std_function(
+        "regex_captures",
+        StdFunctionKind::RegexCaptures,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::String],
+        StdType::List,
+    ),
+    std_function(
+        "regex_replace",
+        StdFunctionKind::RegexReplace,
+        StdArity::Exact(3),
+        &[StdType::Int, StdType::String, StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "regex_replace_all",
+        StdFunctionKind::RegexReplaceAll,
+        StdArity::Exact(3),
+        &[StdType::Int, StdType::String, StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "regex_split",
+        StdFunctionKind::RegexSplit,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::String],
+        StdType::List,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

@@ -113,6 +113,19 @@ fn process_handles() -> &'static Mutex<HashMap<i64, ProcessHandleEntry>> {
     PROCESS_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+// Regex handles for compiled regex patterns
+struct RegexHandle {
+    regex: regex::Regex,
+    pattern: String,
+}
+
+static REGEX_HANDLES: OnceLock<Mutex<HashMap<i64, RegexHandle>>> = OnceLock::new();
+static NEXT_REGEX_HANDLE: AtomicI64 = AtomicI64::new(1);
+
+fn regex_handles() -> &'static Mutex<HashMap<i64, RegexHandle>> {
+    REGEX_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 thread_local! {
     static CURRENT_ERROR: Cell<*mut TeaErrorInstance> = Cell::new(ptr::null_mut());
 }
@@ -3054,6 +3067,164 @@ pub extern "C" fn tea_args_program() -> *mut TeaString {
     let name = detect_program_name().unwrap_or_default();
     let bytes = name.as_bytes();
     tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+}
+
+// ============================================================================
+// Regex functions
+// ============================================================================
+
+/// Compile a regex pattern and return a handle.
+/// Returns -1 if the pattern is invalid.
+#[no_mangle]
+pub extern "C" fn tea_regex_compile(pattern: *const TeaString) -> c_longlong {
+    let pattern_str = expect_string(pattern, "regex.compile expects a valid pattern string");
+    match regex::Regex::new(&pattern_str) {
+        Ok(regex) => {
+            let mut table = regex_handles().lock().unwrap();
+            let handle_id = NEXT_REGEX_HANDLE.fetch_add(1, Ordering::SeqCst);
+            table.insert(
+                handle_id,
+                RegexHandle {
+                    regex,
+                    pattern: pattern_str,
+                },
+            );
+            handle_id as c_longlong
+        }
+        Err(e) => {
+            panic!("regex error: invalid pattern '{}': {}", pattern_str, e);
+        }
+    }
+}
+
+/// Test if a regex matches anywhere in the text.
+#[no_mangle]
+pub extern "C" fn tea_regex_is_match(handle: c_longlong, text: *const TeaString) -> c_int {
+    let text_str = expect_string(text, "regex.is_match expects a valid text string");
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+    if entry.regex.is_match(&text_str) {
+        1
+    } else {
+        0
+    }
+}
+
+/// Find all matches in the text and return as a list of strings.
+#[no_mangle]
+pub extern "C" fn tea_regex_find_all(handle: c_longlong, text: *const TeaString) -> *mut TeaList {
+    let text_str = expect_string(text, "regex.find_all expects a valid text string");
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+
+    let matches: Vec<&str> = entry
+        .regex
+        .find_iter(&text_str)
+        .map(|m| m.as_str())
+        .collect();
+
+    let list = tea_alloc_list(matches.len() as c_longlong);
+    for (i, m) in matches.iter().enumerate() {
+        let s = tea_alloc_string(m.as_ptr() as *const c_char, m.len() as c_longlong);
+        tea_list_set(list, i as c_longlong, tea_value_from_string(s));
+    }
+    list
+}
+
+/// Get capture groups from the first match. Returns a list of strings.
+/// Index 0 is the full match, 1+ are capture groups.
+#[no_mangle]
+pub extern "C" fn tea_regex_captures(handle: c_longlong, text: *const TeaString) -> *mut TeaList {
+    let text_str = expect_string(text, "regex.captures expects a valid text string");
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+
+    if let Some(caps) = entry.regex.captures(&text_str) {
+        let count = caps.len();
+        let list = tea_alloc_list(count as c_longlong);
+        for i in 0..count {
+            if let Some(m) = caps.get(i) {
+                let s = m.as_str();
+                let tea_s = tea_alloc_string(s.as_ptr() as *const c_char, s.len() as c_longlong);
+                tea_list_set(list, i as c_longlong, tea_value_from_string(tea_s));
+            } else {
+                // No match for this group - use empty string
+                let tea_s = tea_alloc_string("".as_ptr() as *const c_char, 0);
+                tea_list_set(list, i as c_longlong, tea_value_from_string(tea_s));
+            }
+        }
+        list
+    } else {
+        // No match - return empty list
+        tea_alloc_list(0)
+    }
+}
+
+/// Replace the first match with the replacement string.
+#[no_mangle]
+pub extern "C" fn tea_regex_replace(
+    handle: c_longlong,
+    text: *const TeaString,
+    replacement: *const TeaString,
+) -> *mut TeaString {
+    let text_str = expect_string(text, "regex.replace expects a valid text string");
+    let replacement_str = expect_string(
+        replacement,
+        "regex.replace expects a valid replacement string",
+    );
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+
+    let result = entry.regex.replace(&text_str, replacement_str.as_str());
+    alloc_tea_string(&result)
+}
+
+/// Replace all matches with the replacement string.
+#[no_mangle]
+pub extern "C" fn tea_regex_replace_all(
+    handle: c_longlong,
+    text: *const TeaString,
+    replacement: *const TeaString,
+) -> *mut TeaString {
+    let text_str = expect_string(text, "regex.replace_all expects a valid text string");
+    let replacement_str = expect_string(
+        replacement,
+        "regex.replace_all expects a valid replacement string",
+    );
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+
+    let result = entry.regex.replace_all(&text_str, replacement_str.as_str());
+    alloc_tea_string(&result)
+}
+
+/// Split the text by the regex pattern.
+#[no_mangle]
+pub extern "C" fn tea_regex_split(handle: c_longlong, text: *const TeaString) -> *mut TeaList {
+    let text_str = expect_string(text, "regex.split expects a valid text string");
+    let table = regex_handles().lock().unwrap();
+    let entry = table
+        .get(&(handle as i64))
+        .unwrap_or_else(|| panic!("regex error: invalid regex handle {}", handle));
+
+    let parts: Vec<&str> = entry.regex.split(&text_str).collect();
+
+    let list = tea_alloc_list(parts.len() as c_longlong);
+    for (i, part) in parts.iter().enumerate() {
+        let s = tea_alloc_string(part.as_ptr() as *const c_char, part.len() as c_longlong);
+        tea_list_set(list, i as c_longlong, tea_value_from_string(s));
+    }
+    list
 }
 
 #[no_mangle]

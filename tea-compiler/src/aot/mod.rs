@@ -477,6 +477,14 @@ struct LlvmCodeGenerator<'ctx> {
     path_separator_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
     args_program_fn: Option<FunctionValue<'ctx>>,
+    // Regex functions
+    regex_compile_fn: Option<FunctionValue<'ctx>>,
+    regex_is_match_fn: Option<FunctionValue<'ctx>>,
+    regex_find_all_fn: Option<FunctionValue<'ctx>>,
+    regex_captures_fn: Option<FunctionValue<'ctx>>,
+    regex_replace_fn: Option<FunctionValue<'ctx>>,
+    regex_replace_all_fn: Option<FunctionValue<'ctx>>,
+    regex_split_fn: Option<FunctionValue<'ctx>>,
     read_line_fn: Option<FunctionValue<'ctx>>,
     read_all_fn: Option<FunctionValue<'ctx>>,
     eprint_int_fn: Option<FunctionValue<'ctx>>,
@@ -1172,6 +1180,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_separator_fn: None,
             cli_args_fn: None,
             args_program_fn: None,
+            // Regex functions
+            regex_compile_fn: None,
+            regex_is_match_fn: None,
+            regex_find_all_fn: None,
+            regex_captures_fn: None,
+            regex_replace_fn: None,
+            regex_replace_all_fn: None,
+            regex_split_fn: None,
             read_line_fn: None,
             read_all_fn: None,
             eprint_int_fn: None,
@@ -6193,6 +6209,28 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             // Args intrinsics
             StdFunctionKind::ArgsAll => self.compile_args_call(),
             StdFunctionKind::ArgsProgram => self.compile_args_program_call(),
+            // Regex module
+            StdFunctionKind::RegexCompile => {
+                self.compile_regex_compile_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexIsMatch => {
+                self.compile_regex_is_match_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexFindAll => {
+                self.compile_regex_find_all_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexCaptures => {
+                self.compile_regex_captures_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexReplace => {
+                self.compile_regex_replace_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexReplaceAll => {
+                self.compile_regex_replace_all_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::RegexSplit => {
+                self.compile_regex_split_call(&call.arguments, function, locals)
+            }
         }
     }
 
@@ -9139,6 +9177,270 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .ok_or_else(|| anyhow!("tea_args_program returned no value"))?
             .into_pointer_value();
         Ok(ExprValue::String(pointer))
+    }
+
+    // Regex functions
+    fn compile_regex_compile_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("regex.compile expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for regex.compile");
+        }
+        let pattern_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let pattern_ptr = self.expect_string_pointer(
+            pattern_expr,
+            "regex.compile expects the pattern to be a String",
+        )?;
+        let func = self.ensure_regex_compile_fn();
+        let handle = self
+            .call_function(func, &[pattern_ptr.into()], "tea_regex_compile")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_compile returned no value"))?
+            .into_int_value();
+        Ok(ExprValue::Int(handle))
+    }
+
+    fn compile_regex_is_match_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("regex.is_match expects exactly 2 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.is_match");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "regex.is_match expects the handle to be an Int",
+        )?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "regex.is_match expects the text to be a String")?;
+        let func = self.ensure_regex_is_match_fn();
+        let raw = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into()],
+                "tea_regex_is_match",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_is_match returned no value"))?
+            .into_int_value();
+        let bool_value = self.i32_to_bool(raw, "regex_is_match_result")?;
+        Ok(ExprValue::Bool(bool_value))
+    }
+
+    fn compile_regex_find_all_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("regex.find_all expects exactly 2 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.find_all");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "regex.find_all expects the handle to be an Int",
+        )?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "regex.find_all expects the text to be a String")?;
+        let func = self.ensure_regex_find_all_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into()],
+                "tea_regex_find_all",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_find_all returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::String),
+        })
+    }
+
+    fn compile_regex_captures_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("regex.captures expects exactly 2 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.captures");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "regex.captures expects the handle to be an Int",
+        )?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "regex.captures expects the text to be a String")?;
+        let func = self.ensure_regex_captures_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into()],
+                "tea_regex_captures",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_captures returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::String),
+        })
+    }
+
+    fn compile_regex_replace_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 3 {
+            bail!("regex.replace expects exactly 3 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.replace");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value =
+            self.expect_int_value(handle_expr, "regex.replace expects the handle to be an Int")?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr =
+            self.expect_string_pointer(text_expr, "regex.replace expects the text to be a String")?;
+        let replacement_expr =
+            self.compile_expression(&arguments[2].expression, function, locals)?;
+        let replacement_ptr = self.expect_string_pointer(
+            replacement_expr,
+            "regex.replace expects the replacement to be a String",
+        )?;
+        let func = self.ensure_regex_replace_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into(), replacement_ptr.into()],
+                "tea_regex_replace",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_replace returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_regex_replace_all_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 3 {
+            bail!("regex.replace_all expects exactly 3 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.replace_all");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "regex.replace_all expects the handle to be an Int",
+        )?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr = self.expect_string_pointer(
+            text_expr,
+            "regex.replace_all expects the text to be a String",
+        )?;
+        let replacement_expr =
+            self.compile_expression(&arguments[2].expression, function, locals)?;
+        let replacement_ptr = self.expect_string_pointer(
+            replacement_expr,
+            "regex.replace_all expects the replacement to be a String",
+        )?;
+        let func = self.ensure_regex_replace_all_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into(), replacement_ptr.into()],
+                "tea_regex_replace_all",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_replace_all returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_regex_split_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("regex.split expects exactly 2 arguments");
+        }
+        for arg in arguments {
+            if arg.name.is_some() {
+                bail!("named arguments are not supported for regex.split");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value =
+            self.expect_int_value(handle_expr, "regex.split expects the handle to be an Int")?;
+        let text_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let text_ptr =
+            self.expect_string_pointer(text_expr, "regex.split expects the text to be a String")?;
+        let func = self.ensure_regex_split_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), text_ptr.into()],
+                "tea_regex_split",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_regex_split returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::String),
+        })
     }
 
     fn compile_read_line_call(&mut self) -> Result<ExprValue<'ctx>> {
@@ -12888,6 +13190,119 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_args_program", fn_type, Some(Linkage::External));
         self.args_program_fn = Some(func);
+        func
+    }
+
+    // Regex ensure functions
+    fn ensure_regex_compile_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_compile_fn {
+            return func;
+        }
+        let fn_type = self
+            .int_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_regex_compile", fn_type, Some(Linkage::External));
+        self.regex_compile_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_is_match_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_is_match_fn {
+            return func;
+        }
+        let fn_type = self.context.i32_type().fn_type(
+            &[self.int_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_regex_is_match", fn_type, Some(Linkage::External));
+        self.regex_is_match_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_find_all_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_find_all_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.int_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_regex_find_all", fn_type, Some(Linkage::External));
+        self.regex_find_all_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_captures_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_captures_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.int_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_regex_captures", fn_type, Some(Linkage::External));
+        self.regex_captures_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_replace_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_replace_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.int_type().into(),
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_regex_replace", fn_type, Some(Linkage::External));
+        self.regex_replace_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_replace_all_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_replace_all_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.int_type().into(),
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+            ],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_regex_replace_all", fn_type, Some(Linkage::External));
+        self.regex_replace_all_fn = Some(func);
+        func
+    }
+
+    fn ensure_regex_split_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.regex_split_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.int_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_regex_split", fn_type, Some(Linkage::External));
+        self.regex_split_fn = Some(func);
         func
     }
 

@@ -21,3 +21,4 @@ tea-intrinsics = { path = "../tea-intrinsics" }
 path-clean = "1"
 pathdiff = "0.2"
 dirs-next = "2"
+regex = "1"

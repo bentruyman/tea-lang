@@ -80,5 +80,13 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         // Args intrinsics
         StdFunctionKind::ArgsAll => "Return all command-line arguments as a list of strings.",
         StdFunctionKind::ArgsProgram => "Return the program name (argv[0] with path stripped).",
+        // Regex module
+        StdFunctionKind::RegexCompile => "Compile a regex pattern and return a handle.",
+        StdFunctionKind::RegexIsMatch => "Test if the pattern matches anywhere in the text.",
+        StdFunctionKind::RegexFindAll => "Find all non-overlapping matches as a list of strings.",
+        StdFunctionKind::RegexCaptures => "Get capture groups from the first match.",
+        StdFunctionKind::RegexReplace => "Replace the first match with a replacement string.",
+        StdFunctionKind::RegexReplaceAll => "Replace all matches with a replacement string.",
+        StdFunctionKind::RegexSplit => "Split the text by the pattern into a list of strings.",
     }
 }

@@ -7,6 +7,7 @@ mod fs;
 mod intrinsics;
 mod path;
 mod process;
+mod regex;
 
 use docs::function_doc;
 
@@ -76,6 +77,14 @@ pub enum StdFunctionKind {
     // Args module
     ArgsAll,
     ArgsProgram,
+    // Regex module
+    RegexCompile,
+    RegexIsMatch,
+    RegexFindAll,
+    RegexCaptures,
+    RegexReplace,
+    RegexReplaceAll,
+    RegexSplit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -170,6 +179,7 @@ pub static MODULES: &[StdModule] = &[
     path::MODULE,
     intrinsics::MODULE,
     process::MODULE,
+    regex::MODULE,
 ];
 
 pub fn find_module(path: &str) -> Option<&'static StdModule> {

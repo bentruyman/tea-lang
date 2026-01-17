@@ -1,0 +1,120 @@
+# Regular expression pattern matching and text manipulation.
+#
+# This module provides functions to compile regex patterns and perform
+# matching, searching, replacing, and splitting operations on strings.
+#
+# Patterns use Rust regex syntax (similar to Perl/PCRE):
+#   - `.` matches any character except newline
+#   - `*` matches 0 or more of the previous element
+#   - `+` matches 1 or more of the previous element
+#   - `?` matches 0 or 1 of the previous element
+#   - `[abc]` matches any character in the set
+#   - `[^abc]` matches any character not in the set
+#   - `\d` matches a digit
+#   - `\w` matches a word character
+#   - `\s` matches whitespace
+#   - `^` matches start of string
+#   - `$` matches end of string
+#   - `(...)` creates a capture group
+#
+# Examples:
+#   use regex = "std.regex"
+#
+#   const re = regex.compile("\\d+")
+#   if regex.is_match(re, "abc123def")
+#     @println("Found a number!")
+#   end
+#
+#   const matches = regex.find_all(re, "foo42bar7baz")
+#   # matches = ["42", "7"]
+use intrinsics = "std.intrinsics"
+
+# Compile a regex pattern and return a handle.
+#
+# The handle can be reused for multiple matching operations.
+# Invalid patterns will cause a panic at runtime.
+#
+# Examples:
+#   const re = regex.compile("\\d+")
+#   const email_re = regex.compile("[a-z]+@[a-z]+\\.[a-z]+")
+pub def compile(pattern: String) -> Int
+  intrinsics.regex_compile(pattern)
+end
+
+# Test if the pattern matches anywhere in the text.
+#
+# Returns true if there is at least one match.
+#
+# Examples:
+#   const re = regex.compile("\\d+")
+#   regex.is_match(re, "abc123")  # true
+#   regex.is_match(re, "abcdef")  # false
+pub def is_match(handle: Int, text: String) -> Bool
+  intrinsics.regex_is_match(handle, text)
+end
+
+# Find all non-overlapping matches as a list of strings.
+#
+# Returns an empty list if there are no matches.
+#
+# Examples:
+#   const re = regex.compile("\\d+")
+#   const nums = regex.find_all(re, "foo42bar7baz")
+#   # nums = ["42", "7"]
+pub def find_all(handle: Int, text: String) -> List[String]
+  intrinsics.regex_find_all(handle, text)
+end
+
+# Get capture groups from the first match.
+#
+# The first element (index 0) is the entire match.
+# Subsequent elements are the capture groups in order.
+# Returns an empty list if there is no match.
+#
+# Examples:
+#   const re = regex.compile("(\\d+)-(\\d+)")
+#   const caps = regex.captures(re, "foo12-34bar")
+#   # caps = ["12-34", "12", "34"]
+pub def captures(handle: Int, text: String) -> List[String]
+  intrinsics.regex_captures(handle, text)
+end
+
+# Replace the first match with a replacement string.
+#
+# Use $1, $2, etc. in the replacement to refer to capture groups.
+# Use $0 to refer to the entire match.
+#
+# Examples:
+#   const re = regex.compile("world")
+#   regex.replace(re, "hello world world", "universe")
+#   # "hello universe world"
+#
+#   const re = regex.compile("(\\w+) (\\w+)")
+#   regex.replace(re, "hello world", "$2 $1")
+#   # "world hello"
+pub def replace(handle: Int, text: String, replacement: String) -> String
+  intrinsics.regex_replace(handle, text, replacement)
+end
+
+# Replace all matches with a replacement string.
+#
+# Use $1, $2, etc. in the replacement to refer to capture groups.
+# Use $0 to refer to the entire match.
+#
+# Examples:
+#   const re = regex.compile("\\d+")
+#   regex.replace_all(re, "foo42bar7baz", "X")
+#   # "fooXbarXbaz"
+pub def replace_all(handle: Int, text: String, replacement: String) -> String
+  intrinsics.regex_replace_all(handle, text, replacement)
+end
+
+# Split the text by the pattern into a list of strings.
+#
+# Examples:
+#   const re = regex.compile("[,;]\\s*")
+#   const parts = regex.split(re, "a, b; c,d")
+#   # parts = ["a", "b", "c", "d"]
+pub def split(handle: Int, text: String) -> List[String]
+  intrinsics.regex_split(handle, text)
+end

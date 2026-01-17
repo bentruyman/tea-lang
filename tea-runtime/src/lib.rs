@@ -3048,6 +3048,14 @@ pub extern "C" fn tea_cli_args() -> *mut TeaList {
     }
 }
 
+/// Get the program name (argv[0] with path stripped).
+#[no_mangle]
+pub extern "C" fn tea_args_program() -> *mut TeaString {
+    let name = detect_program_name().unwrap_or_default();
+    let bytes = name.as_bytes();
+    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+}
+
 #[no_mangle]
 pub extern "C" fn tea_cli_parse(
     template: *const TeaStructTemplate,

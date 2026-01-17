@@ -77,5 +77,8 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::ProcessReadStderr => "Read data from a spawned process's stderr.",
         StdFunctionKind::ProcessWriteStdin => "Write data to a spawned process's stdin.",
         StdFunctionKind::ProcessCloseStdin => "Close a spawned process's stdin pipe.",
+        // Args intrinsics
+        StdFunctionKind::ArgsAll => "Return all command-line arguments as a list of strings.",
+        StdFunctionKind::ArgsProgram => "Return the program name (argv[0] with path stripped).",
     }
 }

@@ -476,6 +476,7 @@ struct LlvmCodeGenerator<'ctx> {
     path_is_absolute_fn: Option<FunctionValue<'ctx>>,
     path_separator_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
+    args_program_fn: Option<FunctionValue<'ctx>>,
     read_line_fn: Option<FunctionValue<'ctx>>,
     read_all_fn: Option<FunctionValue<'ctx>>,
     eprint_int_fn: Option<FunctionValue<'ctx>>,
@@ -1170,6 +1171,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_is_absolute_fn: None,
             path_separator_fn: None,
             cli_args_fn: None,
+            args_program_fn: None,
             read_line_fn: None,
             read_all_fn: None,
             eprint_int_fn: None,
@@ -6188,6 +6190,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::ProcessCloseStdin => {
                 self.compile_process_close_stdin_call(&call.arguments, function, locals)
             }
+            // Args intrinsics
+            StdFunctionKind::ArgsAll => self.compile_args_call(),
+            StdFunctionKind::ArgsProgram => self.compile_args_program_call(),
         }
     }
 
@@ -9123,6 +9128,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             pointer,
             element_type: Box::new(ValueType::String),
         })
+    }
+
+    fn compile_args_program_call(&mut self) -> Result<ExprValue<'ctx>> {
+        let func = self.ensure_args_program_fn();
+        let pointer = self
+            .call_function(func, &[], "tea_args_program")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_args_program returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
     }
 
     fn compile_read_line_call(&mut self) -> Result<ExprValue<'ctx>> {
@@ -12860,6 +12876,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_cli_args", fn_type, Some(Linkage::External));
         self.cli_args_fn = Some(func);
+        func
+    }
+
+    fn ensure_args_program_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.args_program_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(&[], false);
+        let func = self
+            .module
+            .add_function("tea_args_program", fn_type, Some(Linkage::External));
+        self.args_program_fn = Some(func);
         func
     }
 

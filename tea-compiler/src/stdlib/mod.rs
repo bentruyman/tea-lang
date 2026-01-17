@@ -1,3 +1,4 @@
+mod args;
 mod assert;
 mod builtins;
 mod docs;
@@ -72,6 +73,9 @@ pub enum StdFunctionKind {
     ProcessReadStderr,
     ProcessWriteStdin,
     ProcessCloseStdin,
+    // Args module
+    ArgsAll,
+    ArgsProgram,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -159,6 +163,7 @@ macro_rules! std_module {
 pub(crate) use std_module;
 
 pub static MODULES: &[StdModule] = &[
+    args::MODULE,
     assert::MODULE,
     env::MODULE,
     fs::MODULE,

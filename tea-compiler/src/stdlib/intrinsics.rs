@@ -306,6 +306,21 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::Int],
         StdType::Void,
     ),
+    // Args intrinsics
+    std_function(
+        "args_all",
+        StdFunctionKind::ArgsAll,
+        StdArity::Exact(0),
+        &[],
+        StdType::List,
+    ),
+    std_function(
+        "args_program",
+        StdFunctionKind::ArgsProgram,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

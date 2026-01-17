@@ -1,0 +1,155 @@
+# Command-line argument parsing utilities.
+#
+# This module provides functions to access and parse command-line arguments
+# passed to Tea programs. It supports raw argument access, flag detection,
+# option value retrieval, and positional argument extraction.
+#
+# Examples:
+#   use args = "std.args"
+#
+#   # Get all arguments
+#   const all = args.all()
+#
+#   # Check for flags
+#   if args.has("--verbose") || args.has("-v")
+#     verbose = true
+#   end
+#
+#   # Get option values
+#   const output = args.get("--output") ?? "default.txt"
+#
+#   # Get positional arguments (non-flag arguments)
+#   const files = args.positional()
+use intrinsics = "std.intrinsics"
+
+# Return all command-line arguments as a list of strings.
+#
+# Returns arguments passed after the program name. Does not include
+# the program name itself (use `program()` for that).
+#
+# Examples:
+#   # Running: tea script.tea arg1 arg2
+#   const all = args.all()  # ["arg1", "arg2"]
+pub def all() -> List[String]
+  @args()
+end
+
+# Return the program name (argv[0] with path stripped).
+#
+# Examples:
+#   # Running: tea script.tea
+#   const name = args.program()  # "script"
+#
+#   # Running: ./bin/myapp
+#   const name = args.program()  # "myapp"
+pub def program() -> String
+  intrinsics.args_program()
+end
+
+# Check if a flag is present in the arguments.
+#
+# Searches for an exact match of the flag string in the argument list.
+#
+# Examples:
+#   if args.has("--verbose")
+#     @println("Verbose mode enabled")
+#   end
+#
+#   if args.has("-v") || args.has("--verbose")
+#     verbose = true
+#   end
+pub def has(flag: String) -> Bool
+  const arguments = @args()
+
+  for arg in arguments
+    if arg == flag
+      return true
+    end
+  end
+
+  false
+end
+
+# Get the value of an option argument.
+#
+# Looks for the option in the argument list and returns the following
+# argument as its value. Returns nil if the option is not found or
+# has no value.
+#
+# Examples:
+#   # Running: tea script.tea --output result.txt
+#   const output = args.get("--output")  # "result.txt"
+#
+#   # Running: tea script.tea --verbose
+#   const output = args.get("--output")  # nil
+#
+#   # With default value
+#   const output = args.get("--output") ?? "default.txt"
+pub def get(option: String) -> String?
+  const arguments = @args()
+  var i = 0
+  const arg_count = @len(arguments)
+
+  while i < arg_count - 1
+    if arguments[i] == option
+      return arguments[i + 1]
+    end
+
+    i = i + 1
+  end
+
+  return nil
+end
+
+# Return positional arguments (arguments that are not flags or option values).
+#
+# Filters out arguments starting with "-" and their associated values.
+# Useful for extracting file paths or other positional parameters.
+#
+# Examples:
+#   # Running: tea script.tea --verbose file1.txt file2.txt
+#   const files = args.positional()  # ["file1.txt", "file2.txt"]
+#
+#   # Running: tea script.tea -o output.txt input.txt
+#   const files = args.positional()  # ["input.txt"]
+pub def positional() -> List[String]
+  const arguments = @args()
+  # Start with empty sentinel that we'll remove, to get proper typing
+  var result = ["__EMPTY_SENTINEL__"]
+  var i = 0
+  var skip_next = false
+  const arg_count = @len(arguments)
+
+  while i < arg_count
+    const arg = arguments[i]
+
+    if skip_next
+      skip_next = false
+    else if @len(arg) > 0 && arg[0] == "-"
+      # This is a flag or option
+      # Assume flags like --verbose are standalone, -o takes a value
+      # Skip the next arg if this is a short option (single dash, not --)
+      # and next arg doesn't start with -
+      if i + 1 < arg_count
+        const next_arg = arguments[i + 1]
+
+        if @len(next_arg) == 0 || next_arg[0] != "-"
+          skip_next = true
+        end
+      end
+    else
+
+      result = result +[arg]
+    end
+
+    i = i + 1
+  end
+
+  # Remove the sentinel by slicing from index 1
+  if @len(result) > 1
+    result[1...@len(result)]
+  else
+    # Return a proper empty list by slicing the sentinel
+    result[1...1]
+  end
+end

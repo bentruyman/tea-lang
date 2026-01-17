@@ -5,6 +5,7 @@ mod env;
 mod fs;
 mod intrinsics;
 mod path;
+mod process;
 
 use docs::function_doc;
 
@@ -62,6 +63,15 @@ pub enum StdFunctionKind {
     Eprint,
     Eprintln,
     IsTty,
+    // Process execution
+    ProcessRun,
+    ProcessSpawn,
+    ProcessWait,
+    ProcessKill,
+    ProcessReadStdout,
+    ProcessReadStderr,
+    ProcessWriteStdin,
+    ProcessCloseStdin,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -154,6 +164,7 @@ pub static MODULES: &[StdModule] = &[
     fs::MODULE,
     path::MODULE,
     intrinsics::MODULE,
+    process::MODULE,
 ];
 
 pub fn find_module(path: &str) -> Option<&'static StdModule> {

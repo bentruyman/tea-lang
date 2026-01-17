@@ -64,5 +64,18 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::Eprint => "Print a value to stderr without a trailing newline.",
         StdFunctionKind::Eprintln => "Print a value to stderr with a trailing newline.",
         StdFunctionKind::IsTty => "Return true if stdin is connected to an interactive terminal.",
+        // Process execution
+        StdFunctionKind::ProcessRun => {
+            "Run a command synchronously and return its exit code, stdout, and stderr."
+        }
+        StdFunctionKind::ProcessSpawn => "Start a command without waiting, returning a handle.",
+        StdFunctionKind::ProcessWait => {
+            "Wait for a spawned process to complete and return its result."
+        }
+        StdFunctionKind::ProcessKill => "Terminate a spawned process.",
+        StdFunctionKind::ProcessReadStdout => "Read data from a spawned process's stdout.",
+        StdFunctionKind::ProcessReadStderr => "Read data from a spawned process's stderr.",
+        StdFunctionKind::ProcessWriteStdin => "Write data to a spawned process's stdin.",
+        StdFunctionKind::ProcessCloseStdin => "Close a spawned process's stdin pipe.",
     }
 }

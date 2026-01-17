@@ -226,6 +226,86 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::String],
         StdType::String,
     ),
+    // Process execution
+    std_function(
+        "process_run",
+        StdFunctionKind::ProcessRun,
+        StdArity::Range {
+            min: 1,
+            max: Some(5),
+        },
+        &[
+            StdType::String,
+            StdType::List,
+            StdType::Dict,
+            StdType::String,
+            StdType::String,
+        ],
+        StdType::Struct,
+    ),
+    std_function(
+        "process_spawn",
+        StdFunctionKind::ProcessSpawn,
+        StdArity::Range {
+            min: 1,
+            max: Some(4),
+        },
+        &[
+            StdType::String,
+            StdType::List,
+            StdType::Dict,
+            StdType::String,
+        ],
+        StdType::Int,
+    ),
+    std_function(
+        "process_wait",
+        StdFunctionKind::ProcessWait,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Struct,
+    ),
+    std_function(
+        "process_kill",
+        StdFunctionKind::ProcessKill,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Bool,
+    ),
+    std_function(
+        "process_read_stdout",
+        StdFunctionKind::ProcessReadStdout,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::Int, StdType::Int],
+        StdType::String,
+    ),
+    std_function(
+        "process_read_stderr",
+        StdFunctionKind::ProcessReadStderr,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::Int, StdType::Int],
+        StdType::String,
+    ),
+    std_function(
+        "process_write_stdin",
+        StdFunctionKind::ProcessWriteStdin,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "process_close_stdin",
+        StdFunctionKind::ProcessCloseStdin,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Void,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

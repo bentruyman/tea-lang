@@ -1,0 +1,118 @@
+# Process execution for running subprocesses and capturing their output.
+#
+# This module provides functions to run external commands, capture their output,
+# and manage spawned processes for interactive or long-running tasks.
+#
+# ProcessResult is a builtin struct with fields:
+#   - exit: Int (the exit code returned by the process)
+#   - success: Bool (true if exit is 0)
+#   - stdout: String (captured standard output)
+#   - stderr: String (captured standard error)
+#   - command: String (the command that was executed)
+use intrinsics = "std.intrinsics"
+
+# Run a command synchronously and wait for it to complete.
+#
+# Returns a ProcessResult with the exit code, stdout, stderr, and success status.
+#
+# Examples:
+#   const result = process.run("ls", ["-la"])
+#   @println(result.stdout)
+#
+#   const result = process.run_with_options("npm", ["install"], {}, "/path/to/project", "")
+pub def run(command: String, args: List[String]) -> ProcessResult
+  intrinsics.process_run(command, args)
+end
+
+# Run a command with full options (env, cwd, stdin).
+pub def run_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String, stdin: String) -> ProcessResult
+  intrinsics.process_run(command, args, env, cwd, stdin)
+end
+
+# Start a command without waiting for it to complete.
+#
+# Returns a handle that can be used to read output, write input, wait, or kill the process.
+#
+# Examples:
+#   const handle = process.spawn("long-running-command", [])
+#   # ... do other work ...
+#   const result = process.wait(handle)
+pub def spawn(command: String, args: List[String]) -> Int
+  intrinsics.process_spawn(command, args)
+end
+
+# Spawn a command with full options (env, cwd).
+pub def spawn_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String) -> Int
+  intrinsics.process_spawn(command, args, env, cwd)
+end
+
+# Wait for a spawned process to complete and return its result.
+#
+# Examples:
+#   const handle = process.spawn("command", [])
+#   const result = process.wait(handle)
+#   @println(result.exit)
+pub def wait(handle: Int) -> ProcessResult
+  intrinsics.process_wait(handle)
+end
+
+# Terminate a spawned process.
+#
+# Returns true if the process was successfully killed.
+#
+# Examples:
+#   const handle = process.spawn("command", [])
+#   process.kill(handle)
+pub def kill(handle: Int) -> Bool
+  intrinsics.process_kill(handle)
+end
+
+# Read data from a spawned process's stdout.
+#
+# Examples:
+#   const handle = process.spawn("command", [])
+#   const output = process.read_stdout(handle)
+pub def read_stdout(handle: Int) -> String
+  intrinsics.process_read_stdout(handle)
+end
+
+# Read up to the specified number of bytes from a spawned process's stdout.
+pub def read_stdout_bytes(handle: Int, bytes: Int) -> String
+  intrinsics.process_read_stdout(handle, bytes)
+end
+
+# Read data from a spawned process's stderr.
+#
+# Examples:
+#   const handle = process.spawn("command", [])
+#   const errors = process.read_stderr(handle)
+pub def read_stderr(handle: Int) -> String
+  intrinsics.process_read_stderr(handle)
+end
+
+# Read up to the specified number of bytes from a spawned process's stderr.
+pub def read_stderr_bytes(handle: Int, bytes: Int) -> String
+  intrinsics.process_read_stderr(handle, bytes)
+end
+
+# Write data to a spawned process's stdin.
+#
+# Examples:
+#   const handle = process.spawn("cat", [])
+#   process.write_stdin(handle, "hello world")
+pub def write_stdin(handle: Int, data: String) -> Void
+  intrinsics.process_write_stdin(handle, data)
+end
+
+# Close a spawned process's stdin pipe.
+#
+# This signals EOF to the process, which may cause it to finish processing.
+#
+# Examples:
+#   const handle = process.spawn("sort", [])
+#   process.write_stdin(handle, "banana\napple\ncherry")
+#   process.close_stdin(handle)
+#   const result = process.wait(handle)
+pub def close_stdin(handle: Int) -> Void
+  intrinsics.process_close_stdin(handle)
+end

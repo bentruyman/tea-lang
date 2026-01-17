@@ -3076,16 +3076,22 @@ pub extern "C" fn tea_cli_parse(
         .unwrap_or_else(|error| panic!("{}", cli_error("parse", &error)))
 }
 
+/// Run a command synchronously and wait for it to complete.
+/// Arguments passed by pointer for ARM64 ABI compatibility.
 #[no_mangle]
 pub extern "C" fn tea_process_run(
     template: *const TeaStructTemplate,
     command: *const TeaString,
-    args: TeaValue,
-    env: TeaValue,
-    cwd: TeaValue,
-    stdin_value: TeaValue,
+    args_ptr: *const TeaValue,
+    env_ptr: *const TeaValue,
+    cwd_ptr: *const TeaValue,
+    stdin_ptr: *const TeaValue,
 ) -> *mut TeaStructInstance {
     let command_str = expect_string(command, "process.run expects a valid command string");
+    let args = unsafe { *args_ptr };
+    let env = unsafe { *env_ptr };
+    let cwd = unsafe { *cwd_ptr };
+    let stdin_value = unsafe { *stdin_ptr };
     let arguments = tea_value_list_to_strings(args)
         .unwrap_or_else(|error| panic!("{}", process_error("run", &command_str, error)));
     let env_map = tea_value_dict_to_string_map(env)
@@ -3164,14 +3170,19 @@ pub extern "C" fn tea_process_run(
     .unwrap_or_else(|error| panic!("{}", process_error("run", &command_str, error)))
 }
 
+/// Spawn a command without waiting for it to complete.
+/// Arguments passed by pointer for ARM64 ABI compatibility.
 #[no_mangle]
 pub extern "C" fn tea_process_spawn(
     command: *const TeaString,
-    args: TeaValue,
-    env: TeaValue,
-    cwd: TeaValue,
+    args_ptr: *const TeaValue,
+    env_ptr: *const TeaValue,
+    cwd_ptr: *const TeaValue,
 ) -> c_longlong {
     let command_str = expect_string(command, "process.spawn expects a valid command string");
+    let args = unsafe { *args_ptr };
+    let env = unsafe { *env_ptr };
+    let cwd = unsafe { *cwd_ptr };
     let arguments = tea_value_list_to_strings(args)
         .unwrap_or_else(|error| panic!("{}", process_error("spawn", &command_str, error)));
     let env_map = tea_value_dict_to_string_map(env)

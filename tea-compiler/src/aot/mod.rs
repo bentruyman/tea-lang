@@ -1769,6 +1769,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.register_use(use_stmt)?;
             }
         }
+        // Pre-register builtin structs from typechecker so they're available during type parsing
+        self.register_builtin_structs()?;
         self.collect_structs(&module_ast.statements)?;
         self.collect_globals(&module_ast.statements)?;
         for statement in &module_ast.statements {
@@ -1970,6 +1972,58 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.ensure_struct_variant_metadata(struct_type)?;
         }
         type_to_value_type(&resolved)
+    }
+
+    /// Pre-register builtin structs from the typechecker so they're available during type parsing.
+    /// This handles structs like ProcessResult that are not defined in user code.
+    /// Structs with Unknown types in their fields are skipped (e.g., CliParseResult).
+    fn register_builtin_structs(&mut self) -> Result<()> {
+        // Get the names of all builtin structs from struct_definitions_tc that aren't in the AST
+        let builtin_struct_names: Vec<String> = self
+            .struct_definitions_tc
+            .keys()
+            .filter(|name| !self.structs.contains_key(*name))
+            .cloned()
+            .collect();
+
+        for name in builtin_struct_names {
+            if let Some(definition) = self.struct_definitions_tc.get(&name) {
+                if definition.type_parameters.is_empty() {
+                    // Try to lower all field types - skip this struct if any fail
+                    let mut lowered_types = Vec::with_capacity(definition.fields.len());
+                    let mut can_lower = true;
+                    for field in &definition.fields {
+                        match type_to_value_type(&field.ty) {
+                            Ok(ty) => lowered_types.push(ty),
+                            Err(_) => {
+                                // Skip structs with Unknown or other non-lowerable types
+                                can_lower = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if can_lower {
+                        let mut lowering = StructLowering::new();
+                        lowering.field_names = definition
+                            .fields
+                            .iter()
+                            .map(|field| field.name.clone())
+                            .collect();
+                        lowering.field_types = lowered_types.clone();
+
+                        self.struct_field_variants
+                            .entry(name.clone())
+                            .or_insert_with(|| lowered_types.clone());
+                        self.struct_variant_bases
+                            .entry(name.clone())
+                            .or_insert_with(|| name.clone());
+                        self.structs.insert(name, lowering);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn collect_structs(&mut self, statements: &[Statement]) -> Result<()> {
@@ -6109,6 +6163,31 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_fs_rename_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsStat => self.compile_fs_stat_call(&call.arguments, function, locals),
+            // Process execution
+            StdFunctionKind::ProcessRun => {
+                self.compile_process_run_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessSpawn => {
+                self.compile_process_spawn_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessWait => {
+                self.compile_process_wait_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessKill => {
+                self.compile_process_kill_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessReadStdout => {
+                self.compile_process_read_stdout_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessReadStderr => {
+                self.compile_process_read_stderr_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessWriteStdin => {
+                self.compile_process_write_stdin_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessCloseStdin => {
+                self.compile_process_close_stdin_call(&call.arguments, function, locals)
+            }
         }
     }
 
@@ -7424,39 +7503,73 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
 
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
         let command_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
         let command_ptr = self.expect_string_pointer(
             command_expr,
             "process.run expects the command to be a String",
         )?;
 
-        let args_value = if arguments.len() >= 2 {
+        // Build args TeaValue and allocate on stack for ARM64 ABI compatibility
+        let args_tea_value = if arguments.len() >= 2 {
             let expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let args_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "args_ptr"))?;
+        map_builder_error(self.builder.build_store(args_alloca, args_tea_value))?;
 
-        let env_value = if arguments.len() >= 3 {
+        // Build env TeaValue and allocate on stack
+        let env_tea_value = if arguments.len() >= 3 {
             let expr = self.compile_expression(&arguments[2].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let env_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "env_ptr"))?;
+        map_builder_error(self.builder.build_store(env_alloca, env_tea_value))?;
 
-        let cwd_value = if arguments.len() >= 4 {
+        // Build cwd TeaValue and allocate on stack
+        let cwd_tea_value = if arguments.len() >= 4 {
             let expr = self.compile_expression(&arguments[3].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let cwd_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "cwd_ptr"))?;
+        map_builder_error(self.builder.build_store(cwd_alloca, cwd_tea_value))?;
 
-        let stdin_value = if arguments.len() >= 5 {
+        // Build stdin TeaValue and allocate on stack
+        let stdin_tea_value = if arguments.len() >= 5 {
             let expr = self.compile_expression(&arguments[4].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let stdin_alloca =
+            map_builder_error(self.builder.build_alloca(tea_value_type, "stdin_ptr"))?;
+        map_builder_error(self.builder.build_store(stdin_alloca, stdin_tea_value))?;
 
         let template_ptr = self.ensure_struct_template("ProcessResult")?;
         let func = self.ensure_process_run_fn();
@@ -7466,10 +7579,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 &[
                     template_ptr.into(),
                     command_ptr.as_basic_value_enum().into(),
-                    args_value,
-                    env_value,
-                    cwd_value,
-                    stdin_value,
+                    args_alloca.into(),
+                    env_alloca.into(),
+                    cwd_alloca.into(),
+                    stdin_alloca.into(),
                 ],
                 "tea_process_run",
             )?
@@ -7499,32 +7612,58 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
 
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
         let command_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
         let command_ptr = self.expect_string_pointer(
             command_expr,
             "process.spawn expects the command to be a String",
         )?;
 
-        let args_value = if arguments.len() >= 2 {
+        // Build args TeaValue and allocate on stack for ARM64 ABI compatibility
+        let args_tea_value = if arguments.len() >= 2 {
             let expr = self.compile_expression(&arguments[1].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let args_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "args_ptr"))?;
+        map_builder_error(self.builder.build_store(args_alloca, args_tea_value))?;
 
-        let env_value = if arguments.len() >= 3 {
+        // Build env TeaValue and allocate on stack
+        let env_tea_value = if arguments.len() >= 3 {
             let expr = self.compile_expression(&arguments[2].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let env_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "env_ptr"))?;
+        map_builder_error(self.builder.build_store(env_alloca, env_tea_value))?;
 
-        let cwd_value = if arguments.len() >= 4 {
+        // Build cwd TeaValue and allocate on stack
+        let cwd_tea_value = if arguments.len() >= 4 {
             let expr = self.compile_expression(&arguments[3].expression, function, locals)?;
-            self.expr_to_metadata_value(expr)?
+            self.expr_to_tea_value(expr)?
         } else {
-            self.build_nil_value()?
+            let nil_fn = self.ensure_value_nil();
+            self.call_function(nil_fn, &[], "val_nil")?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected TeaValue"))?
         };
+        let cwd_alloca = map_builder_error(self.builder.build_alloca(tea_value_type, "cwd_ptr"))?;
+        map_builder_error(self.builder.build_store(cwd_alloca, cwd_tea_value))?;
 
         let func = self.ensure_process_spawn_fn();
         let value = self
@@ -7532,9 +7671,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 func,
                 &[
                     command_ptr.as_basic_value_enum().into(),
-                    args_value,
-                    env_value,
-                    cwd_value,
+                    args_alloca.into(),
+                    env_alloca.into(),
+                    cwd_alloca.into(),
                 ],
                 "tea_process_spawn",
             )?
@@ -7688,6 +7827,59 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let func = self.ensure_process_close_fn();
         self.call_function(func, &[handle_value.into()], "tea_process_close")?;
         Ok(ExprValue::Void)
+    }
+
+    fn compile_process_wait_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("process.wait expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for process.wait");
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value =
+            self.expect_int_value(handle_expr, "process.wait expects the handle to be an Int")?;
+
+        let template_ptr = self.ensure_struct_template("ProcessResult")?;
+        let func = self.ensure_process_wait_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[template_ptr.into(), handle_value.into()],
+                "tea_process_wait",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_process_wait returned no value"))?
+            .into_pointer_value();
+
+        Ok(ExprValue::Struct {
+            pointer,
+            struct_name: "ProcessResult".to_string(),
+        })
+    }
+
+    fn compile_process_read_stdout_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_process_read_call(arguments, function, locals, true)
+    }
+
+    fn compile_process_read_stderr_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_process_read_call(arguments, function, locals, false)
     }
 
     fn compile_fs_read_text_call(
@@ -9721,259 +9913,396 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ExprValue::Float(v) => {
                 // Tag = 1 (Float), payload = float bitcast to i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(1, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_float"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(1, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_bit_cast(
                     v,
                     self.context.i64_type(),
                     "float_bits",
                 ))?
                 .into_int_value();
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_float_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Bool(v) => {
                 // Tag = 2 (Bool), payload = 0 or 1 as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(2, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_bool"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(2, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_int_z_extend(
                     v,
                     self.context.i64_type(),
                     "bool_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_bool_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::String(ptr) => {
                 // Tag = 3 (String), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(3, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_string"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(3, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     ptr,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_string_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::List { pointer, .. } => {
                 // Tag = 4 (List), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(4, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_list"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(4, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     pointer,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_list_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Dict { pointer, .. } => {
                 // Tag = 5 (Dict), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(5, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_dict"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(5, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     pointer,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_dict_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Struct { pointer, .. } => {
                 // Tag = 6 (Struct), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(6, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_struct"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(6, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     pointer,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_struct_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Error { pointer, .. } => {
                 // Tag = 7 (Error), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(7, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca =
+                    map_builder_error(self.builder.build_alloca(tea_value_type, "tea_val_error"))?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(7, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     pointer,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_error_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Closure { pointer, .. } => {
                 // Tag = 8 (Closure), payload = pointer as i64
                 // TeaValue layout: { tag: i32, padding: i32, payload: i64 }
-                let tag = self.context.i32_type().const_int(8, false);
-                let padding = self.context.i32_type().const_zero();
+                // Use alloca+store to avoid insertvalue/undef issues with ARM64 ABI
+                let alloca = map_builder_error(
+                    self.builder.build_alloca(tea_value_type, "tea_val_closure"),
+                )?;
+                // Store tag at field 0
+                let tag_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    0,
+                    "tag_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(tag_ptr, self.context.i32_type().const_int(8, false)),
+                )?;
+                // Store padding at field 1
+                let padding_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    1,
+                    "padding_ptr",
+                ))?;
+                map_builder_error(
+                    self.builder
+                        .build_store(padding_ptr, self.context.i32_type().const_zero()),
+                )?;
+                // Store payload at field 2
+                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                    tea_value_type,
+                    alloca,
+                    2,
+                    "payload_ptr",
+                ))?;
                 let payload = map_builder_error(self.builder.build_ptr_to_int(
                     pointer,
                     self.context.i64_type(),
                     "ptr_i64",
                 ))?;
-                let undef = tea_value_type.get_undef();
-                let s1 = map_builder_error(self.builder.build_insert_value(
-                    undef,
-                    tag,
-                    0,
-                    "tea_val_tag",
+                map_builder_error(self.builder.build_store(payload_ptr, payload))?;
+                // Load the complete struct
+                let loaded = map_builder_error(self.builder.build_load(
+                    tea_value_type,
+                    alloca,
+                    "tea_val_closure_loaded",
                 ))?;
-                let s1b = map_builder_error(self.builder.build_insert_value(
-                    s1,
-                    padding,
-                    1,
-                    "tea_val_padding",
-                ))?;
-                let s2 = map_builder_error(self.builder.build_insert_value(
-                    s1b,
-                    payload,
-                    2,
-                    "tea_val_payload",
-                ))?
-                .into_struct_value();
-                Ok(s2.into())
+                Ok(loaded)
             }
             ExprValue::Void => {
                 // Tag = 9 (Nil), payload = 0
@@ -12591,13 +12920,15 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.process_run_fn {
             return func;
         }
+        // Pass TeaValue by pointer for ARM64 ABI compatibility
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let param_types = [
             self.struct_template_ptr_type().into(),
             self.string_ptr_type().into(),
-            self.value_type().into(),
-            self.value_type().into(),
-            self.value_type().into(),
-            self.value_type().into(),
+            ptr_type.into(), // args_ptr
+            ptr_type.into(), // env_ptr
+            ptr_type.into(), // cwd_ptr
+            ptr_type.into(), // stdin_ptr
         ];
         let fn_type = self.struct_ptr_type().fn_type(&param_types, false);
         let func = self
@@ -12611,11 +12942,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.process_spawn_fn {
             return func;
         }
+        // Pass TeaValue by pointer for ARM64 ABI compatibility
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let param_types = [
             self.string_ptr_type().into(),
-            self.value_type().into(),
-            self.value_type().into(),
-            self.value_type().into(),
+            ptr_type.into(), // args_ptr
+            ptr_type.into(), // env_ptr
+            ptr_type.into(), // cwd_ptr
         ];
         let fn_type = self.int_type().fn_type(&param_types, false);
         let func = self

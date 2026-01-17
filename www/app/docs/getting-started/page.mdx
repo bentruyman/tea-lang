@@ -1,0 +1,186 @@
+# Getting Started with Tea
+
+This guide will help you install Tea, write your first program, and understand the basics of the language.
+You'll be up and running in less than 10 minutes.
+
+## Prerequisites
+
+<PrerequisiteList description="Before installing Tea, make sure you have:">
+  <PrerequisiteItem title="Git">
+    Version control system ([download here](https://git-scm.com/))
+  </PrerequisiteItem>
+  <PrerequisiteItem title="C++ Compiler">
+    GCC 9+ or Clang 10+ for building from source
+  </PrerequisiteItem>
+  <PrerequisiteItem title="LLVM 14+">
+    Required for native compilation
+  </PrerequisiteItem>
+  <PrerequisiteItem title="Make">
+    Build automation tool
+  </PrerequisiteItem>
+</PrerequisiteList>
+
+## Installation
+
+<div className="space-y-6">
+
+<Step number={1} title="Clone the Repository">
+
+First, clone the Tea repository from GitHub to your local machine:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+```
+
+</Step>
+
+<Step number={2} title="Build and Install">
+
+Run the setup script to build Tea and install it to your system:
+
+```bash
+make setup
+make install
+```
+
+This will compile the Tea compiler and install it to `/usr/local/bin` by default. You may need to use `sudo` for installation.
+
+</Step>
+
+<Step number={3} title="Verify Installation">
+
+Check that Tea is installed correctly:
+
+```bash
+tea --version
+```
+
+You should see output like:
+
+```
+Tea version 0.1.0
+```
+
+</Step>
+
+</div>
+
+## Your First Tea Program
+
+Let's write a simple "Hello, World!" program to get started.
+
+<CodeCard title="Create hello.tea" description="Create a new file called hello.tea with the following content:">
+{`# hello.tea
+@println("Hello, Tea!")`}
+</CodeCard>
+
+<CodeCard title="Run your program" description="Execute your program using Tea:">
+{`tea run hello.tea`}
+</CodeCard>
+
+Output:
+
+```
+Hello, Tea!
+```
+
+<CodeCard title="Compile to native binary" description="Compile your program to a native binary for optimal performance:">
+{`tea compile hello.tea -o hello
+./hello`}
+</CodeCard>
+
+The compiled binary runs directly on your system with no runtime dependencies.
+
+## A More Complex Example
+
+Let's explore Tea's features with a program that demonstrates functions, types, and control flow.
+
+<CodeCard>
+{`# greet.tea
+
+# Define a function with type annotations
+def greet(name: String, age: Int) -> String
+  if age < 18
+    "Hello, young \${name}!"
+  else
+    "Hello, \${name}!"
+  end
+end
+
+# Create an array of names
+var people = [
+  {"name": "Alice", "age": 25},
+  {"name": "Bob", "age": 16},
+  {"name": "Charlie", "age": 30}
+]
+
+# Iterate and greet each person
+for person in people
+  var message = greet(person["name"], person["age"])
+  @println(message)
+end`}
+</CodeCard>
+
+Output:
+
+```
+Hello, Alice!
+Hello, young Bob!
+Hello, Charlie!
+```
+
+<KeyConceptsCard>
+  <KeyConcept title="Function Definitions">
+    Use `def` with type annotations for parameters and return types
+  </KeyConcept>
+  <KeyConcept title="String Interpolation">
+    Embed variables in strings using `${variable}`
+  </KeyConcept>
+  <KeyConcept title="Control Flow">
+    Use `if/else` for conditional logic
+  </KeyConcept>
+  <KeyConcept title="Loops">
+    Iterate over collections with `for...in`
+  </KeyConcept>
+  <KeyConcept title="Type Inference">
+    Variables like `message` have their types inferred automatically
+  </KeyConcept>
+</KeyConceptsCard>
+
+## Next Steps
+
+Now that you've written your first Tea programs, here's what to explore next:
+
+<TwoColumnGrid>
+  <GridLink
+    title="Learn the Syntax"
+    description="Deep dive into Tea's syntax and language features"
+    href="/docs/syntax"
+    icon="file"
+  />
+  <GridLink
+    title="Understand Types"
+    description="Master Tea's static type system and inference"
+    href="/docs/types"
+    icon="zap"
+  />
+  <GridLink
+    title="Browse Examples"
+    description="See real-world Tea programs and patterns"
+    href="/examples"
+    icon="file"
+  />
+  <GridLink
+    title="Explore the Standard Library"
+    description="Discover built-in functions and modules"
+    href="/reference/stdlib"
+    icon="terminal"
+  />
+</TwoColumnGrid>
+
+<HelpCard description="If you run into any issues or have questions, here are some resources:">
+  <HelpLink href="https://github.com/special-tea/tea/issues" external>Report an Issue</HelpLink>
+  <HelpLink href="/community">Join Discord</HelpLink>
+  <HelpLink href="/docs">Read the Docs</HelpLink>
+</HelpCard>

@@ -1,0 +1,189 @@
+# Pattern Matching
+
+Pattern matching in Tea allows you to handle different cases in error handling and conditional logic. Use the `case` keyword to match against different patterns.
+
+## Error Pattern Matching
+
+The primary use of pattern matching in Tea is with error handling. When you catch an error, you can match against specific error types.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Matching Error Types
+
+```tea
+error TeamError {
+  NotFound(name: String)
+  InvalidScore(score: Int)
+}
+
+def find_team(name: String) -> Team ! TeamError.NotFound
+  # ... search logic ...
+  throw TeamError.NotFound(name)
+end
+
+def handle_lookup(name: String) -> String
+  var team = find_team(name) catch err
+    case is TeamError.NotFound
+      return `Team "${err.name}" not found`
+    case _
+      return "Unknown error occurred"
+  end
+
+  `Found team: ${team.name}`
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Case Syntax
+
+Use `case is` to match specific error types, and `case _` as a catch-all for any other cases.
+
+```tea
+var result = risky_operation() catch err
+  case is NetworkError
+    return "Network issue: check connection"
+  case is ValidationError
+    return `Invalid input: ${err.message}`
+  case is TimeoutError
+    return "Operation timed out, please retry"
+  case _
+    return "An unexpected error occurred"
+end
+```
+
+</Card>
+
+## Accessing Error Data
+
+When matching an error, you can access the error's fields through the captured variable.
+
+<CodeCard>
+{`error FileError {
+  NotFound(path: String)
+  PermissionDenied(path: String, user: String)
+  IOError(message: String)
+}
+
+def read_config(path: String) -> String ! FileError
+  # ... file reading logic ...
+  throw FileError.NotFound(path)
+end
+
+def load_config(path: String) -> String
+  var content = read_config(path) catch err
+    case is FileError.NotFound
+      # Access the 'path' field from the error
+      return \`Config file not found: \${err.path}\`
+    case is FileError.PermissionDenied
+      # Access multiple fields
+      return \`User \${err.user} cannot read \${err.path}\`
+    case is FileError.IOError
+      return \`IO error: \${err.message}\`
+    case _
+      return "Unknown file error"
+  end
+
+  content
+end`}
+</CodeCard>
+
+## Conditional Logic Patterns
+
+For simple conditional logic, Tea uses if-expressions and if-statements rather than pattern matching syntax.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### If Expressions
+
+```tea
+# Simple ternary-style conditional
+const status = if(score >= 90) "A" else "B"
+
+# Nested conditions
+const grade = if(score >= 90) "A"
+  else if(score >= 80) "B"
+  else if(score >= 70) "C"
+  else "F"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Matching Values
+
+For matching against specific values, use chained if-else statements.
+
+```tea
+def describe_day(day: Int) -> String
+  if day == 1
+    return "Monday"
+  end
+  if day == 2
+    return "Tuesday"
+  end
+  if day == 3
+    return "Wednesday"
+  end
+  # ... etc
+  "Unknown day"
+end
+```
+
+</Card>
+
+## Complete Example
+
+Here's a full example showing pattern matching with error handling.
+
+<CodeCard>
+{`struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
+
+error TeamError {
+  NotFound(name: String)
+}
+
+const teams = [
+  Team(name: "Ada", wins: 7, losses: 3),
+  Team(name: "Grace", wins: 9, losses: 1)
+]
+
+def find_team(name: String) -> Team ! TeamError.NotFound
+  var idx = 0
+  while idx < @len(teams)
+    var candidate = teams[idx]
+    if candidate.name == name
+      return candidate
+    end
+    idx = idx + 1
+  end
+  throw TeamError.NotFound(name)
+end
+
+## Announce the favorite team
+def announce_favorite(name: String) -> String
+  var team = find_team(name) catch err
+    case is TeamError.NotFound
+      return \`Sorry, \${err.name} is not on the schedule\`
+    case _
+      return "Unexpected lookup issue"
+  end
+
+  \`Fan favorite: \${team.name} with \${team.wins} wins!\`
+end
+
+@println(announce_favorite("Grace"))    # "Fan favorite: Grace with 9 wins!"
+@println(announce_favorite("Unknown"))  # "Sorry, Unknown is not on the schedule"`}
+</CodeCard>
+
+## Next Steps
+
+<NextLink href="/docs/error-handling" title="Error Handling" description="Learn more about Tea's error handling system" />
+<NextLink href="/docs/modules" title="Modules & Imports" description="Organize code into modules" />

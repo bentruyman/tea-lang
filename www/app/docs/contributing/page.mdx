@@ -1,0 +1,187 @@
+# Contributing Guide
+
+Thank you for your interest in contributing to Tea! This guide will help you get started with contributing to the project, whether you're fixing bugs, adding features, or improving documentation.
+
+## Ways to Contribute
+
+<ContributionGrid>
+  <ContributionCard icon="bug" title="Report Bugs">
+    Found a bug? Open an issue with reproduction steps and expected behavior.
+  </ContributionCard>
+  <ContributionCard icon="lightbulb" title="Suggest Features">
+    Have an idea? Open a feature request to discuss new functionality.
+  </ContributionCard>
+  <ContributionCard icon="code" title="Submit Code">
+    Fix bugs, add features, or improve performance with pull requests.
+  </ContributionCard>
+  <ContributionCard icon="git" title="Improve Docs">
+    Help improve documentation, examples, and tutorials.
+  </ContributionCard>
+</ContributionGrid>
+
+## Getting Started
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### 1. Fork and Clone
+
+```bash
+# Fork the repository on GitHub, then:
+git clone https://github.com/YOUR_USERNAME/tea.git
+cd tea
+git remote add upstream https://github.com/special-tea/tea.git
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### 2. Set Up Development Environment
+
+```bash
+# Install dependencies and build
+make setup
+
+# Verify everything works
+make test
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### 3. Create a Branch
+
+```bash
+# Sync with upstream
+git fetch upstream
+git checkout main
+git merge upstream/main
+
+# Create feature branch
+git checkout -b feature/your-feature-name
+```
+
+</Card>
+
+## Development Workflow
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Build Commands
+
+```bash
+# Build the project
+cargo build
+
+# Build in release mode
+cargo build --release
+
+# Run Tea without installing
+cargo run -p tea-cli -- script.tea
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Run specific test
+cargo test -p tea-compiler test_name
+
+# Run E2E tests
+./scripts/e2e.sh
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Formatting
+
+```bash
+# Format all code
+make fmt
+
+# Format Rust only
+cargo fmt --all
+
+# Format Tea code
+cargo run -p tea-cli -- fmt .
+```
+
+</Card>
+
+## Pull Request Guidelines
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-3 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">1.</span>
+      <span className="text-muted-foreground">
+        <strong className="text-foreground">Keep PRs focused</strong> - One feature or fix per PR
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">2.</span>
+      <span className="text-muted-foreground">
+        <strong className="text-foreground">Write tests</strong> - Include tests for new functionality
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">3.</span>
+      <span className="text-muted-foreground">
+        <strong className="text-foreground">Update documentation</strong> - Document new features or changes
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">4.</span>
+      <span className="text-muted-foreground">
+        <strong className="text-foreground">Follow code style</strong> - Run `make fmt` before committing
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">5.</span>
+      <span className="text-muted-foreground">
+        <strong className="text-foreground">Write clear commit messages</strong> - Describe what and why
+      </span>
+    </li>
+  </ul>
+</Card>
+
+## Project Structure
+
+<Card className="p-6 bg-card border-border">
+
+```
+tea/
+├── tea-cli/          # CLI binary
+├── tea-compiler/     # Core compilation pipeline
+├── tea-runtime/      # C runtime library
+├── tea-intrinsics/   # Rust intrinsics implementations
+├── tea-lsp/          # Language server
+├── stdlib/           # Standard library (Tea code)
+├── examples/         # Example programs
+├── spec/             # Grammar specifications
+└── tree-sitter-tea/  # Syntax highlighting
+```
+
+</Card>
+
+## Getting Help
+
+<HelpCard title="Getting Help" description="If you have questions or need help:">
+  <HelpLink href="https://github.com/special-tea/tea/discussions" external>GitHub Discussions</HelpLink>
+  <HelpLink href="https://github.com/special-tea/tea/issues" external>Open an Issue</HelpLink>
+  <HelpLink href="/community">Join Community</HelpLink>
+</HelpCard>
+
+## Next Steps
+
+<NextLink href="/docs/code-style" title="Code Style" description="Learn about Tea's coding conventions" />
+<NextLink href="/docs/testing" title="Testing" description="Write and run tests" />

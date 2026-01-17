@@ -1,0 +1,188 @@
+# Classes & Objects
+
+Tea uses structs to define custom data types. Structs provide a way to group related data together with named fields and strong typing.
+
+## Defining Structs
+
+Use the `struct` keyword to define a new type with named fields.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Basic Struct
+
+```tea
+struct Point {
+  x: Int
+  y: Int
+}
+
+var origin = Point(x: 0, y: 0)
+@println(origin.x)  # 0
+@println(origin.y)  # 0
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### With Documentation
+
+Use `##` comments to document structs and fields.
+
+```tea
+## A user account with profile information
+struct User {
+  ## The user's display name
+  name: String
+  ## How many years old the user is
+  age: Int
+}
+
+var alice = User(name: "Alice", age: 30)
+```
+
+</Card>
+
+## Creating Instances
+
+Create struct instances by calling the struct name like a function with named arguments.
+
+<CodeCard>
+{`struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
+
+# Create with named arguments
+var team = Team(name: "Tigers", wins: 10, losses: 5)
+
+# Access fields
+@println(team.name)    # "Tigers"
+@println(team.wins)    # 10
+@println(team.losses)  # 5`}
+</CodeCard>
+
+## Nested Structs
+
+Struct fields can be other structs, enabling complex data modeling.
+
+<CodeCard>
+{`struct Address {
+  street: String
+  city: String
+}
+
+struct Person {
+  name: String
+  address: Address
+}
+
+var alice = Person(
+  name: "Alice",
+  address: Address(
+    street: "123 Main St",
+    city: "Springfield"
+  )
+)
+
+@println(alice.address.city)  # "Springfield"`}
+</CodeCard>
+
+## Functions with Structs
+
+Pass structs to functions and return them as values.
+
+<CodeCard>
+{`struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
+
+def format_team(team: Team) -> String
+  \`\${team.name}: \${team.wins} wins / \${team.losses} losses\`
+end
+
+def win_rate(team: Team) -> Float
+  var total = team.wins + team.losses
+  if total == 0
+    return 0.0
+  end
+  team.wins / total
+end
+
+var tigers = Team(name: "Tigers", wins: 8, losses: 2)
+@println(format_team(tigers))  # "Tigers: 8 wins / 2 losses"`}
+</CodeCard>
+
+## Collections of Structs
+
+Store structs in lists and iterate over them.
+
+<CodeCard>
+{`struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
+
+const teams = [
+  Team(name: "Ada", wins: 7, losses: 3),
+  Team(name: "Grace", wins: 9, losses: 1),
+  Team(name: "Linus", wins: 5, losses: 5)
+]
+
+# Find the best team
+var champion = teams[0]
+var i = 1
+
+while i < @len(teams)
+  var contender = teams[i]
+  if contender.wins > champion.wins
+    champion = contender
+  end
+  i = i + 1
+end
+
+@println(\`Top team: \${champion.name}\`)  # "Top team: Grace"`}
+</CodeCard>
+
+## Generic Structs
+
+Structs can be generic, allowing them to work with any type.
+
+<CodeCard>
+{`struct Box[T] {
+  value: T
+}
+
+var int_box = Box[Int](value: 42)
+var str_box = Box[String](value: "hello")
+
+@println(int_box.value)  # 42
+@println(str_box.value)  # "hello"`}
+</CodeCard>
+
+## Visibility
+
+By default, structs are private to their module. Use `pub` to export them.
+
+<CodeCard>
+{`# Private struct (only accessible in this module)
+struct InternalData {
+  value: Int
+}
+
+# Public struct (can be imported by other modules)
+pub struct Config {
+  debug: Bool
+  max_retries: Int
+}`}
+</CodeCard>
+
+## Next Steps
+
+<NextLink href="/docs/generics" title="Generics" description="Write generic structs and functions" />
+<NextLink href="/docs/pattern-matching" title="Pattern Matching" description="Match and destructure data" />
+<NextLink href="/docs/error-handling" title="Error Handling" description="Define error types with structs" />

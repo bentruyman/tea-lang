@@ -1,0 +1,201 @@
+# Modules & Imports
+
+Tea's module system helps you organize code into reusable units. Learn how to create modules, export public functions, and import from the standard library or your own code.
+
+## Importing Modules
+
+Use the `use` keyword to import modules.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Standard Library Imports
+
+```tea
+use fs = "std.fs"
+use json = "std.json"
+use path = "std.path"
+use env = "std.env"
+use assert = "std.assert"
+use string = "std.string"
+
+# Use the imported module
+var content = fs.read_file("config.json")
+var data = json.decode(content)
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Relative Imports
+
+Import from local files using relative paths.
+
+```tea
+# Import from same directory
+use helpers = "./helpers"
+
+# Import from parent directory
+use utils = "../utils/mod"
+
+# Import from subdirectory
+use models = "./models/user"
+```
+
+</Card>
+
+## Creating Modules
+
+A module is simply a `.tea` file. Use `pub` to export functions and types.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Exporting Functions
+
+```tea
+# helpers.tea
+
+# Private function (only accessible within this module)
+def scale(value: Int, factor: Int) -> Int
+  value * factor
+end
+
+# Public function (can be imported by other modules)
+pub def triple(value: Int) -> Int
+  scale(value, 3)
+end
+
+pub def double(value: Int) -> Int
+  scale(value, 2)
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Using the Module
+
+```tea
+# main.tea
+use helpers = "./helpers"
+
+@println(helpers.triple(5))   # 15
+@println(helpers.double(10))  # 20
+
+# helpers.scale is not accessible (private)
+```
+
+</Card>
+
+## Module Entry Points
+
+For directories with multiple files, use `mod.tea` as the entry point.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Directory Structure
+
+```
+src/
+├── main.tea
+└── utils/
+    ├── mod.tea      # Entry point for the utils module
+    ├── strings.tea  # Internal helper
+    └── numbers.tea  # Internal helper
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### mod.tea
+
+```tea
+# utils/mod.tea
+# Re-export public functions from internal modules
+
+pub def format_name(name: String) -> String
+  `Name: ${name}`
+end
+
+pub def add(a: Int, b: Int) -> Int
+  a + b
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Importing
+
+```tea
+# main.tea
+use utils = "./utils/mod"
+
+@println(utils.format_name("Tea"))  # "Name: Tea"
+@println(utils.add(1, 2))           # 3
+```
+
+</Card>
+
+## Visibility Rules
+
+<Card className="p-6 bg-card border-border">
+  <div className="space-y-4">
+    <div>
+      <h3 className="font-semibold text-accent mb-2">Private (default)</h3>
+      <p className="text-sm text-muted-foreground">
+        Functions and types without `pub` are private to their module.
+      </p>
+    </div>
+    <div>
+      <h3 className="font-semibold text-accent mb-2">Public</h3>
+      <p className="text-sm text-muted-foreground">
+        Functions and types with `pub` can be imported by other modules.
+      </p>
+    </div>
+  </div>
+
+```tea
+# Private - only accessible in this module
+def internal_helper() -> Int
+  42
+end
+
+# Private struct
+struct InternalData {
+  value: Int
+}
+
+# Public - can be imported
+pub def api_function() -> Int
+  internal_helper()
+end
+
+# Public struct
+pub struct Config {
+  debug: Bool
+}
+```
+
+</Card>
+
+## Standard Library Modules
+
+Tea includes several built-in modules for common tasks.
+
+<ModuleTable>
+  <ModuleRow module="std.fs" description="File system operations" />
+  <ModuleRow module="std.json" description="JSON encoding and decoding" />
+  <ModuleRow module="std.path" description="Path manipulation utilities" />
+  <ModuleRow module="std.env" description="Environment variables" />
+  <ModuleRow module="std.string" description="String manipulation" />
+  <ModuleRow module="std.assert" description="Assertions for testing" />
+</ModuleTable>
+
+## Next Steps
+
+<NextLink href="/reference/stdlib" title="Standard Library Reference" description="Complete API reference for built-in modules" />
+<NextLink href="/docs/project-structure" title="Project Structure" description="Organize larger projects with modules" />

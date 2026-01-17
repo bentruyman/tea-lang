@@ -1,0 +1,139 @@
+# File System
+
+The `std.fs` module provides functions for reading, writing, and managing files and directories.
+
+## Import
+
+<Card className="p-6 bg-card border-border">
+
+```tea
+use fs = "std.fs"
+```
+
+</Card>
+
+## Reading Files
+
+<Card className="p-6 bg-card border-border">
+
+### fs.read_file(path: String) -> String
+
+Read the entire contents of a text file.
+
+```tea
+use fs = "std.fs"
+
+var content = fs.read_file("config.json")
+@println(content)
+
+# Read and process line by line
+var readme = fs.read_file("README.md")
+@println(`File length: ${@len(readme)}`)
+```
+
+</Card>
+
+## Writing Files
+
+<Card className="p-6 bg-card border-border">
+
+### fs.write_file(path: String, content: String) -> Void
+
+Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.
+
+```tea
+use fs = "std.fs"
+
+fs.write_file("output.txt", "Hello, World!")
+
+# Write with string interpolation
+var name = "Tea"
+var version = "1.0"
+fs.write_file("info.txt", `${name} version ${version}`)
+```
+
+</Card>
+
+## Directory Operations
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### fs.create_dir(path: String) -> Void
+
+Create a new directory.
+
+```tea
+use fs = "std.fs"
+
+fs.create_dir("output")
+fs.create_dir("data/cache")
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### fs.read_dir(path: String) -> List[String]
+
+List all entries in a directory.
+
+```tea
+use fs = "std.fs"
+
+var entries = fs.read_dir(".")
+
+var i = 0
+while i < @len(entries)
+  @println(entries[i])
+  i = i + 1
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### fs.remove(path: String) -> Void
+
+Remove a file or directory.
+
+```tea
+use fs = "std.fs"
+
+fs.remove("temp.txt")
+fs.remove("cache_dir")
+```
+
+</Card>
+
+## Path Utilities
+
+Use `std.path` for path manipulation.
+
+<Card className="p-6 bg-card border-border">
+
+```tea
+use path = "std.path"
+
+# Join path components
+var full = path.join(["usr", "local", "bin"])  # "usr/local/bin"
+
+# Get directory name
+var dir = path.dirname("/home/user/file.txt")  # "/home/user"
+
+# Get file name
+var name = path.basename("/home/user/file.txt")  # "file.txt"
+
+# Get extension
+var ext = path.extension("script.tea")  # "tea"
+
+# Split into components
+var parts = path.split("/usr/local/bin")  # ["usr", "local", "bin"]
+```
+
+</Card>
+
+## Next Steps
+
+<NextLink href="/reference/collections" title="Collections" description="Work with Lists and Dictionaries" />
+<NextLink href="/reference/json-yaml" title="JSON & YAML" description="Parse and generate JSON data" />

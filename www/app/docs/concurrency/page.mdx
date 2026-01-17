@@ -1,0 +1,169 @@
+# Concurrency
+
+Tea is designed with concurrency in mind, though the full concurrency model is still evolving. This page covers the current state and future directions.
+
+## Current State
+
+<Card className="p-6 bg-card border-border">
+
+<AlertCard variant="info">
+  Concurrency features are under active development. The current version of Tea is primarily single-threaded, but designed with future concurrency support in mind.
+</AlertCard>
+
+Tea programs currently execute sequentially. However, Tea's design choices—like immutable values, explicit state management, and typed errors—lay the groundwork for safe concurrent programming.
+
+</Card>
+
+## Sequential Execution
+
+Currently, Tea programs execute one statement at a time, in order.
+
+<CodeCard>
+{`use fs = "std.fs"
+
+# These operations happen sequentially
+var config = fs.read_file("config.json")
+var data = fs.read_file("data.json")
+var template = fs.read_file("template.html")
+
+# Process after all reads complete
+@println("All files loaded")`}
+</CodeCard>
+
+## Design Principles for Future Concurrency
+
+Tea's language design incorporates principles that will enable safe concurrency:
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Immutable by Default
+
+Constants (`const`) cannot be modified after creation, making them safe to share between concurrent tasks.
+
+```tea
+const CONFIG = { max_connections: 100 }
+# Safe to read from multiple tasks
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Explicit Mutability
+
+Mutable state is clearly marked with `var`, making it easy to identify shared state that needs synchronization.
+
+```tea
+var counter = 0  # Mutable - needs care in concurrent contexts
+counter = counter + 1
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Typed Errors
+
+Explicit error types make it clear what can fail, which is essential for handling failures in concurrent operations.
+
+```tea
+def fetch_data(url: String) -> String ! NetworkError
+  # Error type is part of the signature
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Value Semantics
+
+Structs are passed by value, avoiding shared mutable state problems common in reference-based languages.
+
+```tea
+struct Task {
+  id: Int
+  name: String
+}
+
+# Each task is a separate copy
+var task1 = Task(id: 1, name: "First")
+var task2 = task1  # Independent copy
+```
+
+</Card>
+
+## Future Directions
+
+Planned concurrency features for Tea include:
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-4 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">1.</span>
+      <div>
+        <strong className="text-foreground">Async/Await</strong>
+        <span className="text-muted-foreground"> - Non-blocking I/O for file operations, network requests</span>
+      </div>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">2.</span>
+      <div>
+        <strong className="text-foreground">Lightweight Tasks</strong>
+        <span className="text-muted-foreground"> - Green threads or coroutines for concurrent execution</span>
+      </div>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">3.</span>
+      <div>
+        <strong className="text-foreground">Channels</strong>
+        <span className="text-muted-foreground"> - Safe communication between concurrent tasks</span>
+      </div>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">4.</span>
+      <div>
+        <strong className="text-foreground">Structured Concurrency</strong>
+        <span className="text-muted-foreground"> - Ensuring child tasks complete before parents</span>
+      </div>
+    </li>
+  </ul>
+</Card>
+
+## Best Practices for Now
+
+Write code today that will work well with future concurrency features.
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-3 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Prefer `const` over `var` when possible
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Keep mutable state localized within functions
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Write pure functions that don't depend on global state
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Use explicit error types for operations that can fail
+      </span>
+    </li>
+  </ul>
+</Card>
+
+## Next Steps
+
+<NextLink href="/docs/memory" title="Memory Management" description="Learn how Tea manages memory" />
+<NextLink href="/docs/contributing" title="Contributing" description="Help shape Tea's concurrency model" />

@@ -1,0 +1,218 @@
+# Standard Library
+
+Core modules and functions that are available in every Tea program without explicit imports.
+
+## Array
+
+Dynamic arrays with type-safe operations.
+
+<Card className="p-6 bg-card border-border">
+  <div className="space-y-6">
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">append</code>
+        <code className="font-mono text-sm text-muted-foreground">(item: T) -&gt; Void</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Add an item to the end of the array</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">length</code>
+        <code className="font-mono text-sm text-muted-foreground">() -&gt; Int</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Get the number of items in the array</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">map</code>
+        <code className="font-mono text-sm text-muted-foreground">&lt;U&gt;(fn: (T) -&gt; U) -&gt; Array&lt;U&gt;</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Transform each element</p>
+
+```tea
+var numbers = [1, 2, 3]
+var doubled = numbers.map(n => n * 2)
+# [2, 4, 6]
+```
+
+</div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">filter</code>
+        <code className="font-mono text-sm text-muted-foreground">(fn: (T) -&gt; Bool) -&gt; Array&lt;T&gt;</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Filter elements by predicate</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">reduce</code>
+        <code className="font-mono text-sm text-muted-foreground">&lt;U&gt;(initial: U, fn: (U, T) -&gt; U) -&gt; U</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Reduce to single value</p>
+    </div>
+  </div>
+</Card>
+
+## String
+
+Immutable string operations and utilities.
+
+<Card className="p-6 bg-card border-border">
+  <div className="space-y-6">
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">length</code>
+        <code className="font-mono text-sm text-muted-foreground">() -&gt; Int</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Get the length of the string</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">split</code>
+        <code className="font-mono text-sm text-muted-foreground">(delimiter: String) -&gt; Array&lt;String&gt;</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Split string by delimiter</p>
+
+```tea
+var text = "hello,world,tea"
+var parts = text.split(",")
+# ["hello", "world", "tea"]
+```
+
+</div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">trim</code>
+        <code className="font-mono text-sm text-muted-foreground">() -&gt; String</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Remove leading and trailing whitespace</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">uppercase</code>
+        <code className="font-mono text-sm text-muted-foreground">() -&gt; String</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Convert to uppercase</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">lowercase</code>
+        <code className="font-mono text-sm text-muted-foreground">() -&gt; String</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Convert to lowercase</p>
+    </div>
+  </div>
+</Card>
+
+## Math
+
+Mathematical functions and constants.
+
+<Card className="p-6 bg-card border-border">
+  <div className="space-y-6">
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">abs</code>
+        <code className="font-mono text-sm text-muted-foreground">(x: Number) -&gt; Number</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Absolute value</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">sqrt</code>
+        <code className="font-mono text-sm text-muted-foreground">(x: Number) -&gt; Number</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Square root</p>
+
+```tea
+import Math
+print(Math.sqrt(16))
+# 4.0
+```
+
+</div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">pow</code>
+        <code className="font-mono text-sm text-muted-foreground">(base: Number, exp: Number) -&gt; Number</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Exponentiation</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">floor</code>
+        <code className="font-mono text-sm text-muted-foreground">(x: Number) -&gt; Int</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Round down to nearest integer</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">ceil</code>
+        <code className="font-mono text-sm text-muted-foreground">(x: Number) -&gt; Int</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Round up to nearest integer</p>
+    </div>
+  </div>
+</Card>
+
+## IO
+
+Input/output operations for console and streams.
+
+<Card className="p-6 bg-card border-border">
+  <div className="space-y-6">
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">print</code>
+        <code className="font-mono text-sm text-muted-foreground">(value: Any) -&gt; Void</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Print value to stdout</p>
+
+```tea
+print("Hello, Tea!")
+print(42)
+print([1, 2, 3])
+```
+
+</div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">println</code>
+        <code className="font-mono text-sm text-muted-foreground">(value: Any) -&gt; Void</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Print value with newline</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">input</code>
+        <code className="font-mono text-sm text-muted-foreground">(prompt: String) -&gt; String</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Read line from stdin</p>
+    </div>
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <code className="font-mono text-lg font-semibold text-accent">error</code>
+        <code className="font-mono text-sm text-muted-foreground">(message: String) -&gt; Void</code>
+      </div>
+      <p className="text-sm text-muted-foreground pl-4">Print to stderr</p>
+    </div>
+  </div>
+</Card>
+
+## Using the Standard Library
+
+<Card className="p-6 bg-muted/30 border-border">
+
+Most standard library functions are available globally without imports. For module-specific functions, use the import statement:
+
+```tea
+import Math
+import JSON
+import File
+```
+
+</Card>
+
+## Next Steps
+
+<NextLink href="/reference/collections" title="Collections" description="Learn about Lists and Dictionaries" />

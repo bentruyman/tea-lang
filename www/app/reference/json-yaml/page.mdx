@@ -1,0 +1,146 @@
+# JSON & YAML
+
+The `std.json` module provides functions for encoding and decoding JSON data.
+
+## Import
+
+<Card className="p-6 bg-card border-border">
+
+```tea
+use json = "std.json"
+```
+
+</Card>
+
+## Encoding JSON
+
+<Card className="p-6 bg-card border-border">
+
+### json.encode(value: Dict[String, String]) -> String
+
+Convert a dictionary to a JSON string.
+
+```tea
+use json = "std.json"
+
+var data = { "name": "tea", "version": "1.0" }
+var json_str = json.encode(data)
+
+@println(json_str)  # {"name":"tea","version":"1.0"}
+```
+
+</Card>
+
+## Decoding JSON
+
+<Card className="p-6 bg-card border-border">
+
+### json.decode(json_str: String) -> Dict[String, String]
+
+Parse a JSON string into a dictionary.
+
+```tea
+use json = "std.json"
+
+var json_str = "{\"name\":\"tea\",\"version\":\"1.0\"}"
+var data = json.decode(json_str)
+
+@println(data.name)     # "tea"
+@println(data.version)  # "1.0"
+```
+
+</Card>
+
+## Working with JSON Files
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Reading JSON Files
+
+```tea
+use fs = "std.fs"
+use json = "std.json"
+
+# Read and parse a JSON file
+var content = fs.read_file("config.json")
+var config = json.decode(content)
+
+@println(`App: ${config.name}`)
+@println(`Debug: ${config.debug}`)
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Writing JSON Files
+
+```tea
+use fs = "std.fs"
+use json = "std.json"
+
+# Create data and write to file
+var settings = {
+  "theme": "dark",
+  "language": "en",
+  "notifications": "true"
+}
+
+var json_str = json.encode(settings)
+fs.write_file("settings.json", json_str)
+```
+
+</Card>
+
+## Common Patterns
+
+<Card className="p-6 bg-card border-border">
+
+### Configuration Loading
+
+```tea
+use fs = "std.fs"
+use json = "std.json"
+use path = "std.path"
+
+def load_config(config_path: String) -> Dict[String, String]
+  var content = fs.read_file(config_path)
+  json.decode(content)
+end
+
+# Load from default location
+var config = load_config("config/app.json")
+@println(`Server: ${config.host}:${config.port}`)
+```
+
+</Card>
+
+## Best Practices
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-3 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Always validate JSON data before accessing fields
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Use meaningful file names with `.json` extension
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Keep configuration files in a dedicated directory (e.g., `config/`)
+      </span>
+    </li>
+  </ul>
+</Card>
+
+## Next Steps
+
+<NextLink href="/reference/filesystem" title="File System" description="Read and write files" />
+<NextLink href="/reference/process" title="Process Management" description="Environment variables and working directory" />

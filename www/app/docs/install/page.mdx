@@ -1,0 +1,214 @@
+# Installation Guide
+
+Complete instructions for installing Tea on Linux, macOS, and Windows.
+
+## System Requirements
+
+<RequirementsCard>
+  <RequirementsSection title="Required">
+    <RequirementItem>Git 2.0+</RequirementItem>
+    <RequirementItem>C++ compiler (GCC 9+ or Clang 10+)</RequirementItem>
+    <RequirementItem>LLVM 14+ (for native compilation)</RequirementItem>
+    <RequirementItem>Make or CMake</RequirementItem>
+    <RequirementItem>2GB RAM minimum</RequirementItem>
+  </RequirementsSection>
+  <RequirementsSection title="Optional">
+    <RequirementItem optional>Python 3.8+ (for build scripts)</RequirementItem>
+  </RequirementsSection>
+</RequirementsCard>
+
+## Linux
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Ubuntu / Debian
+
+Install dependencies:
+
+```bash
+sudo apt update
+sudo apt install git build-essential cmake llvm-14 llvm-14-dev
+```
+
+Clone and build Tea:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+make setup
+sudo make install
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Fedora / RHEL
+
+Install dependencies:
+
+```bash
+sudo dnf install git gcc-c++ cmake llvm-devel
+```
+
+Clone and build Tea:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+make setup
+sudo make install
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Arch Linux
+
+Install dependencies:
+
+```bash
+sudo pacman -S git base-devel cmake llvm
+```
+
+Clone and build Tea:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+make setup
+sudo make install
+```
+
+</Card>
+
+## macOS
+
+<Card className="p-6 bg-card border-border">
+
+Install Xcode Command Line Tools:
+
+```bash
+xcode-select --install
+```
+
+Install Homebrew (if not already installed):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Install LLVM:
+
+```bash
+brew install llvm
+```
+
+Clone and build Tea:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+make setup
+sudo make install
+```
+
+</Card>
+
+## Windows
+
+<Card className="p-6 bg-card border-border">
+
+<AlertCard variant="warning">
+  Windows support is currently experimental. We recommend using WSL2 (Windows Subsystem for Linux) for the best experience.
+</AlertCard>
+
+### Option 1: WSL2 (Recommended)
+
+Install WSL2:
+
+```bash
+wsl --install
+```
+
+After WSL2 is installed, follow the Linux installation instructions above.
+
+### Option 2: Native Windows
+
+1. Install Visual Studio 2022 with C++ tools
+2. Install Git for Windows
+
+Clone and build:
+
+```bash
+git clone https://github.com/special-tea/tea.git
+cd tea
+cmake -B build
+cmake --build build --config Release
+cmake --install build
+```
+
+</Card>
+
+## Verify Installation
+
+<Card className="p-6 bg-card border-border">
+
+After installation, verify that Tea is working correctly:
+
+Check version:
+
+```bash
+tea --version
+```
+
+View help:
+
+```bash
+tea --help
+```
+
+Run a simple test:
+
+```bash
+echo 'print("Tea is working!")' | tea run -
+```
+
+</Card>
+
+## Troubleshooting
+
+<Card className="p-6 bg-card border-border">
+
+### Common Issues
+
+**Command not found: tea**
+
+Make sure `/usr/local/bin` is in your PATH:
+
+```bash
+export PATH="/usr/local/bin:$PATH"
+```
+
+**LLVM not found**
+
+LLVM 14+ is required for Tea. Make sure it's properly installed and available in your PATH.
+
+**Permission denied during installation**
+
+Use `sudo` for the install step, or install to a user directory:
+
+```bash
+make install PREFIX=$HOME/.local
+```
+
+</Card>
+
+## Next Steps
+
+<HelpCard title="Next Steps" description="Now that Tea is installed, you're ready to start coding!">
+  <HelpLink href="/docs/getting-started">Getting Started Guide</HelpLink>
+  <HelpLink href="/examples">Browse Examples</HelpLink>
+  <HelpLink href="/playground">Try the Playground</HelpLink>
+</HelpCard>

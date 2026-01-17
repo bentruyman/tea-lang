@@ -1,0 +1,126 @@
+# Metaprogramming
+
+Metaprogramming in Tea allows you to write code that generates or manipulates code at compile time. This includes intrinsics and compile-time features.
+
+## Intrinsics
+
+Intrinsics are built-in functions that start with `@`. They provide low-level capabilities that can't be implemented in pure Tea.
+
+<IntrinsicTable>
+  <IntrinsicRow intrinsic="@println(value)" description="Print a value with newline" />
+  <IntrinsicRow intrinsic="@len(collection)" description="Get length of string, list, or dict" />
+  <IntrinsicRow intrinsic="@panic(message)" description="Halt execution with error message" />
+  <IntrinsicRow intrinsic="@type_of(value)" description="Get the type of a value as a string" />
+</IntrinsicTable>
+
+<Card className="p-6 bg-card border-border mt-4">
+
+### Using Intrinsics
+
+```tea
+# Printing output
+@println("Hello, World!")
+@println(42)
+
+# Getting length
+var name = "Tea"
+var len = @len(name)  # 3
+
+var numbers = [1, 2, 3, 4, 5]
+@println(@len(numbers))  # 5
+
+# Panic for unrecoverable errors
+def divide(a: Int, b: Int) -> Int
+  if b == 0
+    @panic("division by zero")
+  end
+  a / b
+end
+```
+
+</Card>
+
+## Generics as Metaprogramming
+
+Tea's generics use monomorphization, which is a form of compile-time code generation. The compiler generates specialized code for each concrete type.
+
+<CodeCard>
+{`def identity[T](value: T) -> T
+  value
+end
+
+# At compile time, this generates:
+# - identity_Int for identity[Int](42)
+# - identity_String for identity[String]("hello")
+
+var n = identity[Int](42)
+var s = identity[String]("hello")`}
+</CodeCard>
+
+## Documentation Comments
+
+Use `##` comments to add documentation that can be processed by tools.
+
+<CodeCard>
+{`## A user account with profile information
+##
+## Examples:
+##   var user = User(name: "Alice", age: 30)
+##   @println(user.name)
+struct User {
+  ## The user's display name
+  name: String
+  ## How many years old the user is
+  age: Int
+}
+
+## Calculate the factorial of a non-negative integer.
+##
+## Examples:
+##   factorial(5)  # => 120
+##   factorial(0)  # => 1
+pub def factorial(n: Int) -> Int
+  if n <= 1
+    return 1
+  end
+  n * factorial(n - 1)
+end`}
+</CodeCard>
+
+## Compile-time Constants
+
+Constants with `const` are evaluated at compile time when possible.
+
+<CodeCard>
+{`# These are compile-time constants
+const PI = 3.14159
+const MAX_SIZE = 1024
+const APP_NAME = "MyApp"
+
+# Constant expressions can include simple operations
+const BUFFER_SIZE = MAX_SIZE * 2
+
+# Constant lambdas
+const double = |x: Int| => x * 2`}
+</CodeCard>
+
+## Future Directions
+
+<Card className="p-6 bg-card border-border">
+
+<AlertCard variant="info">
+  Additional metaprogramming features are planned for future releases.
+</AlertCard>
+
+- **Compile-time function execution** - Run functions during compilation
+- **Macros** - Code generation through syntax transformation
+- **Reflection** - Inspect types and values at runtime
+- **Custom attributes** - Annotate code with metadata
+
+</Card>
+
+## Next Steps
+
+<NextLink href="/docs/generics" title="Generics" description="Learn about monomorphization in depth" />
+<NextLink href="/reference/stdlib" title="Standard Library" description="See intrinsics in action" />
+<NextLink href="/docs/contributing" title="Contributing" description="Help shape future metaprogramming features" />

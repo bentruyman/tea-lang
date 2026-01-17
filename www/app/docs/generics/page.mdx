@@ -1,0 +1,193 @@
+# Generics
+
+Generics allow you to write reusable, type-safe code that works with any type. Tea uses monomorphization to generate specialized copies at compile time for optimal performance.
+
+## Generic Functions
+
+Define type parameters using square brackets after the function name.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Identity Function
+
+```tea
+def identity[T](value: T) -> T
+  value
+end
+
+# Call with explicit type
+var n = identity[Int](42)
+var s = identity[String]("hello")
+
+@println(n)  # 42
+@println(s)  # "hello"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Multiple Type Parameters
+
+```tea
+def pair[A, B](first: A, second: B) -> List[A]
+  # Return a list containing just the first element
+  [first]
+end
+
+def swap[A, B](a: A, b: B) -> B
+  b
+end
+```
+
+</Card>
+
+## Generic Structs
+
+Structs can also be parameterized by types.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Box Type
+
+```tea
+struct Box[T] {
+  value: T
+}
+
+# Create instances with specific types
+var int_box = Box[Int](value: 42)
+var str_box = Box[String](value: "hello")
+
+@println(int_box.value)  # 42
+@println(str_box.value)  # "hello"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Multiple Type Parameters
+
+```tea
+struct Pair[A, B] {
+  first: A
+  second: B
+}
+
+var pair = Pair[String, Int](first: "age", second: 30)
+@println(pair.first)   # "age"
+@println(pair.second)  # 30
+```
+
+</Card>
+
+## Factory Functions
+
+Combine generic functions with generic structs to create factory patterns.
+
+<CodeCard>
+{`struct Box[T] {
+  value: T
+}
+
+def make_box[T](value: T) -> Box[T]
+  Box[T](value: value)
+end
+
+# Use the factory function
+var int_box = make_box[Int](42)
+var str_box = make_box[String]("tea")
+
+@println(int_box.value)  # 42
+@println(str_box.value)  # "tea"`}
+</CodeCard>
+
+## Composing Generics
+
+Generic functions can call other generic functions.
+
+<CodeCard>
+{`use assert = "std.assert"
+
+struct Box[T] {
+  value: T
+}
+
+def identity[T](value: T) -> T
+  value
+end
+
+def make_box[T](value: T) -> Box[T]
+  Box[T](value: value)
+end
+
+# Compose: identity wrapped in make_box
+var int_box = make_box[Int](identity[Int](42))
+assert.eq(int_box.value, 42)
+
+var string_box = make_box[String]("tea")
+assert.eq(string_box.value, "tea")`}
+</CodeCard>
+
+## How It Works: Monomorphization
+
+Tea uses monomorphization to implement generics. This means the compiler generates specialized versions of generic code for each concrete type used. This approach provides:
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-3 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">1.</span>
+      <div>
+        <strong className="text-foreground">Zero runtime overhead</strong>
+        <span className="text-muted-foreground"> - No boxing or vtables needed</span>
+      </div>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">2.</span>
+      <div>
+        <strong className="text-foreground">Full type safety</strong>
+        <span className="text-muted-foreground"> - Errors caught at compile time</span>
+      </div>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent font-bold">3.</span>
+      <div>
+        <strong className="text-foreground">Optimal performance</strong>
+        <span className="text-muted-foreground"> - Each specialization is optimized for its type</span>
+      </div>
+    </li>
+  </ul>
+</Card>
+
+## Practical Example
+
+Here's a more complete example showing generics in action.
+
+<CodeCard>
+{`struct Container[T] {
+  items: List[T]
+  name: String
+}
+
+def create_container[T](name: String, items: List[T]) -> Container[T]
+  Container[T](items: items, name: name)
+end
+
+def container_size[T](c: Container[T]) -> Int
+  @len(c.items)
+end
+
+# Usage
+var numbers = create_container[Int]("Numbers", [1, 2, 3, 4, 5])
+var words = create_container[String]("Words", ["hello", "world"])
+
+@println(\`\${numbers.name}: \${container_size[Int](numbers)} items\`)
+@println(\`\${words.name}: \${container_size[String](words)} items\`)`}
+</CodeCard>
+
+## Next Steps
+
+<NextLink href="/docs/pattern-matching" title="Pattern Matching" description="Match and destructure complex data" />
+<NextLink href="/docs/error-handling" title="Error Handling" description="Handle errors with typed exceptions" />
+<NextLink href="/examples" title="Examples" description="See generics in real-world code" />

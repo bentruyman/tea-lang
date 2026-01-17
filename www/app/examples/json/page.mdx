@@ -1,0 +1,116 @@
+# JSON Parsing
+
+<span className="inline-block text-xs px-2 py-1 rounded-full bg-green-500/10 text-green-500 mb-4">Beginner</span>
+
+Learn how to parse, manipulate, and generate JSON data using Tea's built-in JSON module.
+
+## Basic JSON Parsing
+
+<Card className="p-6 bg-card border-border">
+
+### parse_json.tea
+
+```tea
+import JSON
+
+# Parse a JSON string
+var json_string = '{"name": "Alice", "age": 30, "city": "NYC"}'
+var data = JSON.parse(json_string)
+
+# Access values
+print("Name: ${data['name']}")
+print("Age: ${data['age']}")
+print("City: ${data['city']}")
+```
+
+**Output:**
+
+```
+Name: Alice
+Age: 30
+City: NYC
+```
+
+</Card>
+
+## Reading JSON from File
+
+<Card className="p-6 bg-card border-border">
+
+### read_json_file.tea
+
+```tea
+import JSON
+import File
+
+# Read JSON from a file
+var content = File.read("users.json")
+var users = JSON.parse(content)
+
+# Iterate over users
+for user of users
+  print("User: ${user['name']}, Email: ${user['email']}")
+end
+```
+
+</Card>
+
+## Generating JSON
+
+<Card className="p-6 bg-card border-border">
+
+### generate_json.tea
+
+```tea
+import JSON
+
+# Create a data structure
+var person = {
+  "name": "Bob",
+  "age": 25,
+  "hobbies": ["reading", "coding", "gaming"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Boston"
+  }
+}
+
+# Convert to JSON string
+var json_output = JSON.stringify(person, indent: 2)
+print(json_output)
+```
+
+**Output:**
+
+```json
+{
+  "name": "Bob",
+  "age": 25,
+  "hobbies": ["reading", "coding", "gaming"],
+  "address": {
+    "street": "123 Main St",
+    "city": "Boston"
+  }
+}
+```
+
+</Card>
+
+## Key Concepts
+
+<KeyConceptsCard>
+  <KeyConcept number="1" title="JSON.parse()">
+    Converts a JSON string into a Tea data structure (objects and arrays)
+  </KeyConcept>
+  <KeyConcept number="2" title="JSON.stringify()">
+    Converts Tea data structures into JSON strings, with optional formatting
+  </KeyConcept>
+  <KeyConcept number="3" title="File Integration">
+    Combine JSON parsing with file operations to read and write JSON files
+  </KeyConcept>
+</KeyConceptsCard>
+
+## Next Steps
+
+<NextLink href="/reference/json-yaml" title="JSON & YAML Reference" description="Complete JSON module documentation" />
+<NextLink href="/examples/generics" title="Generic Functions" description="Learn about type-safe generic code" />

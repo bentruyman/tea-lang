@@ -1,0 +1,237 @@
+# Code Style
+
+This guide covers coding conventions for both Tea code and Rust code in the Tea compiler. Following consistent style makes the codebase easier to read and maintain.
+
+## Tea Code Style
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Indentation
+
+Use 2 spaces for indentation. Never use tabs.
+
+```tea
+def calculate(x: Int) -> Int
+  if x > 0
+    return x * 2
+  end
+  0
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Naming Conventions
+
+**Variables and Functions: snake_case**
+
+```tea
+var user_count = 0
+var is_valid = true
+
+def calculate_total(items: List[Int]) -> Int
+  # ...
+end
+```
+
+**Types and Structs: PascalCase**
+
+```tea
+struct UserAccount {
+  name: String
+  email: String
+}
+
+error ValidationError {
+  InvalidEmail(message: String)
+}
+```
+
+**Constants: SCREAMING_SNAKE_CASE or snake_case**
+
+```tea
+const MAX_RETRIES = 3
+const PI = 3.14159
+
+# Or lowercase for function-like constants
+const double = |x: Int| => x * 2
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Block Endings
+
+Always use `end` to close blocks.
+
+```tea
+def process(data: String) -> Bool
+  if @len(data) > 0
+    @println(data)
+    return true
+  end
+  false
+end
+
+while count < 10
+  count = count + 1
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### String Interpolation
+
+Use backticks for interpolated strings.
+
+```tea
+# Good
+var message = `Hello, ${name}!`
+
+# Also good for simple cases
+var greeting = "Hello, World!"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Documentation Comments
+
+Use `##` for documentation comments.
+
+```tea
+## Calculate the factorial of n.
+##
+## Examples:
+##   factorial(5)  # => 120
+pub def factorial(n: Int) -> Int
+  if n <= 1
+    return 1
+  end
+  n * factorial(n - 1)
+end
+```
+
+</Card>
+
+## Rust Code Style (Compiler)
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Formatting
+
+Use `cargo fmt` to format all Rust code.
+
+```bash
+cargo fmt --all
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Import Ordering
+
+Group imports with blank lines between sections.
+
+```rust
+// Standard library
+use std::collections::HashMap;
+use std::fs;
+
+// External crates
+use anyhow::Result;
+use serde::Deserialize;
+
+// Internal modules
+use crate::ast::Node;
+use crate::parser::Parser;
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Error Handling
+
+Use `anyhow::Result` for fallible functions and `thiserror` for custom errors.
+
+```rust
+use anyhow::{Result, bail};
+
+fn parse_file(path: &str) -> Result<Ast> {
+    let content = fs::read_to_string(path)?;
+
+    if content.is_empty() {
+        bail!("File is empty");
+    }
+
+    // ...
+}
+```
+
+</Card>
+
+## Formatting Tools
+
+<CodeCard>
+{`# Format everything
+make fmt
+
+# Format Rust code only
+cargo fmt --all
+
+# Format Tea code only
+cargo run -p tea-cli -- fmt .
+
+# Check formatting without changing files
+cargo fmt --all -- --check`}
+</CodeCard>
+
+## Best Practices
+
+<Card className="p-6 bg-card border-border">
+  <ul className="space-y-3 text-sm">
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Keep functions short and focused on a single task
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Use meaningful variable names that describe their purpose
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Add comments for complex logic, but let clear code speak for itself
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Prefer `const` over `var` when possible
+      </span>
+    </li>
+    <li className="flex items-start gap-3">
+      <span className="text-accent">•</span>
+      <span className="text-muted-foreground">
+        Run `make fmt` before committing
+      </span>
+    </li>
+  </ul>
+</Card>
+
+## Next Steps
+
+<NextLink href="/docs/testing" title="Testing" description="Write and run tests" />
+<NextLink href="/docs/contributing" title="Contributing Guide" description="Submit your first pull request" />

@@ -1,0 +1,239 @@
+# Syntax Basics
+
+Learn the fundamentals of Tea's syntax. Tea uses a clean, readable syntax with Python-like indentation
+awareness and Ruby-inspired block endings.
+
+## Variables
+
+Tea has two kinds of bindings: mutable variables with `var` and immutable constants with `const`.
+
+<CodeCard title="Mutable Variables" description="Use var for values that can be reassigned.">
+{`var count = 0
+count = count + 1
+
+var name = "Tea"
+name = "Tea Language"
+
+var numbers = [1, 2, 3]
+numbers = [4, 5, 6]`}
+</CodeCard>
+
+<CodeCard title="Constants" description="Use const for values that should never change.">
+{`const PI = 3.14159
+const APP_NAME = "MyApp"
+const MAX_RETRIES = 3
+
+# Constants can also hold functions
+const double = |x: Int| => x * 2`}
+</CodeCard>
+
+<CodeCard title="Type Annotations" description="Types are inferred automatically, but you can add explicit annotations.">
+{`# Type inference
+var count = 42          # Inferred as Int
+var name = "Tea"        # Inferred as String
+
+# Explicit types
+var count: Int = 42
+var name: String = "Tea"
+
+# Optional types
+var maybe_name: String? = nil`}
+</CodeCard>
+
+## Basic Types
+
+<Card className="p-6 bg-card border-border">
+<TwoColumnGrid>
+<div>
+### Primitive Types
+
+```tea
+var n: Int = 42
+var f: Float = 3.14
+var b: Bool = true
+var s: String = "hello"
+```
+</div>
+<div>
+### Collection Types
+
+```tea
+var list: List[Int] = [1, 2, 3]
+var dict = { x: 1, y: 2 }
+var scores = { "a": 10, "b": 20 }
+```
+</div>
+</TwoColumnGrid>
+</Card>
+
+## Comments
+
+<CodeCard>
+{`# Single line comment
+
+## Doc comment for functions, structs, and fields
+## These can be used for documentation generation
+
+var x = 42  # Inline comment`}
+</CodeCard>
+
+## Control Flow
+
+<CodeCard title="If Statements" description="Conditionals use if, else, and end.">
+{`var score = 85
+
+if score >= 90
+  @println("Grade: A")
+else
+  @println("Grade: B or lower")
+end
+
+# Nested conditions
+if score >= 90
+  @println("A")
+else
+  if score >= 80
+    @println("B")
+  else
+    @println("C or lower")
+  end
+end`}
+</CodeCard>
+
+<CodeCard title="If Expressions" description="Use if() for ternary-style expressions that return values.">
+{`const is_admin = true
+const role = if(is_admin) "admin" else "user"
+
+var x = 10
+var y = if(x > 5) x * 2 else x
+
+# With function calls
+const result = if(true) double(5) else double(10)`}
+</CodeCard>
+
+<CodeCard title="While Loops">
+{`var count = 0
+
+while count < 5
+  @println(count)
+  count = count + 1
+end`}
+</CodeCard>
+
+## Operators
+
+<Card className="p-6 bg-card border-border">
+<TwoColumnGrid>
+<div>
+### Arithmetic
+
+```tea
+var sum = 1 + 2
+var diff = 5 - 3
+var product = 4 * 2
+var quotient = 10 / 2
+var remainder = 7 % 3
+```
+</div>
+<div>
+### Comparison
+
+```tea
+var eq = 1 == 1    # true
+var ne = 1 != 2    # true
+var lt = 1 < 2     # true
+var gt = 2 > 1     # true
+var le = 1 <= 1    # true
+var ge = 2 >= 2    # true
+```
+</div>
+</TwoColumnGrid>
+<TwoColumnGrid className="mt-6">
+<div>
+### Logical
+
+```tea
+var and_result = true && false  # false
+var or_result = true || false   # true
+var not_result = !true          # false
+```
+</div>
+<div>
+### Assignment
+
+```tea
+var x = 10
+x += 5   # x = 15
+x -= 3   # x = 12
+x *= 2   # x = 24
+```
+</div>
+</TwoColumnGrid>
+</Card>
+
+## Strings
+
+<CodeCard title="String Literals">
+{`var simple = "Hello, World!"
+var with_escape = "Line 1\\nLine 2"
+var with_quotes = "She said \\"Hello\\""`}
+</CodeCard>
+
+<CodeCard title="String Interpolation" description="Use backticks for interpolated strings with ${...} expressions.">
+{`var name = "Tea"
+var greeting = \`Hello, \${name}!\`
+
+var x = 5
+var result = \`Next number: \${x + 1}\`
+
+# Function calls in interpolation
+def double(n: Int) -> Int
+  n * 2
+end
+
+@println(\`Doubled: \${double(21)}\`)  # "Doubled: 42"`}
+</CodeCard>
+
+<CodeCard title="String Operations">
+{`var s = "Hello"
+
+# Length
+var len = @len(s)          # 5
+
+# Indexing (0-based)
+var first = s[0]           # "H"
+var last = s[4]            # "o"
+
+# Slicing
+var sub = s[0..3]          # "Hel" (exclusive end)
+var sub2 = s[1...4]        # "ell" (inclusive end)
+
+# Concatenation
+var full = s + " World"    # "Hello World"`}
+</CodeCard>
+
+## Printing Output
+
+<CodeCard description="Use the @println intrinsic to print values.">
+{`@println("Hello, World!")
+@println(42)
+@println(true)
+
+var name = "Tea"
+@println(\`Welcome to \${name}!\`)`}
+</CodeCard>
+
+## Next Steps
+
+<div className="flex flex-col gap-4">
+<NextLink
+  title="Type System"
+  description="Learn about Tea's static type system and inference"
+  href="/docs/types"
+/>
+<NextLink
+  title="Functions"
+  description="Define and use functions in Tea"
+  href="/docs/functions"
+/>
+</div>

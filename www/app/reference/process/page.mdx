@@ -1,0 +1,187 @@
+# Process Management
+
+The `std.env` module provides functions for working with environment variables and the current working directory.
+
+## Import
+
+<Card className="p-6 bg-card border-border">
+
+```tea
+use env = "std.env"
+```
+
+</Card>
+
+## Environment Variables
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### env.get(name: String) -> String
+
+Get the value of an environment variable.
+
+```tea
+use env = "std.env"
+
+var home = env.get("HOME")
+var path = env.get("PATH")
+var user = env.get("USER")
+
+@println(`Home directory: ${home}`)
+@println(`Current user: ${user}`)
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### env.set(name: String, value: String) -> Void
+
+Set an environment variable for the current process.
+
+```tea
+use env = "std.env"
+
+env.set("MY_VAR", "my_value")
+env.set("DEBUG", "true")
+env.set("APP_ENV", "production")
+
+# Verify it was set
+@println(env.get("MY_VAR"))  # "my_value"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### env.vars() -> Dict[String, String]
+
+Get all environment variables as a dictionary.
+
+```tea
+use env = "std.env"
+
+var all_vars = env.vars()
+
+@println(`HOME: ${all_vars.HOME}`)
+@println(`USER: ${all_vars.USER}`)
+```
+
+</Card>
+
+## Working Directory
+
+<Card className="p-6 bg-card border-border">
+
+### env.cwd() -> String
+
+Get the current working directory.
+
+```tea
+use env = "std.env"
+
+var cwd = env.cwd()
+@println(`Current directory: ${cwd}`)
+```
+
+</Card>
+
+## Common Patterns
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Configuration from Environment
+
+```tea
+use env = "std.env"
+
+# Read configuration from environment
+var db_host = env.get("DB_HOST")
+var db_port = env.get("DB_PORT")
+var db_name = env.get("DB_NAME")
+
+@println(`Connecting to ${db_host}:${db_port}/${db_name}`)
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Debug Mode Detection
+
+```tea
+use env = "std.env"
+
+var debug = env.get("DEBUG")
+
+if debug == "true"
+  @println("Debug mode enabled")
+  @println(`Working directory: ${env.cwd()}`)
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Path Construction
+
+```tea
+use env = "std.env"
+use path = "std.path"
+use fs = "std.fs"
+
+# Build paths from environment
+var home = env.get("HOME")
+var config_dir = path.join([home, ".config", "myapp"])
+
+# Read config file
+var config_file = path.join([config_dir, "settings.json"])
+var content = fs.read_file(config_file)
+```
+
+</Card>
+
+## Complete Example
+
+<Card className="p-6 bg-card border-border">
+
+```tea
+use env = "std.env"
+use fs = "std.fs"
+use path = "std.path"
+use json = "std.json"
+
+# Application initialization
+def init_app() -> Dict[String, String]
+  # Get configuration from environment
+  var app_env = env.get("APP_ENV")
+  var debug = env.get("DEBUG")
+
+  @println(`Starting in ${app_env} mode`)
+
+  if debug == "true"
+    @println(`CWD: ${env.cwd()}`)
+  end
+
+  # Load config file based on environment
+  var home = env.get("HOME")
+  var config_path = path.join([home, ".config", "myapp", `${app_env}.json`])
+
+  var content = fs.read_file(config_path)
+  var config = json.decode(content)
+
+  @println(`Loaded config for: ${config.name}`)
+  config
+end
+
+var config = init_app()
+@println(`Server will run on port ${config.port}`)
+```
+
+</Card>
+
+## Next Steps
+
+<NextLink href="/reference/json-yaml" title="JSON & YAML" description="Parse and generate JSON data" />
+<NextLink href="/reference" title="Reference" description="Back to reference overview" />

@@ -1,0 +1,114 @@
+# Generic Functions
+
+<span className="inline-block text-xs px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-500 mb-4">Intermediate</span>
+
+Learn how to write reusable, type-safe code using Tea's powerful generic system with compile-time specialization.
+
+## Basic Generic Function
+
+<Card className="p-6 bg-card border-border">
+
+### generic_first.tea
+
+```tea
+# Generic function to get first element
+def first<T>(arr: Array<T>) -> T
+  arr[0]
+end
+
+# Works with any type
+var numbers = [1, 2, 3]
+var names = ["Alice", "Bob"]
+
+print(first(numbers))  # 1
+print(first(names))    # "Alice"
+```
+
+</Card>
+
+## Generic with Type Constraints
+
+<Card className="p-6 bg-card border-border">
+
+### generic_comparable.tea
+
+```tea
+# Generic function with constraint
+def max<T: Comparable>(a: T, b: T) -> T
+  if a > b
+    a
+  else
+    b
+  end
+end
+
+print(max(10, 20))             # 20
+print(max("apple", "banana"))  # "banana"
+```
+
+</Card>
+
+## Generic Class
+
+<Card className="p-6 bg-card border-border">
+
+### generic_stack.tea
+
+```tea
+# Generic Stack implementation
+class Stack<T>
+  var items: Array<T>
+
+  def init()
+    @items = []
+  end
+
+  def push(item: T)
+    @items.append(item)
+  end
+
+  def pop() -> T
+    @items.pop()
+  end
+
+  def size() -> Int
+    @items.length
+  end
+end
+
+# Use with integers
+var int_stack = Stack<Int>.new()
+int_stack.push(1)
+int_stack.push(2)
+print(int_stack.pop())  # 2
+
+# Use with strings
+var str_stack = Stack<String>.new()
+str_stack.push("hello")
+str_stack.push("world")
+print(str_stack.pop())  # "world"
+```
+
+</Card>
+
+## Key Concepts
+
+<KeyConceptsCard>
+  <KeyConcept number="1" title="Type Parameters">
+    Use `<T>` to define generic type parameters that can be replaced with any type
+  </KeyConcept>
+  <KeyConcept number="2" title="Type Constraints">
+    Restrict generic types with constraints like `T: Comparable` to ensure required operations
+  </KeyConcept>
+  <KeyConcept number="3" title="Compile-Time Specialization">
+    Tea generates specialized versions of generic code for each type used, ensuring optimal performance
+  </KeyConcept>
+  <KeyConcept number="4" title="Type Safety">
+    Generics provide compile-time type checking, preventing type errors at runtime
+  </KeyConcept>
+</KeyConceptsCard>
+
+## Next Steps
+
+<NextLink href="/docs/generics" title="Learn More About Generics" description="Deep dive into Tea's generic system" />
+<NextLink href="/examples/json" title="JSON Parsing" description="Work with JSON data" />

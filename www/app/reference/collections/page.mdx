@@ -1,0 +1,170 @@
+# Collections
+
+Tea provides built-in collection types for organizing and manipulating groups of values. Learn about lists and dictionaries.
+
+## Lists
+
+Lists are ordered, indexable collections of elements with the same type.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Creating Lists
+
+```tea
+# List literals
+var numbers = [1, 2, 3, 4, 5]      # List[Int]
+var words = ["hello", "world"]     # List[String]
+var empty: List[Int] = []          # Empty list with type annotation
+
+# Nested lists
+var matrix = [
+  [1, 2, 3],
+  [4, 5, 6],
+  [7, 8, 9]
+]
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Accessing Elements
+
+```tea
+var numbers = [10, 20, 30, 40, 50]
+
+# Index access (0-based)
+var first = numbers[0]    # 10
+var third = numbers[2]    # 30
+var last = numbers[4]     # 50
+
+# Nested access
+var matrix = [[1, 2], [3, 4]]
+var value = matrix[1][0]  # 3
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### List Slicing
+
+```tea
+var numbers = [1, 2, 3, 4, 5]
+
+# Exclusive end (0..3 gives indices 0, 1, 2)
+var first_three = numbers[0..3]    # [1, 2, 3]
+
+# Inclusive end (0...3 gives indices 0, 1, 2, 3)
+var first_four = numbers[0...3]    # [1, 2, 3, 4]
+
+# From middle
+var middle = numbers[1..4]         # [2, 3, 4]
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### List Length
+
+```tea
+var numbers = [1, 2, 3, 4, 5]
+var len = @len(numbers)  # 5
+
+# Iterating with length
+var i = 0
+while i < @len(numbers)
+  @println(numbers[i])
+  i = i + 1
+end
+```
+
+</Card>
+
+## Dictionaries
+
+Dictionaries are key-value mappings. Tea supports both object-style and string-keyed dictionaries.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Object-Style Dictionaries
+
+```tea
+# Object-style with identifier keys
+var point = { x: 10, y: 20 }
+
+# Access with dot notation
+@println(point.x)  # 10
+@println(point.y)  # 20
+
+# Nested objects
+var config = {
+  server: { host: "localhost", port: 8080 },
+  debug: true
+}
+@println(config.server.host)  # "localhost"
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### String-Keyed Dictionaries
+
+```tea
+# String keys for dynamic keys
+var scores = { "alice": 100, "bob": 85, "charlie": 92 }
+
+# Access with dot notation
+@println(scores.alice)    # 100
+@println(scores.bob)      # 85
+```
+
+</Card>
+
+## Common Patterns
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Iterating Over Lists
+
+```tea
+var items = ["apple", "banana", "cherry"]
+
+var i = 0
+while i < @len(items)
+  @println(`Item ${i}: ${items[i]}`)
+  i = i + 1
+end
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Lists of Structs
+
+```tea
+struct User {
+  name: String
+  age: Int
+}
+
+var users = [
+  User(name: "Alice", age: 30),
+  User(name: "Bob", age: 25),
+  User(name: "Charlie", age: 35)
+]
+
+# Access struct fields
+@println(users[0].name)  # "Alice"
+@println(users[1].age)   # 25
+```
+
+</Card>
+
+## Next Steps
+
+<NextLink href="/reference/stdlib" title="Standard Library" description="Core modules and functions" />
+<NextLink href="/reference/filesystem" title="File System" description="Read and write files" />

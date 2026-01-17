@@ -1,0 +1,198 @@
+# Type System
+
+Tea features a powerful static type system with full type inference. Catch errors at compile time while writing concise, readable code.
+
+## Primitive Types
+
+<TypeTable>
+  <TypeRow type="Int" description="64-bit signed integer" example="42, -10" />
+  <TypeRow type="Float" description="64-bit floating point" example="3.14, -0.5" />
+  <TypeRow type="Bool" description="Boolean value" example="true, false" />
+  <TypeRow type="String" description="UTF-8 string" example='"hello"' />
+  <TypeRow type="Void" description="No return value" example="Function returns nothing" />
+</TypeTable>
+
+## Type Inference
+
+Tea automatically infers types from values, so you rarely need explicit annotations for local variables.
+
+<CodeCard>
+{`# Types are inferred automatically
+var count = 42            # Int
+var price = 19.99         # Float
+var active = true         # Bool
+var name = "Tea"          # String
+var numbers = [1, 2, 3]   # List[Int]
+var point = { x: 0, y: 0 }  # Dict
+
+# Explicit annotations are optional
+var count: Int = 42
+var name: String = "Tea"`}
+</CodeCard>
+
+## Collection Types
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Lists
+
+Ordered collections of elements with the same type.
+
+```tea
+var numbers = [1, 2, 3]           # List[Int]
+var words = ["hello", "world"]    # List[String]
+var nested = [[1, 2], [3, 4]]     # List[List[Int]]
+
+# Access by index
+var first = numbers[0]            # 1
+var second = words[1]             # "world"
+
+# Nested access
+var value = nested[0][1]          # 2
+
+# Length
+var len = @len(numbers)           # 3
+
+# Slicing
+var slice = numbers[0..2]         # [1, 2]
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Dictionaries
+
+Key-value mappings with flexible access patterns.
+
+```tea
+# Object-style dict
+var point = { x: 10, y: 20 }
+@println(point.x)                 # 10
+@println(point.y)                 # 20
+
+# String-keyed dict
+var scores = { "alice": 100, "bob": 85 }
+@println(scores.alice)            # 100
+```
+
+</Card>
+
+## Optional Types
+
+Optional types represent values that may or may not exist. Use `?` after a type to make it optional.
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Declaring Optionals
+
+```tea
+var maybe_name: String? = nil
+var maybe_count: Int? = nil
+
+# Optionals can hold values
+maybe_name = "Tea"
+maybe_count = 42
+
+# Or be nil
+maybe_name = nil
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border mb-4">
+
+### Nil Coalescing
+
+Use `??` to provide a default value when an optional is nil.
+
+```tea
+var maybe_name: String? = nil
+var name = maybe_name ?? "Anonymous"  # "Anonymous"
+
+var maybe_count: Int? = 42
+var count = maybe_count ?? 0          # 42
+```
+
+</Card>
+
+<Card className="p-6 bg-card border-border">
+
+### Force Unwrap
+
+Use `!` to unwrap an optional when you know it has a value. This will panic if the value is nil.
+
+```tea
+var maybe_name: String? = nil
+
+if maybe_name == nil
+  maybe_name = "Tea"
+end
+
+# Safe to unwrap after nil check
+@println(maybe_name!)  # "Tea"
+```
+
+</Card>
+
+## Struct Types
+
+Define custom types with named fields using structs.
+
+<CodeCard>
+{`## A user account
+struct User {
+  ## The user's display name
+  name: String
+  ## How many years old the user is
+  age: Int
+}
+
+# Create instances with named arguments
+var alice = User(name: "Alice", age: 30)
+
+# Access fields with dot notation
+@println(alice.name)   # "Alice"
+@println(alice.age)    # 30`}
+</CodeCard>
+
+## Function Types
+
+Functions are first-class values in Tea with their own types.
+
+<CodeCard>
+{`# Function type: Func(parameters) -> return_type
+def make_adder(base: Int) -> Func(Int) -> Int
+  |value: Int| => base + value
+end
+
+var add_ten = make_adder(10)
+@println(add_ten(5))   # 15
+
+# Lambdas as values
+const double = |x: Int| => x * 2
+@println(double(21))   # 42`}
+</CodeCard>
+
+## Generic Types
+
+Tea supports generics for writing reusable, type-safe code. See the [Generics](/docs/generics) page for details.
+
+<CodeCard>
+{`struct Box[T] {
+  value: T
+}
+
+def identity[T](value: T) -> T
+  value
+end
+
+var int_box = Box[Int](value: 42)
+var str_box = Box[String](value: "hello")`}
+</CodeCard>
+
+## Next Steps
+
+<NextLink href="/docs/functions" title="Functions" description="Define functions with type annotations" />
+<NextLink href="/docs/classes" title="Classes & Objects" description="Learn about structs and custom types" />
+<NextLink href="/docs/generics" title="Generics" description="Write reusable, type-safe code" />

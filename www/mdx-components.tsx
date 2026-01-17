@@ -81,10 +81,18 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
       return <code className="text-accent bg-muted px-1.5 py-0.5 rounded text-sm">{children}</code>
     },
     pre: ({ children }) => {
-      // Extract the code element's props
-      const codeChild = Children.toArray(children).find(
-        (child) => isValidElement(child) && child.type === 'code'
-      )
+      // Extract the code element - check for both string 'code' type and component with className
+      const childArray = Children.toArray(children)
+
+      // Find the code element - could be a native 'code' element or have language-* className
+      const codeChild = childArray.find((child) => {
+        if (!isValidElement(child)) return false
+        // Check if it's a native code element
+        if (child.type === 'code') return true
+        // Check if props has a language className (for when code override is applied)
+        const props = child.props as { className?: string }
+        return props.className?.startsWith('language-')
+      })
 
       if (isValidElement(codeChild)) {
         const props = codeChild.props as { className?: string; children?: ReactNode }
@@ -92,7 +100,10 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
         const language = extractLanguage(className)
         const code = extractTextContent(props.children)
 
-        return <CodeHighlighter code={code} language={language} />
+        // Only use CodeHighlighter if we have actual code content
+        if (code.trim()) {
+          return <CodeHighlighter code={code} language={language} />
+        }
       }
 
       // Fallback for non-code content

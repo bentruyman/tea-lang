@@ -21,8 +21,9 @@ use tower_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
     HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
-    MarkupContent, MarkupKind, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkDoneProgressOptions,
+    MarkupContent, MarkupKind, MessageType, OneOf, Position, PrepareRenameResponse, Range,
+    RenameParams, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextEdit, Url, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 
@@ -325,6 +326,37 @@ end
             .find(|symbol| symbol.name == "num" && symbol.kind == SymbolKind::Variable)
             .expect("num variable to be present");
         assert_eq!(num_symbol.type_desc.as_deref(), Some("Int"));
+    }
+
+    #[test]
+    fn find_identifier_occurrences_finds_all_matches() {
+        let text = r#"var count = 0
+count = count + 1
+var counter = 10
+@println(count)"#;
+
+        let occurrences = find_identifier_occurrences(text, "count");
+        assert_eq!(occurrences.len(), 4);
+
+        // First occurrence: var count = 0
+        assert_eq!(occurrences[0].start.line, 0);
+        assert_eq!(occurrences[0].start.character, 4);
+
+        // Second occurrence: count = count + 1 (first count)
+        assert_eq!(occurrences[1].start.line, 1);
+        assert_eq!(occurrences[1].start.character, 0);
+
+        // Third occurrence: count = count + 1 (second count)
+        assert_eq!(occurrences[2].start.line, 1);
+        assert_eq!(occurrences[2].start.character, 8);
+
+        // Fourth occurrence: @println(count)
+        assert_eq!(occurrences[3].start.line, 3);
+        assert_eq!(occurrences[3].start.character, 9);
+
+        // "counter" should not be matched when searching for "count"
+        let counter_occurrences = find_identifier_occurrences(text, "counter");
+        assert_eq!(counter_occurrences.len(), 1);
     }
 }
 
@@ -1423,6 +1455,7 @@ impl LanguageServer for TeaLanguageServer {
                 completion_item: None,
             }),
             definition_provider: Some(OneOf::Left(true)),
+            rename_provider: Some(OneOf::Left(true)),
             ..Default::default()
         };
 
@@ -1880,6 +1913,166 @@ impl LanguageServer for TeaLanguageServer {
             range: symbol.range.clone(),
         })))
     }
+
+    async fn prepare_rename(
+        &self,
+        params: tower_lsp::lsp_types::TextDocumentPositionParams,
+    ) -> jsonrpc::Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+
+        let mut doc = match self.document_snapshot(&uri).await {
+            Some(doc) => doc,
+            None => return Ok(None),
+        };
+
+        if doc.analysis.is_none() {
+            let _ = self.compile_and_publish(&uri, None).await;
+            doc = match self.document_snapshot(&uri).await {
+                Some(doc) => doc,
+                None => return Ok(None),
+            };
+        }
+
+        let Some(ref analysis) = doc.analysis else {
+            return Ok(None);
+        };
+
+        // Find the symbol at the cursor position
+        let symbol = symbol_at_position(analysis, &position).or_else(|| {
+            identifier_at_position(&doc.text, &position)
+                .and_then(|name| symbol_by_name(analysis, &name))
+        });
+
+        let Some(symbol) = symbol else {
+            return Ok(None);
+        };
+
+        // Check if this symbol can be renamed (exclude module aliases for now as they have
+        // complex cross-file implications with external modules)
+        match symbol.kind {
+            SymbolKind::Variable
+            | SymbolKind::Const
+            | SymbolKind::Parameter
+            | SymbolKind::Function
+            | SymbolKind::Struct
+            | SymbolKind::Enum
+            | SymbolKind::Field
+            | SymbolKind::EnumVariant => {}
+            SymbolKind::ModuleAlias => {
+                // Module aliases can be renamed within the file
+            }
+        }
+
+        Ok(Some(PrepareRenameResponse::Range(symbol.range.clone())))
+    }
+
+    async fn rename(&self, params: RenameParams) -> jsonrpc::Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        // Validate new name is a valid identifier
+        if new_name.is_empty()
+            || !new_name
+                .chars()
+                .next()
+                .map_or(false, |c| c == '_' || c.is_ascii_alphabetic())
+            || !new_name
+                .chars()
+                .all(|c| c == '_' || c.is_ascii_alphanumeric())
+        {
+            return Err(jsonrpc::Error::invalid_params("Invalid identifier name"));
+        }
+
+        let mut doc = match self.document_snapshot(&uri).await {
+            Some(doc) => doc,
+            None => return Ok(None),
+        };
+
+        if doc.analysis.is_none() {
+            let _ = self.compile_and_publish(&uri, None).await;
+            doc = match self.document_snapshot(&uri).await {
+                Some(doc) => doc,
+                None => return Ok(None),
+            };
+        }
+
+        let Some(ref analysis) = doc.analysis else {
+            return Ok(None);
+        };
+
+        // Find the symbol at the cursor position
+        let symbol = symbol_at_position(analysis, &position).or_else(|| {
+            identifier_at_position(&doc.text, &position)
+                .and_then(|name| symbol_by_name(analysis, &name))
+        });
+
+        let Some(symbol) = symbol else {
+            return Ok(None);
+        };
+
+        let old_name = symbol.name.clone();
+        let symbol_kind = symbol.kind;
+
+        // Find all occurrences in the current file
+        let occurrences = find_identifier_occurrences(&doc.text, &old_name);
+
+        // Create text edits for this file
+        let edits: Vec<TextEdit> = occurrences
+            .into_iter()
+            .map(|range| TextEdit {
+                range,
+                new_text: new_name.clone(),
+            })
+            .collect();
+
+        let mut changes = HashMap::new();
+        if !edits.is_empty() {
+            changes.insert(uri.clone(), edits);
+        }
+
+        // For functions, structs, enums - also check dependent files
+        if matches!(
+            symbol_kind,
+            SymbolKind::Function | SymbolKind::Struct | SymbolKind::Enum
+        ) {
+            // Get files that depend on this file
+            let dependents = {
+                let state = self.state.lock().await;
+                state.dependents.get(&doc.path).cloned().unwrap_or_default()
+            };
+
+            for dep_uri in dependents {
+                if dep_uri == uri {
+                    continue;
+                }
+
+                let dep_doc = match self.document_snapshot(&dep_uri).await {
+                    Some(doc) => doc,
+                    None => continue,
+                };
+
+                let dep_occurrences = find_identifier_occurrences(&dep_doc.text, &old_name);
+                if !dep_occurrences.is_empty() {
+                    let dep_edits: Vec<TextEdit> = dep_occurrences
+                        .into_iter()
+                        .map(|range| TextEdit {
+                            range,
+                            new_text: new_name.clone(),
+                        })
+                        .collect();
+                    changes.insert(dep_uri, dep_edits);
+                }
+            }
+        }
+
+        Ok(Some(WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        }))
+    }
 }
 
 impl TeaLanguageServer {
@@ -2175,6 +2368,86 @@ fn is_identifier_byte(b: u8) -> bool {
 
 fn is_identifier_char(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
+}
+
+/// Find all occurrences of an identifier in text, returning their ranges.
+/// Only matches whole words (not substrings of longer identifiers).
+fn find_identifier_occurrences(text: &str, name: &str) -> Vec<Range> {
+    let mut results = Vec::new();
+    let name_bytes = name.as_bytes();
+    let text_bytes = text.as_bytes();
+
+    if name_bytes.is_empty() || text_bytes.len() < name_bytes.len() {
+        return results;
+    }
+
+    let mut line: u32 = 0;
+    let mut col: u32 = 0;
+    let mut i = 0;
+
+    while i <= text_bytes.len() - name_bytes.len() {
+        // Check if we're at a word boundary (start)
+        let at_word_start = i == 0 || !is_identifier_byte(text_bytes[i - 1]);
+
+        if at_word_start && &text_bytes[i..i + name_bytes.len()] == name_bytes {
+            // Check if we're at a word boundary (end)
+            let end_pos = i + name_bytes.len();
+            let at_word_end =
+                end_pos >= text_bytes.len() || !is_identifier_byte(text_bytes[end_pos]);
+
+            if at_word_end {
+                // Found a match
+                let start_line = line;
+                let start_col = col;
+
+                // Calculate end position
+                let mut end_line = line;
+                let mut end_col = col;
+                for &b in &text_bytes[i..end_pos] {
+                    if b == b'\n' {
+                        end_line += 1;
+                        end_col = 0;
+                    } else {
+                        end_col += 1;
+                    }
+                }
+
+                results.push(Range {
+                    start: Position {
+                        line: start_line,
+                        character: start_col,
+                    },
+                    end: Position {
+                        line: end_line,
+                        character: end_col,
+                    },
+                });
+
+                // Skip past this match
+                for &b in &text_bytes[i..end_pos] {
+                    if b == b'\n' {
+                        line += 1;
+                        col = 0;
+                    } else {
+                        col += 1;
+                    }
+                }
+                i = end_pos;
+                continue;
+            }
+        }
+
+        // Move to next character
+        if text_bytes[i] == b'\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+        i += 1;
+    }
+
+    results
 }
 
 fn previous_char(text: &str, idx: usize) -> Option<(usize, char)> {

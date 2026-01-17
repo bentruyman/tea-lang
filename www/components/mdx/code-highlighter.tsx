@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createHighlighter, type Highlighter } from 'shiki'
+import { createHighlighter, type Highlighter, type LanguageRegistration } from 'shiki'
 
 // Import grammar statically for bundling
-import teaLanguage from '@/lib/tea.tmLanguage.json'
+import teaGrammar from '@/lib/tea.tmLanguage.json'
 
 interface CodeHighlighterProps {
   code: string
@@ -13,6 +13,12 @@ interface CodeHighlighterProps {
 
 // Singleton highlighter promise
 let highlighterPromise: Promise<Highlighter> | null = null
+
+// Create a proper language registration for Tea
+const teaLanguage: LanguageRegistration = {
+  ...teaGrammar,
+  name: 'tea',
+} as LanguageRegistration
 
 async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
@@ -28,11 +34,9 @@ async function getHighlighter(): Promise<Highlighter> {
           'yaml',
           'toml',
           'text',
+          teaLanguage,
         ],
       })
-
-      // Load custom Tea language after initialization
-      await highlighter.loadLanguage(teaLanguage as any)
 
       return highlighter
     })()

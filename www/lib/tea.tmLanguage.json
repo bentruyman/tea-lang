@@ -3,6 +3,7 @@
   "name": "tea",
   "displayName": "Tea",
   "scopeName": "source.tea",
+  "fileTypes": ["tea"],
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
@@ -57,7 +58,7 @@
               "name": "punctuation.definition.template-expression.end.tea"
             }
           },
-          "patterns": [{ "include": "source.tea" }]
+          "patterns": [{ "include": "$self" }]
         }
       ]
     },

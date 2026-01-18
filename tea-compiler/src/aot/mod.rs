@@ -551,6 +551,7 @@ struct LlvmCodeGenerator<'ctx> {
     list_concat_fn: Option<FunctionValue<'ctx>>,
     string_concat_fn: Option<FunctionValue<'ctx>>,
     string_push_str_fn: Option<FunctionValue<'ctx>>,
+    string_push_byte_fn: Option<FunctionValue<'ctx>>,
     string_slice_fn: Option<FunctionValue<'ctx>>,
     list_slice_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
@@ -1256,6 +1257,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_concat_fn: None,
             string_concat_fn: None,
             string_push_str_fn: None,
+            string_push_byte_fn: None,
             string_slice_fn: None,
             list_slice_fn: None,
             struct_set_fn: None,
@@ -3889,7 +3891,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
     }
 
-    /// Try to optimize `var = var + expr` into a push_str operation for strings.
+    /// Try to optimize `var = var + expr` into a push_str/push_byte operation for strings.
     /// Returns Some(ExprValue::Void) if the optimization was applied, None otherwise.
     fn try_compile_string_push_assignment(
         &mut self,
@@ -3904,10 +3906,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             if matches!(binary.operator, BinaryOperator::Add) {
                 if let ExpressionKind::Identifier(left_id) = &binary.left.kind {
                     if left_id.name == target_name {
-                        // This is `var = var + expr` - use push_str optimization
-                        // Compile the right-hand side (the part being appended)
-                        let rhs = self.compile_expression(&binary.right, function, locals)?;
-                        let rhs_ptr = rhs.into_string()?;
+                        // This is `var = var + expr` - use push optimization
 
                         // Load current string value
                         let current_ptr = if let Some(pointer) = variable.pointer {
@@ -3920,8 +3919,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             return Ok(None);
                         };
 
-                        // Call push_str which mutates in place
-                        let new_ptr = self.push_string_value(current_ptr, rhs_ptr)?;
+                        // Check if RHS is a single-character string literal for push_byte optimization
+                        let new_ptr = if let Some(byte) =
+                            self.try_get_single_byte_literal(&binary.right)
+                        {
+                            // Use optimized push_byte for single characters
+                            self.push_byte_value(current_ptr, byte)?
+                        } else {
+                            // Compile the right-hand side and use push_str
+                            let rhs = self.compile_expression(&binary.right, function, locals)?;
+                            let rhs_ptr = rhs.into_string()?;
+                            self.push_string_value(current_ptr, rhs_ptr)?
+                        };
 
                         // Store the (possibly reallocated) result back
                         if let Some(pointer) = variable.pointer {
@@ -3945,6 +3954,34 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
         Ok(None)
+    }
+
+    /// Check if an expression is a single-byte string literal and return the byte value.
+    fn try_get_single_byte_literal(&self, expr: &Expression) -> Option<u8> {
+        if let ExpressionKind::Literal(Literal::String(s)) = &expr.kind {
+            let bytes = s.as_bytes();
+            if bytes.len() == 1 {
+                return Some(bytes[0]);
+            }
+        }
+        None
+    }
+
+    /// Push a single byte onto target string. Returns possibly reallocated target.
+    fn push_byte_value(
+        &mut self,
+        target: PointerValue<'ctx>,
+        byte: u8,
+    ) -> Result<PointerValue<'ctx>> {
+        let push_fn = self.ensure_string_push_byte_fn();
+        let byte_val = self.context.i8_type().const_int(byte as u64, false);
+        let result = self
+            .call_function(push_fn, &[target.into(), byte_val.into()], "push_byte")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_push_byte returned no value"))?
+            .into_pointer_value();
+        Ok(result)
     }
 
     fn compile_indexed_assignment(
@@ -5317,67 +5354,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .get_struct_type("TeaString")
             .ok_or_else(|| anyhow!("TeaString type not found"))?;
 
-        // Allocate SmallString on heap using malloc (24 bytes)
-        let malloc_fn = self.ensure_malloc_fn();
-        let size = self.context.i64_type().const_int(24, false); // sizeof(TeaString)
-        let call = self.call_function(malloc_fn, &[size.into()], "malloc_small_str")?;
-        let string_ptr = call
-            .try_as_basic_value()
-            .left()
-            .ok_or_else(|| anyhow!("malloc returned no value"))?
-            .into_pointer_value();
+        // Create the TeaString struct as a global constant
+        // This avoids runtime allocation for string literals (critical for loops!)
+        // TeaString layout: { tag: i8, len: i8, data: [22 x i8] }
+        let tag = self.context.i8_type().const_int(1, false); // inline tag
+        let len_val = self.context.i8_type().const_int(len as u64, false);
 
-        // Set tag = 1 (inline)
-        let tag_ptr = map_builder_error(self.builder.build_struct_gep(
-            string_type,
-            string_ptr,
-            0,
-            "tag_ptr",
-        ))?;
-        map_builder_error(
-            self.builder
-                .build_store(tag_ptr, self.context.i8_type().const_int(1, false)),
-        )?;
-
-        // Set length
-        let len_ptr = map_builder_error(self.builder.build_struct_gep(
-            string_type,
-            string_ptr,
-            1,
-            "len_ptr",
-        ))?;
-        map_builder_error(
-            self.builder
-                .build_store(len_ptr, self.context.i8_type().const_int(len as u64, false)),
-        )?;
-
-        // Copy bytes into inline data array
-        let data_ptr = map_builder_error(self.builder.build_struct_gep(
-            string_type,
-            string_ptr,
-            2,
-            "data_ptr",
-        ))?;
-
-        for (i, &byte) in bytes.iter().enumerate() {
-            let elem_ptr = unsafe {
-                map_builder_error(self.builder.build_in_bounds_gep(
-                    self.context.i8_type().array_type(22),
-                    data_ptr,
-                    &[
-                        self.context.i32_type().const_zero(),
-                        self.context.i32_type().const_int(i as u64, false),
-                    ],
-                    &format!("byte_{}", i),
-                ))?
-            };
-            map_builder_error(self.builder.build_store(
-                elem_ptr,
-                self.context.i8_type().const_int(byte as u64, false),
-            ))?;
+        // Build the data array (22 bytes, padded with zeros)
+        let mut data_bytes = Vec::with_capacity(22);
+        for &byte in bytes {
+            data_bytes.push(self.context.i8_type().const_int(byte as u64, false));
         }
+        // Pad with zeros to fill 22 bytes
+        while data_bytes.len() < 22 {
+            data_bytes.push(self.context.i8_type().const_zero());
+        }
+        let data_array = self.context.i8_type().const_array(&data_bytes);
 
-        Ok(ExprValue::String(string_ptr))
+        // Create the struct constant
+        let struct_const =
+            string_type.const_named_struct(&[tag.into(), len_val.into(), data_array.into()]);
+
+        // Create a global for this string literal
+        let name = format!(".str.{}", self.string_counter);
+        self.string_counter += 1;
+        let global = self.module.add_global(string_type, None, &name);
+        global.set_initializer(&struct_const);
+        global.set_constant(true);
+        global.set_linkage(Linkage::Private);
+
+        Ok(ExprValue::String(global.as_pointer_value()))
     }
 
     fn compile_heap_string_literal(&mut self, bytes: &[u8]) -> Result<ExprValue<'ctx>> {
@@ -13096,6 +13102,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_string_push_str", fn_type, Some(Linkage::External));
         self.string_push_str_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_push_byte_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_push_byte_fn {
+            return func;
+        }
+        // tea_string_push_byte(target: *TeaString, byte: i8) -> *TeaString
+        let fn_type = self.string_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.context.i8_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_push_byte", fn_type, Some(Linkage::External));
+        self.string_push_byte_fn = Some(func);
         func
     }
 

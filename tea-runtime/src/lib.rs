@@ -32,8 +32,13 @@ use std::os::windows::fs::MetadataExt;
 pub struct TeaString {
     pub tag: u8,        // 0=heap, 1=inline
     pub len: u8,        // length for inline strings (0-22) or padding for heap
-    pub data: [u8; 22], // inline data OR first 8 bytes hold heap pointer
+    pub data: [u8; 22], // inline data OR heap metadata (see HeapStringData)
 }
+
+// Heap string layout in data[0..22]:
+// - bytes 0-7: data pointer (8 bytes)
+// - bytes 8-15: length (8 bytes)
+// - bytes 16-21: capacity (6 bytes, max ~281 TB)
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -290,48 +295,49 @@ pub extern "C" fn tea_print_string(value: *const TeaString) {
 /// When capacity > length, there's room to append without reallocation.
 
 /// Get capacity from a heap string (returns 0 for inline strings)
+#[inline(always)]
 unsafe fn tea_string_capacity(string_ref: &TeaString) -> usize {
-    if string_ref.tag == 1 {
-        // Inline strings have no extra capacity
-        0
-    } else {
-        // Read capacity from bytes 16-22 (6 bytes, little-endian)
-        let mut cap_bytes = [0u8; 8];
-        cap_bytes[0..6].copy_from_slice(&string_ref.data[16..22]);
-        u64::from_le_bytes(cap_bytes) as usize
-    }
+    debug_assert!(string_ref.tag == 0, "capacity only valid for heap strings");
+    // Read capacity from bytes 16-22 (6 bytes, little-endian)
+    // Use unaligned read for the 48-bit value
+    let cap_ptr = string_ref.data.as_ptr().add(16) as *const u64;
+    (cap_ptr.read_unaligned() & 0x0000_FFFF_FFFF_FFFF) as usize
 }
 
 /// Set capacity on a heap string
+#[inline(always)]
 unsafe fn tea_string_set_capacity(string_ref: &mut TeaString, capacity: usize) {
     debug_assert!(string_ref.tag == 0, "cannot set capacity on inline string");
-    let cap_bytes = (capacity as u64).to_le_bytes();
-    string_ref.data[16..22].copy_from_slice(&cap_bytes[0..6]);
+    // Write only 6 bytes to avoid overwriting beyond data array
+    let cap_ptr = string_ref.data.as_mut_ptr().add(16);
+    std::ptr::copy_nonoverlapping((capacity as u64).to_le_bytes().as_ptr(), cap_ptr, 6);
 }
 
 /// Set length on a heap string
+#[inline(always)]
 unsafe fn tea_string_set_len(string_ref: &mut TeaString, len: usize) {
     debug_assert!(string_ref.tag == 0, "cannot set len on inline heap string");
-    let len_bytes = (len as i64).to_ne_bytes();
-    string_ref.data[8..16].copy_from_slice(&len_bytes);
+    let len_ptr = string_ref.data.as_mut_ptr().add(8) as *mut usize;
+    len_ptr.write_unaligned(len);
 }
 
 /// Get mutable pointer to heap string data
+#[inline(always)]
 unsafe fn tea_string_data_ptr_mut(string_ref: &TeaString) -> *mut u8 {
     debug_assert!(
         string_ref.tag == 0,
         "cannot get mutable ptr for inline string"
     );
-    let mut ptr_bytes = [0u8; 8];
-    ptr_bytes.copy_from_slice(&string_ref.data[0..8]);
-    usize::from_ne_bytes(ptr_bytes) as *mut u8
+    let ptr_ptr = string_ref.data.as_ptr() as *const *mut u8;
+    ptr_ptr.read_unaligned()
 }
 
 /// Set heap data pointer
+#[inline(always)]
 unsafe fn tea_string_set_data_ptr(string_ref: &mut TeaString, ptr: *mut u8) {
     debug_assert!(string_ref.tag == 0, "cannot set data ptr on inline string");
-    let ptr_bytes = (ptr as usize).to_ne_bytes();
-    string_ref.data[0..8].copy_from_slice(&ptr_bytes);
+    let ptr_ptr = string_ref.data.as_mut_ptr() as *mut *mut u8;
+    ptr_ptr.write_unaligned(ptr);
 }
 
 /// Allocate a string with extra capacity for efficient appending.
@@ -405,9 +411,9 @@ pub extern "C" fn tea_string_push_str(
         let src_len = src_bytes.len();
         let new_len = target_len + src_len;
 
-        // If target is inline, convert to heap with capacity
+        // If target is inline, create a NEW heap string (can't mutate - target might be const)
         if target_ref.tag == 1 {
-            // Convert inline to heap with growth capacity
+            // Allocate a new heap string with growth capacity
             let target_bytes = tea_string_as_bytes(target_ref);
             let new_capacity = (new_len * 2).max(32);
             let mut buffer = Vec::with_capacity(new_capacity + 1);
@@ -417,12 +423,16 @@ pub extern "C" fn tea_string_push_str(
             let data_ptr = buffer.as_mut_ptr();
             std::mem::forget(buffer);
 
-            target_ref.tag = 0;
-            target_ref.len = 0;
-            tea_string_set_data_ptr(target_ref, data_ptr);
-            tea_string_set_len(target_ref, new_len);
-            tea_string_set_capacity(target_ref, new_capacity);
-            return target;
+            // Create a new TeaString on the heap
+            let mut new_tea_string = TeaString {
+                tag: 0,
+                len: 0, // padding for heap strings
+                data: [0; 22],
+            };
+            tea_string_set_data_ptr(&mut new_tea_string, data_ptr);
+            tea_string_set_len(&mut new_tea_string, new_len);
+            tea_string_set_capacity(&mut new_tea_string, new_capacity);
+            return Box::into_raw(Box::new(new_tea_string));
         }
 
         // Target is heap string
@@ -451,6 +461,102 @@ pub extern "C" fn tea_string_push_str(
 
             // Free old buffer (it was allocated as Vec, so use Vec to free)
             // The old buffer had capacity + 1 bytes
+            let old_capacity = capacity;
+            drop(Vec::from_raw_parts(
+                old_data_ptr,
+                target_len + 1,
+                old_capacity + 1,
+            ));
+
+            tea_string_set_data_ptr(target_ref, new_data_ptr);
+            tea_string_set_len(target_ref, new_len);
+            tea_string_set_capacity(target_ref, new_capacity);
+            target
+        }
+    }
+}
+
+/// Optimized push for a single byte - avoids string extraction overhead
+#[no_mangle]
+pub extern "C" fn tea_string_push_byte(target: *mut TeaString, byte: u8) -> *mut TeaString {
+    unsafe {
+        if target.is_null() {
+            // Create new inline string with the single byte
+            let mut tea_string = TeaString {
+                tag: 1, // inline
+                len: 1,
+                data: [0; 22],
+            };
+            tea_string.data[0] = byte;
+            return Box::into_raw(Box::new(tea_string));
+        }
+
+        let target_ref = &*target;
+        let target_len = tea_string_len(target_ref);
+        let new_len = target_len + 1;
+
+        // If target is inline and result still fits inline, stay inline
+        if target_ref.tag == 1 && new_len <= 22 {
+            // Create new inline string (can't mutate - target might be const)
+            let mut new_tea_string = TeaString {
+                tag: 1,
+                len: new_len as u8,
+                data: [0; 22],
+            };
+            // Copy existing data
+            new_tea_string.data[..target_len].copy_from_slice(&target_ref.data[..target_len]);
+            // Append the byte
+            new_tea_string.data[target_len] = byte;
+            return Box::into_raw(Box::new(new_tea_string));
+        }
+
+        // If target is inline but result needs heap, convert to heap
+        if target_ref.tag == 1 {
+            let target_bytes = &target_ref.data[..target_len];
+            let new_capacity = (new_len * 2).max(32);
+            let mut buffer = Vec::with_capacity(new_capacity + 1);
+            buffer.extend_from_slice(target_bytes);
+            buffer.push(byte);
+            buffer.resize(new_capacity + 1, 0);
+            let data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            let mut new_tea_string = TeaString {
+                tag: 0,
+                len: 0,
+                data: [0; 22],
+            };
+            tea_string_set_data_ptr(&mut new_tea_string, data_ptr);
+            tea_string_set_len(&mut new_tea_string, new_len);
+            tea_string_set_capacity(&mut new_tea_string, new_capacity);
+            return Box::into_raw(Box::new(new_tea_string));
+        }
+
+        // Target is heap string - mutate in place
+        let target_ref = &mut *(target as *mut TeaString);
+        let capacity = tea_string_capacity(target_ref);
+
+        if new_len <= capacity {
+            // Enough capacity - append in place
+            let data_ptr = tea_string_data_ptr_mut(target_ref);
+            *data_ptr.add(target_len) = byte;
+            *data_ptr.add(new_len) = 0; // null terminator
+            tea_string_set_len(target_ref, new_len);
+            target
+        } else {
+            // Need to grow
+            let new_capacity = (capacity * 2).max(new_len).max(32);
+            let old_data_ptr = tea_string_data_ptr_mut(target_ref);
+
+            let mut buffer = Vec::with_capacity(new_capacity + 1);
+            let old_bytes = std::slice::from_raw_parts(old_data_ptr, target_len);
+            buffer.extend_from_slice(old_bytes);
+            buffer.push(byte);
+            buffer.resize(new_capacity + 1, 0);
+            let new_data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            // Free old buffer
             let old_capacity = capacity;
             drop(Vec::from_raw_parts(
                 old_data_ptr,
@@ -573,19 +679,20 @@ fn tea_cstr_to_rust(ptr: *const c_char) -> Option<String> {
 }
 
 // Helper function to get the length of a TeaString (inline or heap)
+#[inline(always)]
 unsafe fn tea_string_len(string_ref: &TeaString) -> usize {
     if string_ref.tag == 1 {
         // Inline string: length is in the len field
         string_ref.len as usize
     } else {
-        // Heap string: length is in bytes 8-16 of data array
-        let mut len_bytes = [0u8; 8];
-        len_bytes.copy_from_slice(&string_ref.data[8..16]);
-        i64::from_ne_bytes(len_bytes) as usize
+        // Heap string: length is at bytes 8-16 of data array
+        let len_ptr = string_ref.data.as_ptr().add(8) as *const usize;
+        len_ptr.read_unaligned()
     }
 }
 
 // Helper function to extract bytes from a TeaString (inline or heap)
+#[inline(always)]
 unsafe fn tea_string_as_bytes<'a>(string_ref: &'a TeaString) -> &'a [u8] {
     if string_ref.tag == 1 {
         // Inline string: data is directly in the array
@@ -593,13 +700,10 @@ unsafe fn tea_string_as_bytes<'a>(string_ref: &'a TeaString) -> &'a [u8] {
         &string_ref.data[0..len]
     } else {
         // Heap string: pointer and length are in data array
-        let mut ptr_bytes = [0u8; 8];
-        ptr_bytes.copy_from_slice(&string_ref.data[0..8]);
-        let data_ptr = usize::from_ne_bytes(ptr_bytes) as *const u8;
-
-        let mut len_bytes = [0u8; 8];
-        len_bytes.copy_from_slice(&string_ref.data[8..16]);
-        let len = i64::from_ne_bytes(len_bytes);
+        let ptr_ptr = string_ref.data.as_ptr() as *const *const u8;
+        let data_ptr = ptr_ptr.read_unaligned();
+        let len_ptr = string_ref.data.as_ptr().add(8) as *const usize;
+        let len = len_ptr.read_unaligned();
 
         std::slice::from_raw_parts(data_ptr, len as usize)
     }

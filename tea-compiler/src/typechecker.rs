@@ -3402,7 +3402,19 @@ impl TypeChecker {
 
         let object_type = self.infer_expression(&member.object);
         match object_type {
-            Type::Dict(value_type) => (*value_type).clone(),
+            Type::Dict(ref value_type) => {
+                // Check for Dict methods: keys, values, entries
+                match member.property.as_str() {
+                    "keys" | "values" | "entries" => {
+                        // Return Type::Unknown as a marker - actual type resolution happens in type_from_call
+                        Type::Unknown
+                    }
+                    _ => {
+                        // Regular dict field access (dict.key syntax)
+                        (**value_type).clone()
+                    }
+                }
+            }
             Type::Struct(ref struct_type) => {
                 if let Some(definition) = self.structs.get(&struct_type.name) {
                     if let Some(field) = definition.field(&member.property) {
@@ -3534,8 +3546,29 @@ impl TypeChecker {
                     return Type::Unknown;
                 }
             }
+            Type::List(ref _element_type) => {
+                // List methods: map, filter, reduce, find, any, all
+                match member.property.as_str() {
+                    "map" | "filter" | "reduce" | "find" | "any" | "all" => {
+                        // Return Type::Unknown as a marker - actual type resolution happens in type_from_call
+                        Type::Unknown
+                    }
+                    _ => {
+                        self.report_error(
+                            format!(
+                                "List has no method named '{}'. Available methods: map, filter, reduce, find, any, all",
+                                member.property
+                            ),
+                            Some(member.property_span),
+                        );
+                        Type::Unknown
+                    }
+                }
+            }
             Type::Unknown => Type::Unknown,
-            other => {
+            ref other => {
+                // Check if we're trying to access methods on a String (for future String methods)
+                // or on other types that don't support member access
                 self.report_error(
                     format!(
                         "member access requires a dictionary or struct value, found {}",
@@ -3876,6 +3909,7 @@ impl TypeChecker {
         }
 
         if let ExpressionKind::Member(member) = &call.callee.kind {
+            // First check for error constructor calls (ErrorName.Variant)
             if let ExpressionKind::Identifier(error_ident) = &member.object.kind {
                 if let Some(error_def) = self.errors.get(&error_ident.name) {
                     if let Some(variant_def) = error_def.variants.get(&member.property).cloned() {
@@ -3895,6 +3929,48 @@ impl TypeChecker {
                             Some(member.property_span),
                         );
                         return Type::Unknown;
+                    }
+                }
+
+                // Only check for List/Dict methods if the identifier is a known binding
+                // (not an error type, module, or unknown identifier)
+                if self.lookup(&error_ident.name).is_some() {
+                    let object_type = self.infer_expression(&member.object);
+                    if let Type::List(ref element_type) = object_type {
+                        if matches!(
+                            member.property.as_str(),
+                            "map" | "filter" | "reduce" | "find" | "any" | "all"
+                        ) {
+                            return self.type_from_list_method_call(
+                                member,
+                                element_type,
+                                call,
+                                span,
+                            );
+                        }
+                    }
+
+                    if let Type::Dict(ref value_type) = object_type {
+                        if matches!(member.property.as_str(), "keys" | "values" | "entries") {
+                            return self.type_from_dict_method_call(member, value_type, call, span);
+                        }
+                    }
+                }
+            } else {
+                // Object is not a simple identifier, safe to infer its type for method calls
+                let object_type = self.infer_expression(&member.object);
+                if let Type::List(ref element_type) = object_type {
+                    if matches!(
+                        member.property.as_str(),
+                        "map" | "filter" | "reduce" | "find" | "any" | "all"
+                    ) {
+                        return self.type_from_list_method_call(member, element_type, call, span);
+                    }
+                }
+
+                if let Type::Dict(ref value_type) = object_type {
+                    if matches!(member.property.as_str(), "keys" | "values" | "entries") {
+                        return self.type_from_dict_method_call(member, value_type, call, span);
                     }
                 }
             }
@@ -4398,6 +4474,442 @@ impl TypeChecker {
             name: identifier.name.clone(),
             type_arguments,
         })
+    }
+
+    /// Type check a List method call (map, filter, reduce, find, any, all)
+    fn type_from_list_method_call(
+        &mut self,
+        member: &crate::ast::MemberExpression,
+        element_type: &Type,
+        call: &CallExpression,
+        span: SourceSpan,
+    ) -> Type {
+        match member.property.as_str() {
+            "map" => {
+                // map(fn: Func(T) -> U) -> List[U]
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.map expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let expected_param = element_type.clone();
+                let fn_type = self.infer_lambda_with_expected(
+                    &call.arguments[0].expression,
+                    &[expected_param.clone()],
+                );
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 1 {
+                        self.report_error(
+                            format!(
+                                "List.map callback must take 1 parameter, found {}",
+                                params.len()
+                            ),
+                            Some(call.arguments[0].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &expected_param,
+                        &params[0],
+                        "List.map callback parameter",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::List(return_type)
+                } else {
+                    self.report_error(
+                        format!("List.map expects a function, found {}", fn_type.describe()),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            "filter" => {
+                // filter(fn: Func(T) -> Bool) -> List[T]
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.filter expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let expected_param = element_type.clone();
+                let fn_type = self.infer_lambda_with_expected(
+                    &call.arguments[0].expression,
+                    &[expected_param.clone()],
+                );
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 1 {
+                        self.report_error(
+                            format!(
+                                "List.filter callback must take 1 parameter, found {}",
+                                params.len()
+                            ),
+                            Some(call.arguments[0].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &expected_param,
+                        &params[0],
+                        "List.filter callback parameter",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    self.ensure_compatible(
+                        &Type::Bool,
+                        &return_type,
+                        "List.filter callback return type",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::List(Box::new(element_type.clone()))
+                } else {
+                    self.report_error(
+                        format!(
+                            "List.filter expects a function, found {}",
+                            fn_type.describe()
+                        ),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            "reduce" => {
+                // reduce(init: U, fn: Func(U, T) -> U) -> U
+                if call.arguments.len() != 2 {
+                    self.report_error(
+                        format!(
+                            "List.reduce expects 2 arguments (initial value and reducer function), found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let init_type = self.infer_expression(&call.arguments[0].expression);
+                let expected_params = vec![init_type.clone(), element_type.clone()];
+                let fn_type = self
+                    .infer_lambda_with_expected(&call.arguments[1].expression, &expected_params);
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 2 {
+                        self.report_error(
+                            format!(
+                                "List.reduce callback must take 2 parameters (accumulator and element), found {}",
+                                params.len()
+                            ),
+                            Some(call.arguments[1].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &init_type,
+                        &params[0],
+                        "List.reduce callback accumulator parameter",
+                        Some(call.arguments[1].expression.span),
+                    );
+                    self.ensure_compatible(
+                        element_type,
+                        &params[1],
+                        "List.reduce callback element parameter",
+                        Some(call.arguments[1].expression.span),
+                    );
+                    self.ensure_compatible(
+                        &init_type,
+                        &return_type,
+                        "List.reduce callback return type must match initial value type",
+                        Some(call.arguments[1].expression.span),
+                    );
+                    (*return_type).clone()
+                } else {
+                    self.report_error(
+                        format!(
+                            "List.reduce expects a function as second argument, found {}",
+                            fn_type.describe()
+                        ),
+                        Some(call.arguments[1].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            "find" => {
+                // find(fn: Func(T) -> Bool) -> T? (returns nil if not found)
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.find expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let expected_param = element_type.clone();
+                let fn_type = self.infer_lambda_with_expected(
+                    &call.arguments[0].expression,
+                    &[expected_param.clone()],
+                );
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 1 {
+                        self.report_error(
+                            format!(
+                                "List.find callback must take 1 parameter, found {}",
+                                params.len()
+                            ),
+                            Some(call.arguments[0].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &expected_param,
+                        &params[0],
+                        "List.find callback parameter",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    self.ensure_compatible(
+                        &Type::Bool,
+                        &return_type,
+                        "List.find callback return type",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    // Returns optional type since find may not find an element
+                    Type::Optional(Box::new(element_type.clone()))
+                } else {
+                    self.report_error(
+                        format!("List.find expects a function, found {}", fn_type.describe()),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            "any" | "all" => {
+                // any(fn: Func(T) -> Bool) -> Bool
+                // all(fn: Func(T) -> Bool) -> Bool
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.{} expects 1 argument, found {}",
+                            member.property,
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let expected_param = element_type.clone();
+                let fn_type = self.infer_lambda_with_expected(
+                    &call.arguments[0].expression,
+                    &[expected_param.clone()],
+                );
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 1 {
+                        self.report_error(
+                            format!(
+                                "List.{} callback must take 1 parameter, found {}",
+                                member.property,
+                                params.len()
+                            ),
+                            Some(call.arguments[0].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &expected_param,
+                        &params[0],
+                        &format!("List.{} callback parameter", member.property),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    self.ensure_compatible(
+                        &Type::Bool,
+                        &return_type,
+                        &format!("List.{} callback return type", member.property),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Bool
+                } else {
+                    self.report_error(
+                        format!(
+                            "List.{} expects a function, found {}",
+                            member.property,
+                            fn_type.describe()
+                        ),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            _ => {
+                self.report_error(
+                    format!("List has no method named '{}'", member.property),
+                    Some(member.property_span),
+                );
+                Type::Unknown
+            }
+        }
+    }
+
+    /// Type check a Dict method call (keys, values, entries)
+    fn type_from_dict_method_call(
+        &mut self,
+        member: &crate::ast::MemberExpression,
+        value_type: &Type,
+        call: &CallExpression,
+        span: SourceSpan,
+    ) -> Type {
+        match member.property.as_str() {
+            "keys" => {
+                // keys() -> List[String]
+                if !call.arguments.is_empty() {
+                    self.report_error(
+                        format!(
+                            "Dict.keys expects 0 arguments, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+                Type::List(Box::new(Type::String))
+            }
+            "values" => {
+                // values() -> List[V]
+                if !call.arguments.is_empty() {
+                    self.report_error(
+                        format!(
+                            "Dict.values expects 0 arguments, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+                Type::List(Box::new(value_type.clone()))
+            }
+            "entries" => {
+                // entries() -> List[Dict[String, V]] (each entry is a dict with "key" and "value")
+                if !call.arguments.is_empty() {
+                    self.report_error(
+                        format!(
+                            "Dict.entries expects 0 arguments, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+                // Return type is a list of dicts with the same value type
+                // The entries have "key" (String) and "value" (V) fields
+                Type::List(Box::new(Type::Dict(Box::new(value_type.clone()))))
+            }
+            _ => {
+                self.report_error(
+                    format!("Dict has no method named '{}'", member.property),
+                    Some(member.property_span),
+                );
+                Type::Unknown
+            }
+        }
+    }
+
+    /// Infer the type of an expression, using expected parameter types for lambda type inference
+    fn infer_lambda_with_expected(&mut self, expr: &Expression, expected_params: &[Type]) -> Type {
+        if let ExpressionKind::Lambda(lambda) = &expr.kind {
+            // Check if lambda parameters need type inference
+            let needs_inference = lambda
+                .parameters
+                .iter()
+                .any(|p| p.type_annotation.is_none());
+
+            if needs_inference && expected_params.len() == lambda.parameters.len() {
+                return self.type_from_lambda_with_hints(lambda, expected_params);
+            }
+        }
+        self.infer_expression(expr)
+    }
+
+    /// Type check a lambda with inferred parameter types
+    fn type_from_lambda_with_hints(
+        &mut self,
+        lambda: &crate::ast::LambdaExpression,
+        expected_params: &[Type],
+    ) -> Type {
+        let mut param_types = Vec::with_capacity(lambda.parameters.len());
+
+        for (param, expected) in lambda.parameters.iter().zip(expected_params.iter()) {
+            let ty = if let Some(annotation) = &param.type_annotation {
+                // If the parameter has an explicit annotation, use it
+                self.parse_type(annotation).unwrap_or(Type::Unknown)
+            } else {
+                // Otherwise, use the expected type from context
+                expected.clone()
+            };
+            param_types.push(ty);
+        }
+
+        self.push_scope();
+        for (param, param_type) in lambda.parameters.iter().zip(param_types.iter()) {
+            self.insert(param.name.clone(), param_type.clone(), true);
+            self.binding_types.insert(param.span, param_type.clone());
+            if let Some(default) = &param.default_value {
+                let actual = self.infer_expression(default);
+                self.ensure_compatible(
+                    param_type,
+                    &actual,
+                    &format!("default value for parameter '{}' in lambda", param.name),
+                    Some(param.span),
+                );
+            }
+        }
+
+        let return_type = match &lambda.body {
+            LambdaBody::Expression(expr) => self.infer_expression(expr),
+            LambdaBody::Block(block) => {
+                self.contexts.push(FunctionContext {
+                    return_type: Type::Unknown,
+                    allowed_errors: ErrorSet::empty(),
+                    saw_explicit_return: false,
+                    last_expression_type: None,
+                    explicit_return_types: Vec::new(),
+                });
+                self.check_statements(&block.statements);
+                let context = self.contexts.pop().unwrap();
+
+                if !context.explicit_return_types.is_empty() {
+                    let mut iter = context.explicit_return_types.into_iter();
+                    let mut acc = iter.next().unwrap_or(Type::Void);
+                    for ty in iter {
+                        acc = self.merge_binding_type(acc, ty, "lambda return type", None);
+                    }
+                    acc
+                } else if let Some(last) = context.last_expression_type {
+                    last
+                } else if context.saw_explicit_return {
+                    Type::Void
+                } else {
+                    Type::Void
+                }
+            }
+        };
+
+        self.pop_scope();
+        let function_type = Type::Function(param_types.clone(), Box::new(return_type.clone()));
+        self.lambda_types.insert(lambda.id, function_type.clone());
+        function_type
     }
 
     fn type_from_error_constructor(

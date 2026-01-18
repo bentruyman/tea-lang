@@ -604,6 +604,8 @@ struct LlvmCodeGenerator<'ctx> {
     loop_context: Option<LoopContext<'ctx>>,
     list_len_ffi_fn: Option<FunctionValue<'ctx>>,
     dict_keys_fn: Option<FunctionValue<'ctx>>,
+    dict_values_fn: Option<FunctionValue<'ctx>>,
+    dict_entries_fn: Option<FunctionValue<'ctx>>,
 }
 
 /// Macros to generate FFI helper functions.
@@ -1308,6 +1310,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             loop_context: None,
             list_len_ffi_fn: None,
             dict_keys_fn: None,
+            dict_values_fn: None,
+            dict_entries_fn: None,
         }
     }
 
@@ -3732,6 +3736,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    /// Ensure the tea_dict_values FFI function is declared
+    fn ensure_dict_values_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_values_fn {
+            return func;
+        }
+        let fn_type = self
+            .list_ptr_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_dict_values", fn_type, Some(Linkage::External));
+        self.dict_values_fn = Some(func);
+        func
+    }
+
+    /// Ensure the tea_dict_entries FFI function is declared
+    fn ensure_dict_entries_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_entries_fn {
+            return func;
+        }
+        let fn_type = self
+            .list_ptr_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_dict_entries", fn_type, Some(Linkage::External));
+        self.dict_entries_fn = Some(func);
+        func
+    }
+
     /// Convert a TeaValue struct to an ExprValue based on expected type
     fn tea_value_to_expr_value(
         &mut self,
@@ -5870,6 +5904,60 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if let Some(functions) = self.module_builtins.get(&alias_ident.name) {
                     if let Some(&kind) = functions.get(&member.property) {
                         return self.compile_builtin_call(kind, call, function, locals);
+                    }
+                }
+            }
+
+            // Check for List/Dict method calls, but only if the object is not
+            // an error type, struct, or module identifier (those are handled separately)
+            let should_check_methods =
+                if let ExpressionKind::Identifier(ident) = &member.object.kind {
+                    // Skip method check if this identifier is an error type, struct, or module
+                    !self.error_definitions_tc.contains_key(&ident.name)
+                        && !self.structs.contains_key(&ident.name)
+                        && !self.module_builtins.contains_key(&ident.name)
+                } else {
+                    true
+                };
+
+            if should_check_methods {
+                // Check for List method calls (map, filter, reduce, find, any, all)
+                let object = self.compile_expression(&member.object, function, locals)?;
+                if let ExprValue::List {
+                    pointer,
+                    element_type,
+                } = &object
+                {
+                    if matches!(
+                        member.property.as_str(),
+                        "map" | "filter" | "reduce" | "find" | "any" | "all"
+                    ) {
+                        return self.compile_list_method_call(
+                            &member.property,
+                            *pointer,
+                            element_type.clone(),
+                            call,
+                            function,
+                            locals,
+                        );
+                    }
+                }
+
+                // Check for Dict method calls (keys, values, entries)
+                if let ExprValue::Dict {
+                    pointer,
+                    value_type,
+                } = &object
+                {
+                    if matches!(member.property.as_str(), "keys" | "values" | "entries") {
+                        return self.compile_dict_method_call(
+                            &member.property,
+                            *pointer,
+                            value_type.clone(),
+                            call,
+                            function,
+                            locals,
+                        );
                     }
                 }
             }
@@ -8593,6 +8681,1035 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         self.handle_possible_error(function)?;
 
         Ok(expr)
+    }
+
+    /// Compile a List method call (map, filter, reduce, find, any, all)
+    fn compile_list_method_call(
+        &mut self,
+        method_name: &str,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        match method_name {
+            "map" => self.compile_list_map(list_ptr, element_type, call, function, locals),
+            "filter" => self.compile_list_filter(list_ptr, element_type, call, function, locals),
+            "reduce" => self.compile_list_reduce(list_ptr, element_type, call, function, locals),
+            "find" => self.compile_list_find(list_ptr, element_type, call, function, locals),
+            "any" => self.compile_list_any(list_ptr, element_type, call, function, locals),
+            "all" => self.compile_list_all(list_ptr, element_type, call, function, locals),
+            _ => bail!("unknown List method: {}", method_name),
+        }
+    }
+
+    /// Compile list.map(fn) - transform each element
+    fn compile_list_map(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Get the callback closure
+        let callback = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let (closure_ptr, param_types, return_type) = match callback {
+            ExprValue::Closure {
+                pointer,
+                param_types,
+                return_type,
+            } => (pointer, param_types, return_type),
+            _ => bail!("List.map expects a function argument"),
+        };
+
+        // Get list length
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Allocate result list
+        let alloc_list_fn = self.ensure_alloc_list();
+        let result_list = map_builder_error(self.builder.build_call(
+            alloc_list_fn,
+            &[length.into()],
+            "result_list",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected pointer from alloc_list"))?
+        .into_pointer_value();
+
+        // Create loop blocks
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+        let cond_block = self.context.append_basic_block(function, "map_cond");
+        let body_block = self.context.append_basic_block(function, "map_body");
+        let exit_block = self.context.append_basic_block(function, "map_exit");
+
+        // Branch to condition
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Condition block
+        self.builder.position_at_end(cond_block);
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        let cond = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "map_cond",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // Body block
+        self.builder.position_at_end(body_block);
+
+        // Get element at index
+        let list_get_fn = self.ensure_list_get();
+        let tea_value = map_builder_error(self.builder.build_call(
+            list_get_fn,
+            &[list_ptr.into(), index_phi.as_basic_value().into()],
+            "element_value",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected TeaValue"))?
+        .into_struct_value();
+
+        // Convert to proper type
+        let element = self.tea_value_to_expr_value(tea_value, &element_type)?;
+
+        // Call closure with element
+        let call_result = self.call_closure_with_args(
+            closure_ptr,
+            &param_types,
+            &return_type,
+            vec![element],
+            function,
+        )?;
+
+        // Convert result to TeaValue and store in result list
+        let result_tea_value = self.expr_to_tea_value(call_result)?;
+        let list_set_fn = self.ensure_list_set();
+        map_builder_error(self.builder.build_call(
+            list_set_fn,
+            &[
+                result_list.into(),
+                index_phi.as_basic_value().into(),
+                result_tea_value.into(),
+            ],
+            "",
+        ))?;
+
+        // Increment index
+        let next_index = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "next_index",
+        ))?;
+        index_phi.add_incoming(&[(&next_index, body_block)]);
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Exit block
+        self.builder.position_at_end(exit_block);
+
+        Ok(ExprValue::List {
+            pointer: result_list,
+            element_type: return_type,
+        })
+    }
+
+    /// Compile list.filter(fn) - keep elements matching predicate
+    fn compile_list_filter(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Get the callback closure
+        let callback = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let (closure_ptr, param_types, _return_type) = match callback {
+            ExprValue::Closure {
+                pointer,
+                param_types,
+                return_type,
+            } => (pointer, param_types, return_type),
+            _ => bail!("List.filter expects a function argument"),
+        };
+
+        // Get list length
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Allocate result list (start with same capacity, will be smaller or equal)
+        let alloc_list_fn = self.ensure_alloc_list();
+        let result_list = map_builder_error(self.builder.build_call(
+            alloc_list_fn,
+            &[self.context.i64_type().const_zero().into()],
+            "result_list",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected pointer from alloc_list"))?
+        .into_pointer_value();
+
+        // Create loop blocks
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+        let cond_block = self.context.append_basic_block(function, "filter_cond");
+        let body_block = self.context.append_basic_block(function, "filter_body");
+        let append_block = self.context.append_basic_block(function, "filter_append");
+        let continue_block = self.context.append_basic_block(function, "filter_continue");
+        let exit_block = self.context.append_basic_block(function, "filter_exit");
+
+        // Branch to condition
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Condition block
+        self.builder.position_at_end(cond_block);
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        let cond = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "filter_cond",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // Body block
+        self.builder.position_at_end(body_block);
+
+        // Get element at index
+        let list_get_fn = self.ensure_list_get();
+        let tea_value = map_builder_error(self.builder.build_call(
+            list_get_fn,
+            &[list_ptr.into(), index_phi.as_basic_value().into()],
+            "element_value",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected TeaValue"))?
+        .into_struct_value();
+
+        // Convert to proper type
+        let element = self.tea_value_to_expr_value(tea_value, &element_type)?;
+
+        // Call closure with element
+        let predicate_result = self.call_closure_with_args(
+            closure_ptr,
+            &param_types,
+            &Box::new(ValueType::Bool),
+            vec![element.clone()],
+            function,
+        )?;
+
+        // Check predicate result
+        let bool_val = match predicate_result {
+            ExprValue::Bool(v) => v,
+            _ => bail!("filter predicate must return Bool"),
+        };
+
+        // Compare with true (1)
+        let is_true = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::NE,
+            bool_val,
+            self.context.i32_type().const_zero(),
+            "is_true",
+        ))?;
+
+        map_builder_error(self.builder.build_conditional_branch(
+            is_true,
+            append_block,
+            continue_block,
+        ))?;
+
+        // Append block - add element to result
+        self.builder.position_at_end(append_block);
+        let append_fn = self.ensure_list_append_fn();
+        let element_tea_value = self.expr_to_tea_value(element)?;
+        map_builder_error(self.builder.build_call(
+            append_fn,
+            &[result_list.into(), element_tea_value.into()],
+            "",
+        ))?;
+        map_builder_error(self.builder.build_unconditional_branch(continue_block))?;
+
+        // Continue block - increment and loop
+        self.builder.position_at_end(continue_block);
+        let next_index = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "next_index",
+        ))?;
+        index_phi.add_incoming(&[(&next_index, continue_block)]);
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Exit block
+        self.builder.position_at_end(exit_block);
+
+        Ok(ExprValue::List {
+            pointer: result_list,
+            element_type,
+        })
+    }
+
+    /// Compile list.reduce(init, fn) - fold list to single value
+    fn compile_list_reduce(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Get initial value
+        let init_value =
+            self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let init_type = init_value.ty();
+
+        // Get the callback closure
+        let callback = self.compile_expression(&call.arguments[1].expression, function, locals)?;
+        let (closure_ptr, param_types, return_type) = match callback {
+            ExprValue::Closure {
+                pointer,
+                param_types,
+                return_type,
+            } => (pointer, param_types, return_type),
+            _ => bail!("List.reduce expects a function argument"),
+        };
+
+        // Get list length
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Store accumulator in alloca for updates within loop
+        let acc_alloca =
+            self.create_entry_alloca(function, "reduce_acc", self.basic_type(&init_type)?)?;
+        let init_basic = init_value
+            .into_basic_value()
+            .ok_or_else(|| anyhow!("init value must produce a basic value"))?;
+        map_builder_error(self.builder.build_store(acc_alloca, init_basic))?;
+
+        // Create loop blocks
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+        let cond_block = self.context.append_basic_block(function, "reduce_cond");
+        let body_block = self.context.append_basic_block(function, "reduce_body");
+        let exit_block = self.context.append_basic_block(function, "reduce_exit");
+
+        // Branch to condition
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Condition block
+        self.builder.position_at_end(cond_block);
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        let cond = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "reduce_cond",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // Body block
+        self.builder.position_at_end(body_block);
+
+        // Load current accumulator
+        let acc_basic = map_builder_error(self.builder.build_load(
+            self.basic_type(&init_type)?,
+            acc_alloca,
+            "acc_load",
+        ))?;
+        let acc_expr = self.basic_to_expr_value(acc_basic, &init_type)?;
+
+        // Get element at index
+        let list_get_fn = self.ensure_list_get();
+        let tea_value = map_builder_error(self.builder.build_call(
+            list_get_fn,
+            &[list_ptr.into(), index_phi.as_basic_value().into()],
+            "element_value",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected TeaValue"))?
+        .into_struct_value();
+
+        // Convert to proper type
+        let element = self.tea_value_to_expr_value(tea_value, &element_type)?;
+
+        // Call closure with accumulator and element
+        let new_acc = self.call_closure_with_args(
+            closure_ptr,
+            &param_types,
+            &return_type,
+            vec![acc_expr, element],
+            function,
+        )?;
+
+        // Store new accumulator
+        let new_acc_basic = new_acc
+            .into_basic_value()
+            .ok_or_else(|| anyhow!("reducer must return a value"))?;
+        map_builder_error(self.builder.build_store(acc_alloca, new_acc_basic))?;
+
+        // Increment index
+        let next_index = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "next_index",
+        ))?;
+        index_phi.add_incoming(&[(&next_index, body_block)]);
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Exit block
+        self.builder.position_at_end(exit_block);
+        let final_acc = map_builder_error(self.builder.build_load(
+            self.basic_type(&init_type)?,
+            acc_alloca,
+            "final_acc",
+        ))?;
+        self.basic_to_expr_value(final_acc, &init_type)
+    }
+
+    /// Compile list.find(fn) - first matching element (nil if none)
+    fn compile_list_find(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        // Get the callback closure
+        let callback = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let (closure_ptr, param_types, _return_type) = match callback {
+            ExprValue::Closure {
+                pointer,
+                param_types,
+                return_type,
+            } => (pointer, param_types, return_type),
+            _ => bail!("List.find expects a function argument"),
+        };
+
+        // Get list length
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Create result alloca for optional value
+        let result_alloca =
+            map_builder_error(self.builder.build_alloca(self.value_type(), "find_result"))?;
+        // Initialize with nil
+        let value_nil_fn = self.ensure_value_nil();
+        let nil_value = map_builder_error(self.builder.build_call(value_nil_fn, &[], "nil_value"))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("expected TeaValue from value_nil"))?;
+        map_builder_error(self.builder.build_store(result_alloca, nil_value))?;
+
+        // Create loop blocks
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+        let cond_block = self.context.append_basic_block(function, "find_cond");
+        let body_block = self.context.append_basic_block(function, "find_body");
+        let found_block = self.context.append_basic_block(function, "find_found");
+        let continue_block = self.context.append_basic_block(function, "find_continue");
+        let exit_block = self.context.append_basic_block(function, "find_exit");
+
+        // Branch to condition
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Condition block
+        self.builder.position_at_end(cond_block);
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        let cond = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "find_cond",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // Body block
+        self.builder.position_at_end(body_block);
+
+        // Get element at index
+        let list_get_fn = self.ensure_list_get();
+        let tea_value = map_builder_error(self.builder.build_call(
+            list_get_fn,
+            &[list_ptr.into(), index_phi.as_basic_value().into()],
+            "element_value",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected TeaValue"))?
+        .into_struct_value();
+
+        // Store tea_value for potential use in found_block
+        let element_alloca =
+            map_builder_error(self.builder.build_alloca(self.value_type(), "element_temp"))?;
+        map_builder_error(self.builder.build_store(element_alloca, tea_value))?;
+
+        // Convert to proper type
+        let element = self.tea_value_to_expr_value(tea_value, &element_type)?;
+
+        // Call closure with element
+        let predicate_result = self.call_closure_with_args(
+            closure_ptr,
+            &param_types,
+            &Box::new(ValueType::Bool),
+            vec![element],
+            function,
+        )?;
+
+        // Check predicate result
+        let bool_val = match predicate_result {
+            ExprValue::Bool(v) => v,
+            _ => bail!("find predicate must return Bool"),
+        };
+
+        let is_true = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::NE,
+            bool_val,
+            self.context.i32_type().const_zero(),
+            "is_true",
+        ))?;
+
+        map_builder_error(self.builder.build_conditional_branch(
+            is_true,
+            found_block,
+            continue_block,
+        ))?;
+
+        // Found block - store element and exit
+        self.builder.position_at_end(found_block);
+        let found_element = map_builder_error(self.builder.build_load(
+            self.value_type(),
+            element_alloca,
+            "found_element",
+        ))?;
+        map_builder_error(self.builder.build_store(result_alloca, found_element))?;
+        map_builder_error(self.builder.build_unconditional_branch(exit_block))?;
+
+        // Continue block - increment and loop
+        self.builder.position_at_end(continue_block);
+        let next_index = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "next_index",
+        ))?;
+        index_phi.add_incoming(&[(&next_index, continue_block)]);
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Exit block
+        self.builder.position_at_end(exit_block);
+        let final_result = map_builder_error(self.builder.build_load(
+            self.value_type(),
+            result_alloca,
+            "final_result",
+        ))?
+        .into_struct_value();
+
+        Ok(ExprValue::Optional {
+            value: final_result,
+            inner: element_type,
+        })
+    }
+
+    /// Compile list.any(fn) - true if any element matches
+    fn compile_list_any(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_list_any_all(list_ptr, element_type, call, function, locals, true)
+    }
+
+    /// Compile list.all(fn) - true if all elements match
+    fn compile_list_all(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_list_any_all(list_ptr, element_type, call, function, locals, false)
+    }
+
+    /// Shared implementation for any/all
+    fn compile_list_any_all(
+        &mut self,
+        list_ptr: PointerValue<'ctx>,
+        element_type: Box<ValueType>,
+        call: &CallExpression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        is_any: bool,
+    ) -> Result<ExprValue<'ctx>> {
+        // Get the callback closure
+        let callback = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let (closure_ptr, param_types, _return_type) = match callback {
+            ExprValue::Closure {
+                pointer,
+                param_types,
+                return_type,
+            } => (pointer, param_types, return_type),
+            _ => bail!(
+                "List.{} expects a function argument",
+                if is_any { "any" } else { "all" }
+            ),
+        };
+
+        // Get list length
+        let list_len_fn = self.ensure_list_len_ffi_fn();
+        let length = map_builder_error(self.builder.build_call(
+            list_len_fn,
+            &[list_ptr.into()],
+            "list_len",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected i64 from list_len"))?
+        .into_int_value();
+
+        // Create result alloca
+        let i32_type = self.context.i32_type();
+        let result_alloca =
+            map_builder_error(self.builder.build_alloca(i32_type, "any_all_result"))?;
+        // Initialize: any starts with false (0), all starts with true (1)
+        let initial = if is_any {
+            i32_type.const_zero()
+        } else {
+            i32_type.const_int(1, false)
+        };
+        map_builder_error(self.builder.build_store(result_alloca, initial))?;
+
+        // Create loop blocks
+        let current_block = self
+            .builder
+            .get_insert_block()
+            .ok_or_else(|| anyhow!("missing insertion block"))?;
+        let cond_block = self.context.append_basic_block(function, "any_all_cond");
+        let body_block = self.context.append_basic_block(function, "any_all_body");
+        let early_exit_block = self
+            .context
+            .append_basic_block(function, "any_all_early_exit");
+        let continue_block = self
+            .context
+            .append_basic_block(function, "any_all_continue");
+        let exit_block = self.context.append_basic_block(function, "any_all_exit");
+
+        // Branch to condition
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Condition block
+        self.builder.position_at_end(cond_block);
+        let i64_type = self.context.i64_type();
+        let index_phi = map_builder_error(self.builder.build_phi(i64_type, "index"))?;
+        index_phi.add_incoming(&[(&i64_type.const_zero(), current_block)]);
+
+        let cond = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            index_phi.as_basic_value().into_int_value(),
+            length,
+            "any_all_cond",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_conditional_branch(cond, body_block, exit_block),
+        )?;
+
+        // Body block
+        self.builder.position_at_end(body_block);
+
+        // Get element at index
+        let list_get_fn = self.ensure_list_get();
+        let tea_value = map_builder_error(self.builder.build_call(
+            list_get_fn,
+            &[list_ptr.into(), index_phi.as_basic_value().into()],
+            "element_value",
+        ))?
+        .try_as_basic_value()
+        .left()
+        .ok_or_else(|| anyhow!("expected TeaValue"))?
+        .into_struct_value();
+
+        // Convert to proper type
+        let element = self.tea_value_to_expr_value(tea_value, &element_type)?;
+
+        // Call closure with element
+        let predicate_result = self.call_closure_with_args(
+            closure_ptr,
+            &param_types,
+            &Box::new(ValueType::Bool),
+            vec![element],
+            function,
+        )?;
+
+        // Check predicate result
+        let bool_val = match predicate_result {
+            ExprValue::Bool(v) => v,
+            _ => bail!("predicate must return Bool"),
+        };
+
+        let is_true = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::NE,
+            bool_val,
+            i32_type.const_zero(),
+            "is_true",
+        ))?;
+
+        // For any: if true, early exit with true
+        // For all: if false, early exit with false
+        if is_any {
+            map_builder_error(self.builder.build_conditional_branch(
+                is_true,
+                early_exit_block,
+                continue_block,
+            ))?;
+        } else {
+            map_builder_error(self.builder.build_conditional_branch(
+                is_true,
+                continue_block,
+                early_exit_block,
+            ))?;
+        }
+
+        // Early exit block
+        self.builder.position_at_end(early_exit_block);
+        let early_result = if is_any {
+            i32_type.const_int(1, false) // true for any
+        } else {
+            i32_type.const_zero() // false for all
+        };
+        map_builder_error(self.builder.build_store(result_alloca, early_result))?;
+        map_builder_error(self.builder.build_unconditional_branch(exit_block))?;
+
+        // Continue block
+        self.builder.position_at_end(continue_block);
+        let next_index = map_builder_error(self.builder.build_int_add(
+            index_phi.as_basic_value().into_int_value(),
+            i64_type.const_int(1, false),
+            "next_index",
+        ))?;
+        index_phi.add_incoming(&[(&next_index, continue_block)]);
+        map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
+
+        // Exit block
+        self.builder.position_at_end(exit_block);
+        let final_result = map_builder_error(self.builder.build_load(
+            i32_type,
+            result_alloca,
+            "final_result",
+        ))?
+        .into_int_value();
+
+        Ok(ExprValue::Bool(final_result))
+    }
+
+    /// Helper to call a closure with pre-compiled arguments
+    fn call_closure_with_args(
+        &mut self,
+        closure_ptr: PointerValue<'ctx>,
+        param_types: &[ValueType],
+        return_type: &Box<ValueType>,
+        args: Vec<ExprValue<'ctx>>,
+        function: FunctionValue<'ctx>,
+    ) -> Result<ExprValue<'ctx>> {
+        let mut arg_values: Vec<BasicValueEnum<'ctx>> = Vec::with_capacity(args.len());
+        for (index, (expected_type, arg)) in param_types.iter().zip(args.into_iter()).enumerate() {
+            let converted = self
+                .convert_expr_to_type(arg, expected_type)
+                .map_err(|error| {
+                    anyhow!("argument {} has mismatched type: {}", index + 1, error)
+                })?;
+            let basic = converted
+                .into_basic_value()
+                .ok_or_else(|| anyhow!("argument must produce a value"))?;
+            arg_values.push(basic);
+        }
+
+        let fn_ptr_ptr = map_builder_error(self.builder.build_struct_gep(
+            self.tea_closure,
+            closure_ptr,
+            0,
+            "closure_fn_ptr",
+        ))?;
+        let raw_fn_ptr = map_builder_error(self.builder.build_load(
+            self.ptr_type,
+            fn_ptr_ptr,
+            "closure_fn",
+        ))?
+        .into_pointer_value();
+
+        let mut llvm_params: Vec<BasicMetadataTypeEnum<'ctx>> =
+            Vec::with_capacity(param_types.len() + 1);
+        llvm_params.push(self.closure_ptr_type().into());
+        for ty in param_types {
+            llvm_params.push(self.basic_type(ty)?.into());
+        }
+
+        let fn_type = match return_type.as_ref() {
+            ValueType::Void => self.context.void_type().fn_type(&llvm_params, false),
+            ValueType::Int => self.int_type().fn_type(&llvm_params, false),
+            ValueType::Float => self.float_type().fn_type(&llvm_params, false),
+            ValueType::Bool => self.bool_type().fn_type(&llvm_params, false),
+            ValueType::String => self.string_ptr_type().fn_type(&llvm_params, false),
+            ValueType::List(_) => self.list_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Dict(_) => self.dict_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Struct(_) => self.struct_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Error { .. } => self.error_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&llvm_params, false),
+            ValueType::Optional(_) => self.value_type().fn_type(&llvm_params, false),
+        };
+
+        let typed_fn_ptr = map_builder_error(self.builder.build_bit_cast(
+            raw_fn_ptr,
+            self.ptr_type,
+            "closure_callee",
+        ))?
+        .into_pointer_value();
+
+        let mut call_args: Vec<BasicMetadataValueEnum<'ctx>> =
+            Vec::with_capacity(arg_values.len() + 1);
+        call_args.push(closure_ptr.into());
+        for value in arg_values {
+            call_args.push(BasicMetadataValueEnum::from(value));
+        }
+
+        let call_site = map_builder_error(self.builder.build_indirect_call(
+            fn_type,
+            typed_fn_ptr,
+            &call_args,
+            "closure_call",
+        ))?;
+
+        if matches!(return_type.as_ref(), ValueType::Void) {
+            self.handle_possible_error(function)?;
+            return Ok(ExprValue::Void);
+        }
+
+        let result = call_site
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("closure returned no value"))?;
+
+        let expr = match return_type.as_ref() {
+            ValueType::Int => ExprValue::Int(result.into_int_value()),
+            ValueType::Float => ExprValue::Float(result.into_float_value()),
+            ValueType::Bool => ExprValue::Bool(result.into_int_value()),
+            ValueType::String => ExprValue::String(result.into_pointer_value()),
+            ValueType::List(inner) => ExprValue::List {
+                pointer: result.into_pointer_value(),
+                element_type: inner.clone(),
+            },
+            ValueType::Dict(inner) => ExprValue::Dict {
+                pointer: result.into_pointer_value(),
+                value_type: inner.clone(),
+            },
+            ValueType::Struct(struct_name) => ExprValue::Struct {
+                pointer: result.into_pointer_value(),
+                struct_name: struct_name.clone(),
+            },
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => ExprValue::Error {
+                pointer: result.into_pointer_value(),
+                error_name: error_name.clone(),
+                variant_name: variant_name.clone(),
+            },
+            ValueType::Function(params, ret) => ExprValue::Closure {
+                pointer: result.into_pointer_value(),
+                param_types: params.clone(),
+                return_type: ret.clone(),
+            },
+            ValueType::Optional(inner) => ExprValue::Optional {
+                value: result.into_struct_value(),
+                inner: inner.clone(),
+            },
+            ValueType::Void => unreachable!(),
+        };
+        self.handle_possible_error(function)?;
+
+        Ok(expr)
+    }
+
+    /// Helper to convert BasicValueEnum to ExprValue
+    fn basic_to_expr_value(
+        &self,
+        value: BasicValueEnum<'ctx>,
+        ty: &ValueType,
+    ) -> Result<ExprValue<'ctx>> {
+        match ty {
+            ValueType::Int => Ok(ExprValue::Int(value.into_int_value())),
+            ValueType::Float => Ok(ExprValue::Float(value.into_float_value())),
+            ValueType::Bool => Ok(ExprValue::Bool(value.into_int_value())),
+            ValueType::String => Ok(ExprValue::String(value.into_pointer_value())),
+            ValueType::List(inner) => Ok(ExprValue::List {
+                pointer: value.into_pointer_value(),
+                element_type: inner.clone(),
+            }),
+            ValueType::Dict(inner) => Ok(ExprValue::Dict {
+                pointer: value.into_pointer_value(),
+                value_type: inner.clone(),
+            }),
+            ValueType::Struct(name) => Ok(ExprValue::Struct {
+                pointer: value.into_pointer_value(),
+                struct_name: name.clone(),
+            }),
+            ValueType::Error {
+                error_name,
+                variant_name,
+            } => Ok(ExprValue::Error {
+                pointer: value.into_pointer_value(),
+                error_name: error_name.clone(),
+                variant_name: variant_name.clone(),
+            }),
+            ValueType::Function(params, ret) => Ok(ExprValue::Closure {
+                pointer: value.into_pointer_value(),
+                param_types: params.clone(),
+                return_type: ret.clone(),
+            }),
+            ValueType::Optional(inner) => Ok(ExprValue::Optional {
+                value: value.into_struct_value(),
+                inner: inner.clone(),
+            }),
+            ValueType::Void => bail!("cannot convert void to ExprValue"),
+        }
+    }
+
+    /// Compile a Dict method call (keys, values, entries)
+    fn compile_dict_method_call(
+        &mut self,
+        method_name: &str,
+        dict_ptr: PointerValue<'ctx>,
+        value_type: Box<ValueType>,
+        _call: &CallExpression,
+        _function: FunctionValue<'ctx>,
+        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        match method_name {
+            "keys" => {
+                let dict_keys_fn = self.ensure_dict_keys_fn();
+                let keys_ptr = map_builder_error(self.builder.build_call(
+                    dict_keys_fn,
+                    &[dict_ptr.into()],
+                    "dict_keys",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected pointer from dict_keys"))?
+                .into_pointer_value();
+                Ok(ExprValue::List {
+                    pointer: keys_ptr,
+                    element_type: Box::new(ValueType::String),
+                })
+            }
+            "values" => {
+                let dict_values_fn = self.ensure_dict_values_fn();
+                let values_ptr = map_builder_error(self.builder.build_call(
+                    dict_values_fn,
+                    &[dict_ptr.into()],
+                    "dict_values",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected pointer from dict_values"))?
+                .into_pointer_value();
+                Ok(ExprValue::List {
+                    pointer: values_ptr,
+                    element_type: value_type,
+                })
+            }
+            "entries" => {
+                let dict_entries_fn = self.ensure_dict_entries_fn();
+                let entries_ptr = map_builder_error(self.builder.build_call(
+                    dict_entries_fn,
+                    &[dict_ptr.into()],
+                    "dict_entries",
+                ))?
+                .try_as_basic_value()
+                .left()
+                .ok_or_else(|| anyhow!("expected pointer from dict_entries"))?
+                .into_pointer_value();
+                // Each entry is a dict with the same value type
+                Ok(ExprValue::List {
+                    pointer: entries_ptr,
+                    element_type: Box::new(ValueType::Dict(value_type)),
+                })
+            }
+            _ => bail!("unknown Dict method: {}", method_name),
+        }
     }
 
     fn compile_struct_constructor(

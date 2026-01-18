@@ -2632,6 +2632,48 @@ pub extern "C" fn tea_dict_keys(dict: *const TeaDict) -> *mut TeaList {
     }
 }
 
+/// Get all values from a dict as a list (for dict.values() method)
+#[no_mangle]
+pub extern "C" fn tea_dict_values(dict: *const TeaDict) -> *mut TeaList {
+    if dict.is_null() {
+        return tea_alloc_list(0);
+    }
+    unsafe {
+        let dict_ref = &*dict;
+        let values: Vec<&TeaValue> = dict_ref.entries.values().collect();
+        let list = tea_alloc_list(values.len() as c_longlong);
+        for (i, value) in values.into_iter().enumerate() {
+            tea_list_set(list, i as c_longlong, *value);
+        }
+        list
+    }
+}
+
+/// Get all entries from a dict as a list of {key, value} dicts (for dict.entries() method)
+#[no_mangle]
+pub extern "C" fn tea_dict_entries(dict: *const TeaDict) -> *mut TeaList {
+    if dict.is_null() {
+        return tea_alloc_list(0);
+    }
+    unsafe {
+        let dict_ref = &*dict;
+        let entries: Vec<(&String, &TeaValue)> = dict_ref.entries.iter().collect();
+        let list = tea_alloc_list(entries.len() as c_longlong);
+        for (i, (key, value)) in entries.into_iter().enumerate() {
+            // Create a dict with "key" and "value" fields
+            let entry_dict = tea_dict_new();
+            let key_str = tea_alloc_string(key.as_ptr() as *const c_char, key.len() as c_longlong);
+            // Create the "key" and "value" field name strings
+            let key_field = tea_alloc_string(b"key".as_ptr() as *const c_char, 3);
+            let value_field = tea_alloc_string(b"value".as_ptr() as *const c_char, 5);
+            tea_dict_set(entry_dict, key_field, tea_value_from_string(key_str));
+            tea_dict_set(entry_dict, value_field, *value);
+            tea_list_set(list, i as c_longlong, tea_value_from_dict(entry_dict));
+        }
+        list
+    }
+}
+
 /// Get length of a list (FFI wrapper for iteration)
 #[no_mangle]
 pub extern "C" fn tea_list_len_ffi(list: *const TeaList) -> c_longlong {

@@ -2606,6 +2606,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             function.name
                         )
                     }
+                    ValueType::Any => {
+                        bail!(
+                            "function '{}' may exit without returning value",
+                            function.name
+                        )
+                    }
                 }
             }
 
@@ -4036,10 +4042,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
                 // Call tea_dict_set to mutate the dictionary in place
                 let dict_set = self.ensure_dict_set();
-                let tea_value = self.expr_to_tea_value(new_value)?;
+                let tea_value = self.expr_to_tea_value(new_value)?.into_struct_value();
+
+                // ARM64 ABI fix: Pass TeaValue by pointer instead of by value
+                let tea_value_type = self
+                    .context
+                    .get_struct_type("TeaValue")
+                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                let alloca = map_builder_error(
+                    self.builder
+                        .build_alloca(tea_value_type, "dict_set_tea_value_tmp"),
+                )?;
+                map_builder_error(self.builder.build_store(alloca, tea_value))?;
+
                 self.call_function(
                     dict_set,
-                    &[pointer.into(), key_ptr.into(), tea_value.into()],
+                    &[pointer.into(), key_ptr.into(), alloca.into()],
                     "dict_set",
                 )?;
 
@@ -4280,6 +4298,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let dict_set = self.ensure_dict_set();
 
+        // Get TeaValue type for stack allocations
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+
         let mut value_type: Option<ValueType> = None;
         for entry in &dict.entries {
             let key_expr = self.compile_string_literal(&entry.key)?;
@@ -4298,14 +4322,18 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 value_type = Some(value_ty.clone());
             }
 
-            let tea_value = self.expr_to_tea_value(value_expr)?;
+            let tea_value = self.expr_to_tea_value(value_expr)?.into_struct_value();
+
+            // ARM64 ABI fix: Pass TeaValue by pointer instead of by value
+            let alloca = map_builder_error(
+                self.builder
+                    .build_alloca(tea_value_type, "dict_literal_tea_value_tmp"),
+            )?;
+            map_builder_error(self.builder.build_store(alloca, tea_value))?;
+
             self.call_function(
                 dict_set,
-                &[
-                    dict_ptr.into(),
-                    key_ptr.into(),
-                    BasicMetadataValueEnum::from(tea_value),
-                ],
+                &[dict_ptr.into(), key_ptr.into(), alloca.into()],
                 "dict_set",
             )?;
         }
@@ -5201,6 +5229,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Error { .. } => self.error_ptr_type().fn_type(&param_types, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&param_types, false),
             ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
+            ValueType::Any => self.value_type().fn_type(&param_types, false),
         };
 
         let lambda_fn = self
@@ -5657,6 +5686,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 variant_name: variant_name.clone(),
             }),
             ValueType::Void => Ok(ExprValue::Void),
+            ValueType::Any => Ok(ExprValue::Any {
+                value: value.into_struct_value(),
+            }),
         }
     }
 
@@ -5759,6 +5791,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 })
             }
             ValueType::Void => bail!("void value cannot be loaded"),
+            ValueType::Any => {
+                let loaded =
+                    map_builder_error(self.builder.build_load(self.value_type(), pointer, name))?;
+                Ok(ExprValue::Any {
+                    value: loaded.into_struct_value(),
+                })
+            }
         }
     }
 
@@ -6006,6 +6045,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             inner,
                         },
                         ValueType::Void => unreachable!(),
+                        ValueType::Any => ExprValue::Any {
+                            value: result.into_struct_value(),
+                        },
                     };
                     if signature.can_throw {
                         self.handle_possible_error(function)?;
@@ -6240,6 +6282,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             StdFunctionKind::RegexSplit => {
                 self.compile_regex_split_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::JsonEncode => {
+                self.compile_json_encode_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::JsonDecode => {
+                self.compile_json_decode_call(&call.arguments, function, locals)
             }
         }
     }
@@ -8532,6 +8580,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Error { .. } => self.error_ptr_type().fn_type(&llvm_params, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&llvm_params, false),
             ValueType::Optional(_) => self.value_type().fn_type(&llvm_params, false),
+            ValueType::Any => self.value_type().fn_type(&llvm_params, false),
         };
 
         let typed_fn_ptr = map_builder_error(self.builder.build_bit_cast(
@@ -8599,6 +8648,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 inner: inner.clone(),
             },
             ValueType::Void => unreachable!(),
+            ValueType::Any => ExprValue::Any {
+                value: result.into_struct_value(),
+            },
         };
         self.handle_possible_error(function)?;
 
@@ -9452,6 +9504,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Error { .. } => self.error_ptr_type().fn_type(&llvm_params, false),
             ValueType::Function(_, _) => self.closure_ptr_type().fn_type(&llvm_params, false),
             ValueType::Optional(_) => self.value_type().fn_type(&llvm_params, false),
+            ValueType::Any => self.value_type().fn_type(&llvm_params, false),
         };
 
         let typed_fn_ptr = map_builder_error(self.builder.build_bit_cast(
@@ -9520,6 +9573,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 inner: inner.clone(),
             },
             ValueType::Void => unreachable!(),
+            ValueType::Any => ExprValue::Any {
+                value: result.into_struct_value(),
+            },
         };
         self.handle_possible_error(function)?;
 
@@ -9567,6 +9623,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 inner: inner.clone(),
             }),
             ValueType::Void => bail!("cannot convert void to ExprValue"),
+            ValueType::Any => Ok(ExprValue::Any {
+                value: value.into_struct_value(),
+            }),
         }
     }
 
@@ -10026,6 +10085,26 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         bail!("expected string literal for nil printing");
                     }
                 }
+                ExprValue::Any { value } => {
+                    // Any holds a TeaValue struct - convert to string and print
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "any_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[alloca.into()], "any_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_print_string();
+                    self.call_function(func, &[string_ptr.into()], "print_any")?;
+                }
             }
         }
         Ok(ExprValue::Void)
@@ -10109,6 +10188,26 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     } else {
                         bail!("expected string literal for nil printing");
                     }
+                }
+                ExprValue::Any { value } => {
+                    // Any holds a TeaValue struct - convert to string and println
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "any_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[alloca.into()], "any_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_println_string();
+                    self.call_function(func, &[string_ptr.into()], "println_any")?;
                 }
             }
         }
@@ -10482,6 +10581,88 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         })
     }
 
+    fn compile_json_encode_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("json_encode expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for json_encode");
+        }
+        let value = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let tea_value = self.expr_to_tea_value(value)?.into_struct_value();
+
+        // ARM64 ABI fix: Pass TeaValue by pointer instead of by value
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+        let alloca = map_builder_error(
+            self.builder
+                .build_alloca(tea_value_type, "json_tea_value_tmp"),
+        )?;
+        map_builder_error(self.builder.build_store(alloca, tea_value))?;
+
+        let func = self.ensure_json_encode();
+        let result = self
+            .call_function(func, &[alloca.into()], "tea_json_encode")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_json_encode returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(result))
+    }
+
+    fn compile_json_decode_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("json_decode expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for json_decode");
+        }
+        let value = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let string_ptr =
+            self.expect_string_pointer(value, "json_decode expects a String argument")?;
+
+        // Allocate space for the result on the stack
+        let tea_value_type = self
+            .context
+            .get_struct_type("TeaValue")
+            .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+        let result_alloca = map_builder_error(
+            self.builder
+                .build_alloca(tea_value_type, "json_decode_result"),
+        )?;
+
+        // Call with out-pointer as first argument
+        let func = self.ensure_json_decode();
+        self.call_function(
+            func,
+            &[result_alloca.into(), string_ptr.into()],
+            "tea_json_decode",
+        )?;
+
+        // Load the result
+        let tea_value = map_builder_error(self.builder.build_load(
+            tea_value_type,
+            result_alloca,
+            "loaded",
+        ))?
+        .into_struct_value();
+
+        // Return the TeaValue as an Any type - the actual type is determined at runtime
+        Ok(ExprValue::Any { value: tea_value })
+    }
+
     fn compile_read_line_call(&mut self) -> Result<ExprValue<'ctx>> {
         let func = self.ensure_read_line_fn();
         let pointer = self
@@ -10556,6 +10737,26 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 ExprValue::Void | ExprValue::Optional { .. } => {
                     bail!("cannot eprint void or optional values");
                 }
+                ExprValue::Any { value } => {
+                    // Any holds a TeaValue struct - convert to string and eprint
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "any_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[alloca.into()], "any_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_eprint_string();
+                    self.call_function(func, &[string_ptr.into()], "eprint_any")?;
+                }
             }
         }
         Ok(ExprValue::Void)
@@ -10612,6 +10813,26 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
                 ExprValue::Void | ExprValue::Optional { .. } => {
                     bail!("cannot eprintln void or optional values");
+                }
+                ExprValue::Any { value } => {
+                    // Any holds a TeaValue struct - convert to string and eprintln
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    let alloca = map_builder_error(
+                        self.builder.build_alloca(tea_value_type, "any_tea_val_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, value))?;
+                    let to_string = self.ensure_util_to_string_fn();
+                    let string_ptr = self
+                        .call_function(to_string, &[alloca.into()], "any_to_string")?
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| anyhow!("tea_util_to_string returned no value"))?
+                        .into_pointer_value();
+                    let func = self.ensure_eprintln_string();
+                    self.call_function(func, &[string_ptr.into()], "eprintln_any")?;
                 }
             }
         }
@@ -11365,6 +11586,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 Ok(struct_val.into())
             }
             ExprValue::Optional { value, .. } => Ok(value.into()),
+            // Any already holds a TeaValue struct - just return it
+            ExprValue::Any { value } => Ok(value.into()),
         }
     }
 
@@ -11926,8 +12149,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     return_type,
                 })
             }
-            ValueType::Optional(_) | ValueType::Void => {
-                bail!("payload_to_expr doesn't handle Optional or Void")
+            ValueType::Optional(_) | ValueType::Void | ValueType::Any => {
+                bail!("payload_to_expr doesn't handle Optional, Void, or Any")
             }
         }
     }
@@ -12146,6 +12369,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Struct(_) => self.struct_ptr_type().fn_type(&param_types, false),
             ValueType::Error { .. } => self.error_ptr_type().fn_type(&param_types, false),
             ValueType::Optional(_) => self.value_type().fn_type(&param_types, false),
+            ValueType::Any => self.value_type().fn_type(&param_types, false),
         };
         Ok(fn_type)
     }
@@ -12162,6 +12386,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ValueType::Struct(_) => Ok(self.struct_ptr_type().into()),
             ValueType::Error { .. } => Ok(self.error_ptr_type().into()),
             ValueType::Optional(_) => Ok(self.value_type().into()),
+            ValueType::Any => Ok(self.value_type().into()),
             ValueType::Void => bail!("void type is not a value"),
         }
     }
@@ -13290,10 +13515,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.dict_set_fn {
             return func;
         }
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let param_types = [
             self.dict_ptr_type().into(),
             self.string_ptr_type().into(),
-            self.value_type().into(),
+            ptr_type.into(),
         ];
         let fn_type = self.context.void_type().fn_type(&param_types, false);
         let func = self
@@ -14250,9 +14477,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.json_encode_fn {
             return func;
         }
-        let fn_type = self
-            .string_ptr_type()
-            .fn_type(&[self.value_type().into()], false);
+        // Pass TeaValue by pointer to avoid ARM64 ABI struct passing issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let fn_type = self.string_ptr_type().fn_type(&[ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_json_encode", fn_type, Some(Linkage::External));
@@ -14264,9 +14491,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.json_decode_fn {
             return func;
         }
+        // Return via out-pointer to avoid ARM64 ABI struct return issues
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
         let fn_type = self
-            .value_type()
-            .fn_type(&[self.string_ptr_type().into()], false);
+            .context
+            .void_type()
+            .fn_type(&[ptr_type.into(), self.string_ptr_type().into()], false);
         let func = self
             .module
             .add_function("tea_json_decode", fn_type, Some(Linkage::External));

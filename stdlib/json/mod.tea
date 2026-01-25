@@ -1,21 +1,36 @@
 # JSON encoding and decoding utilities.
 #
 # This module provides a Tea-native interface to JSON operations.
+# Supports encoding/decoding of nested objects, arrays, numbers, booleans, and strings.
 
 use intrinsics = "std.intrinsics"
 
-# Encode a value to JSON string.
+# Encode any Tea value to a JSON string.
+#
+# Supports: Int, Float, Bool, String, List, Dict, and nested structures.
 #
 # Examples:
-#   var json_str = json.encode({"name": "tea", "version": "1.0"})
-pub def encode(value: Dict[String, String]) -> String
+#   json.encode({"name": "tea", "version": 1})  # => '{"name":"tea","version":1}'
+#   json.encode([1, 2, 3])                       # => '[1,2,3]'
+#   json.encode(true)                            # => 'true'
+pub def encode(value) -> String
   return intrinsics.json_encode(value)
 end
 
-# Decode a JSON string to a value.
+# Decode a JSON string to a Tea value.
+#
+# Returns the appropriate Tea type based on JSON content:
+#   - JSON object  -> Dict
+#   - JSON array   -> List
+#   - JSON string  -> String
+#   - JSON number  -> Int or Float
+#   - JSON boolean -> Bool
+#   - JSON null    -> nil
 #
 # Examples:
-#   var data = json.decode("{\"name\":\"tea\"}")
-pub def decode(json_str: String) -> Dict[String, String]
+#   json.decode('{"name":"tea"}')  # => {"name": "tea"}
+#   json.decode('[1, 2, 3]')       # => [1, 2, 3]
+#   json.decode('true')            # => true
+pub def decode(json_str: String)
   return intrinsics.json_decode(json_str)
 end

@@ -85,6 +85,9 @@ pub enum StdFunctionKind {
     RegexReplace,
     RegexReplaceAll,
     RegexSplit,
+    // JSON module
+    JsonEncode,
+    JsonDecode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -88,5 +88,8 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::RegexReplace => "Replace the first match with a replacement string.",
         StdFunctionKind::RegexReplaceAll => "Replace all matches with a replacement string.",
         StdFunctionKind::RegexSplit => "Split the text by the pattern into a list of strings.",
+        // JSON module
+        StdFunctionKind::JsonEncode => "Encode a value as a JSON string.",
+        StdFunctionKind::JsonDecode => "Decode a JSON string into a Tea value.",
     }
 }

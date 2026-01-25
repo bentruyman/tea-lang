@@ -157,7 +157,7 @@ fn alloc_tea_string(text: &str) -> *mut TeaString {
 
 fn dict_set_value(dict: *mut TeaDict, key: &str, value: TeaValue) {
     let key_ptr = alloc_tea_string(key);
-    tea_dict_set(dict, key_ptr, value);
+    dict_set_internal(dict, key_ptr, value);
 }
 
 fn dict_set_bool(dict: *mut TeaDict, key: &str, value: bool) {
@@ -1290,7 +1290,7 @@ fn json_to_tea_value(value: &JsonValue) -> TeaValue {
             for (key, item) in map.iter() {
                 let key_ptr =
                     tea_alloc_string(key.as_ptr() as *const c_char, key.len() as c_longlong);
-                tea_dict_set(dict, key_ptr, json_to_tea_value(item));
+                dict_set_internal(dict, key_ptr, json_to_tea_value(item));
             }
             tea_value_from_dict(dict)
         }
@@ -2673,8 +2673,8 @@ pub extern "C" fn tea_dict_new() -> *mut TeaDict {
     }))
 }
 
-#[no_mangle]
-pub extern "C" fn tea_dict_set(dict: *mut TeaDict, key: *const TeaString, value: TeaValue) {
+/// Internal helper for setting dict values (safe to call from Rust)
+fn dict_set_internal(dict: *mut TeaDict, key: *const TeaString, value: TeaValue) {
     if dict.is_null() {
         panic!("null dict");
     }
@@ -2682,6 +2682,19 @@ pub extern "C" fn tea_dict_set(dict: *mut TeaDict, key: *const TeaString, value:
     unsafe {
         let dict_ref = &mut *dict;
         dict_ref.entries.insert(key_str, value);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_dict_set(
+    dict: *mut TeaDict,
+    key: *const TeaString,
+    value_ptr: *const TeaValue,
+) {
+    // Take value by pointer to avoid ARM64 ABI struct passing issues
+    // Internal callers should use dict_set_internal directly
+    unsafe {
+        dict_set_internal(dict, key, *value_ptr);
     }
 }
 
@@ -2770,8 +2783,8 @@ pub extern "C" fn tea_dict_entries(dict: *const TeaDict) -> *mut TeaList {
             // Create the "key" and "value" field name strings
             let key_field = tea_alloc_string(b"key".as_ptr() as *const c_char, 3);
             let value_field = tea_alloc_string(b"value".as_ptr() as *const c_char, 5);
-            tea_dict_set(entry_dict, key_field, tea_value_from_string(key_str));
-            tea_dict_set(entry_dict, value_field, *value);
+            dict_set_internal(entry_dict, key_field, tea_value_from_string(key_str));
+            dict_set_internal(entry_dict, value_field, *value);
             tea_list_set(list, i as c_longlong, tea_value_from_dict(entry_dict));
         }
         list
@@ -2856,21 +2869,29 @@ pub extern "C" fn tea_io_flush() {
 }
 
 #[no_mangle]
-pub extern "C" fn tea_json_encode(value: TeaValue) -> *mut TeaString {
-    let json_value =
-        tea_value_to_json(value).unwrap_or_else(|error| panic!("failed to encode JSON: {error}"));
-    let encoded = serde_json::to_string(&json_value)
-        .unwrap_or_else(|error| panic!("failed to encode JSON: {error}"));
-    let bytes = encoded.as_bytes();
-    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+pub extern "C" fn tea_json_encode(value_ptr: *const TeaValue) -> *mut TeaString {
+    // Take by pointer to avoid ARM64 ABI struct passing issues
+    unsafe {
+        let value = *value_ptr;
+        let json_value = tea_value_to_json(value)
+            .unwrap_or_else(|error| panic!("failed to encode JSON: {error}"));
+        let encoded = serde_json::to_string(&json_value)
+            .unwrap_or_else(|error| panic!("failed to encode JSON: {error}"));
+        let bytes = encoded.as_bytes();
+        tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn tea_json_decode(text: *const TeaString) -> TeaValue {
+pub extern "C" fn tea_json_decode(out: *mut TeaValue, text: *const TeaString) {
+    // Write to out-pointer to avoid ARM64 ABI struct return issues
     let input = expect_string(text, "json.decode expects a String argument");
     let parsed: JsonValue = serde_json::from_str(&input)
         .unwrap_or_else(|error| panic!("failed to decode JSON: {error}"));
-    json_to_tea_value(&parsed)
+    let result = json_to_tea_value(&parsed);
+    unsafe {
+        *out = result;
+    }
 }
 
 #[no_mangle]
@@ -2980,7 +3001,7 @@ fn runtime_dict_to_tea(map: &HashMap<String, RuntimeValue>) -> Result<TeaValue> 
         let value_tea = runtime_value_to_tea(value)?;
         let bytes = key.as_bytes();
         let key_ptr = tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong);
-        tea_dict_set(dict, key_ptr, value_tea);
+        dict_set_internal(dict, key_ptr, value_tea);
     }
     Ok(tea_value_from_dict(dict))
 }
@@ -3019,7 +3040,7 @@ fn runtime_scope_to_tea(scope: &CliScopeOutcome) -> Result<TeaValue> {
         name_bytes.as_ptr() as *const c_char,
         name_bytes.len() as c_longlong,
     );
-    tea_dict_set(dict, name_key, name_value);
+    dict_set_internal(dict, name_key, name_value);
 
     let options_value = runtime_dict_to_tea(&scope.options)?;
     let options_key_bytes = b"options";
@@ -3027,7 +3048,7 @@ fn runtime_scope_to_tea(scope: &CliScopeOutcome) -> Result<TeaValue> {
         options_key_bytes.as_ptr() as *const c_char,
         options_key_bytes.len() as c_longlong,
     );
-    tea_dict_set(dict, options_key, options_value);
+    dict_set_internal(dict, options_key, options_value);
 
     let positionals_value = runtime_dict_to_tea(&scope.positionals)?;
     let positionals_key_bytes = b"positionals";
@@ -3035,7 +3056,7 @@ fn runtime_scope_to_tea(scope: &CliScopeOutcome) -> Result<TeaValue> {
         positionals_key_bytes.as_ptr() as *const c_char,
         positionals_key_bytes.len() as c_longlong,
     );
-    tea_dict_set(dict, positionals_key, positionals_value);
+    dict_set_internal(dict, positionals_key, positionals_value);
 
     Ok(tea_value_from_dict(dict))
 }

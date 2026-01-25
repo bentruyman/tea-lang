@@ -371,6 +371,21 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::Int, StdType::String],
         StdType::List,
     ),
+    // JSON encoding/decoding
+    std_function(
+        "json_encode",
+        StdFunctionKind::JsonEncode,
+        StdArity::Exact(1),
+        &[StdType::Any],
+        StdType::String,
+    ),
+    std_function(
+        "json_decode",
+        StdFunctionKind::JsonDecode,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Any,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

@@ -1,0 +1,52 @@
+# Basic JSON encoding and decoding examples
+
+use intrinsics = "std.intrinsics"
+
+# Test encoding various types
+println("Testing JSON encoding:")
+
+# Encode a simple dict (all string values)
+var dict_json = intrinsics.json_encode( { "name": "tea", "version": "1.0" })
+println("Dict:")
+println(dict_json)
+
+# Encode a list of integers
+var list_json = intrinsics.json_encode([1, 2, 3, 4, 5])
+println("List:")
+println(list_json)
+
+# Encode a boolean
+var bool_json = intrinsics.json_encode(true)
+println("Bool:")
+println(bool_json)
+
+# Encode a number
+var num_json = intrinsics.json_encode(42)
+println("Number:")
+println(num_json)
+
+println("")
+println("Testing JSON decoding:")
+
+# Decode a dict
+var decoded_dict = intrinsics.json_decode("{\"name\":\"tea\",\"version\":\"1.0\"}")
+println("Decoded dict:")
+println(decoded_dict)
+
+# Decode a list
+var decoded_list = intrinsics.json_decode("[1, 2, 3]")
+println("Decoded list:")
+println(decoded_list)
+
+# Decode a boolean
+var decoded_bool = intrinsics.json_decode("true")
+println("Decoded bool:")
+println(decoded_bool)
+
+# Decode a number
+var decoded_num = intrinsics.json_decode("42")
+println("Decoded number:")
+println(decoded_num)
+
+println("")
+println("JSON tests complete!")

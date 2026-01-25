@@ -21,6 +21,8 @@ pub enum ValueType {
     },
     Optional(Box<ValueType>),
     Void,
+    /// Dynamic type for values whose type is only known at runtime (e.g., JSON decode)
+    Any,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -153,6 +155,10 @@ pub enum ExprValue<'ctx> {
         inner: Box<ValueType>,
     },
     Void,
+    /// Dynamic value (TeaValue struct) for values whose type is only known at runtime
+    Any {
+        value: StructValue<'ctx>,
+    },
 }
 
 impl<'ctx> ExprValue<'ctx> {
@@ -180,6 +186,7 @@ impl<'ctx> ExprValue<'ctx> {
             } => ValueType::Function(param_types.clone(), return_type.clone()),
             ExprValue::Optional { inner, .. } => ValueType::Optional(inner.clone()),
             ExprValue::Void => ValueType::Void,
+            ExprValue::Any { .. } => ValueType::Any,
         }
     }
 
@@ -196,6 +203,7 @@ impl<'ctx> ExprValue<'ctx> {
             ExprValue::Closure { pointer, .. } => Some(pointer.into()),
             ExprValue::Optional { value, .. } => Some(value.into()),
             ExprValue::Void => None,
+            ExprValue::Any { value } => Some(value.into()),
         }
     }
 
@@ -311,7 +319,7 @@ pub(crate) fn type_to_value_type(ty: &Type) -> Result<ValueType> {
             error_name: error_type.name.clone(),
             variant_name: error_type.variant.clone(),
         }),
-        Type::Unknown => bail!("cannot lower Unknown type in LLVM backend"),
+        Type::Unknown => Ok(ValueType::Any),
     }
 }
 

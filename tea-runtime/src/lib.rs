@@ -2800,6 +2800,15 @@ pub extern "C" fn tea_list_len_ffi(list: *const TeaList) -> c_longlong {
     unsafe { tea_list_len(&*list) }
 }
 
+/// Get length of a string (FFI wrapper that handles inline and heap strings)
+#[no_mangle]
+pub extern "C" fn tea_string_len_ffi(string: *const TeaString) -> c_longlong {
+    if string.is_null() {
+        return 0;
+    }
+    unsafe { tea_string_len(&*string) as c_longlong }
+}
+
 #[no_mangle]
 pub extern "C" fn tea_io_read_line() -> TeaValue {
     let mut buffer = String::new();

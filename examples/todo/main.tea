@@ -1,0 +1,506 @@
+## todo - A simple task manager
+##
+## A CLI todo list application demonstrating file I/O,
+## subcommands, and environment variable configuration.
+##
+## Tasks are stored as lines in a simple text format:
+## ID|DONE|TEXT
+## Example: 1|0|Write documentation
+
+use args = "std.args"
+use env = "std.env"
+use fs = "std.fs"
+use path = "std.path"
+
+## Convert a digit character to its numeric value
+def char_to_digit(c: String) -> Int
+  if c == "0"
+    return 0
+  else if c == "1"
+    return 1
+  else if c == "2"
+    return 2
+  else if c == "3"
+    return 3
+  else if c == "4"
+    return 4
+  else if c == "5"
+    return 5
+  else if c == "6"
+    return 6
+  else if c == "7"
+    return 7
+  else if c == "8"
+    return 8
+  else if c == "9"
+    return 9
+  else
+    return - 1
+  end
+end
+
+## Check if a character is a digit
+def is_digit(c: String) -> Bool
+  return char_to_digit(c) >= 0
+end
+
+## Parse a string to integer
+def parse_int(s: String) -> Int
+  var result = 0
+  var i = 0
+
+  while i < @len(s)
+    const c = s[i]
+    const digit = char_to_digit(c)
+
+    if digit >= 0
+      result = result * 10 + digit
+    else
+      @eprintln(`todo: invalid number '${s}'`)
+      @exit(1)
+    end
+
+    i = i + 1
+  end
+
+  return result
+end
+
+## Join positional arguments from a starting index
+def join_args(args_list: List[String], start: Int) -> String
+  var result = ""
+  var i = start
+
+  while i < @len(args_list)
+    if i > start
+      result = result + " "
+    end
+
+    result = result + args_list[i]
+    i = i + 1
+  end
+
+  return result
+end
+
+## Print usage information
+def print_usage() -> Void
+  @println("todo - A simple task manager")
+  @println("")
+  @println("Usage: todo <command> [arguments]")
+  @println("")
+  @println("Commands:")
+  @println("  init             Initialize the todo file")
+  @println("  add <task>       Add a new task")
+  @println("  list, ls         List all tasks")
+  @println("  done <id>        Mark a task as complete")
+  @println("  remove, rm <id>  Remove a task")
+  @println("  help             Show this help message")
+  @println("")
+  @println("Environment:")
+  @println("  TODO_FILE        Path to the todo file (default: ~/.todo.txt)")
+  @println("")
+  @println("Examples:")
+  @println("  todo add Write documentation")
+  @println("  todo list")
+  @println("  todo done 1")
+  @println("  todo remove 2")
+end
+
+## Get the path to the todo file
+def get_todo_file() -> String
+  # Check for TODO_FILE environment variable
+  const custom_path = env.get("TODO_FILE")
+
+  if @len(custom_path) > 0
+    return custom_path
+  end
+
+  # Default to ~/.todo.txt
+  const home = env.get("HOME")
+
+  if @len(home) == 0
+    @eprintln("todo: cannot determine home directory")
+    @exit(1)
+  end
+
+  return path.join([home, ".todo.txt"])
+end
+
+## Read the todo file content
+## Note: File must exist. Create with: touch ~/.todo.txt
+def read_todo_file() -> String
+  const filepath = get_todo_file()
+  return fs.read_file(filepath)
+end
+
+## Initialize the todo file (creates empty file)
+def init_todo_file() -> Void
+  const filepath = get_todo_file()
+  fs.write_file(filepath, "")
+  @println(`Initialized ${filepath}`)
+end
+
+## Write content to the todo file
+def write_todo_file(content: String) -> Void
+  const filepath = get_todo_file()
+  fs.write_file(filepath, content)
+end
+
+## Parse a task line (ID|DONE|TEXT) and return parts
+## Returns a list: [id_str, done_str, text]
+def parse_task_line(line: String) -> List[String]
+  var parts: List[String] = ["", "", ""]
+  var current_part = 0
+  var current_str = ""
+  var i = 0
+
+  while i < @len(line)
+    const c = line[i]
+
+    if c == "|" && current_part < 2
+      if current_part == 0
+        parts = [current_str, "", ""]
+      else if current_part == 1
+        parts = [parts[0], current_str, ""]
+      end
+
+      current_part = current_part + 1
+      current_str = ""
+    else
+      current_str = current_str + c
+    end
+
+    i = i + 1
+  end
+
+  # Set the last part (text)
+  if current_part == 2
+    parts = [parts[0], parts[1], current_str]
+  end
+
+  return parts
+end
+
+## Get the next task ID by finding the highest existing ID + 1
+def get_next_id(content: String) -> Int
+  var max_id = 0
+  var current_line = ""
+  var i = 0
+
+  while i < @len(content)
+    const c = content[i]
+
+    if c == "\n"
+      if @len(current_line) > 0
+        const parts = parse_task_line(current_line)
+        const id_str = parts[0]
+
+        if @len(id_str) > 0
+          const id = parse_int(id_str)
+
+          if id > max_id
+            max_id = id
+          end
+        end
+      end
+
+      current_line = ""
+    else if c != "\r"
+      current_line = current_line + c
+    end
+
+    i = i + 1
+  end
+
+  # Check the last line
+  if @len(current_line) > 0
+    const parts = parse_task_line(current_line)
+    const id_str = parts[0]
+
+    if @len(id_str) > 0
+      const id = parse_int(id_str)
+
+      if id > max_id
+        max_id = id
+      end
+    end
+  end
+
+  return max_id + 1
+end
+
+## Add a new task
+def cmd_add(text: String) -> Void
+  var content = read_todo_file()
+  const next_id = get_next_id(content)
+
+  # Append new task line
+  const task_line = `${@to_string(next_id)}|0|${text}`
+
+  if @len(content) > 0 && content[@len(content) - 1] != "\n"
+    content = content + "\n"
+  end
+
+  content = content + task_line + "\n"
+
+  write_todo_file(content)
+  @println(`Added task ${@to_string(next_id)}: ${text}`)
+end
+
+## List all tasks
+def cmd_list() -> Void
+  const content = read_todo_file()
+
+  if @len(content) == 0
+    @println("No tasks. Add one with: todo add <task>")
+    return
+  end
+
+  @println("Tasks:")
+  @println("")
+
+  var current_line = ""
+  var i = 0
+  var task_count = 0
+  var done_count = 0
+
+  while i < @len(content)
+    const c = content[i]
+
+    if c == "\n"
+      if @len(current_line) > 0
+        const parts = parse_task_line(current_line)
+        const id_str = parts[0]
+        const done_str = parts[1]
+        const text = parts[2]
+
+        if @len(id_str) > 0
+          task_count = task_count + 1
+          const status = if(done_str == "1") "[x]" else "[ ]"
+          @println(`  ${id_str}. ${status} ${text}`)
+
+          if done_str == "1"
+            done_count = done_count + 1
+          end
+        end
+      end
+
+      current_line = ""
+    else if c != "\r"
+      current_line = current_line + c
+    end
+
+    i = i + 1
+  end
+
+  # Check last line
+  if @len(current_line) > 0
+    const parts = parse_task_line(current_line)
+    const id_str = parts[0]
+    const done_str = parts[1]
+    const text = parts[2]
+
+    if @len(id_str) > 0
+      task_count = task_count + 1
+      const status = if(done_str == "1") "[x]" else "[ ]"
+      @println(`  ${id_str}. ${status} ${text}`)
+
+      if done_str == "1"
+        done_count = done_count + 1
+      end
+    end
+  end
+
+  if task_count == 0
+    @println("No tasks. Add one with: todo add <task>")
+  else
+    @println("")
+    @println(`${@to_string(done_count)}/${@to_string(task_count)} completed`)
+  end
+end
+
+## Mark a task as done
+def cmd_done(task_id: Int) -> Void
+  const content = read_todo_file()
+  var new_content = ""
+  var found = false
+  var current_line = ""
+  var i = 0
+
+  while i < @len(content)
+    const c = content[i]
+
+    if c == "\n"
+      if @len(current_line) > 0
+        const parts = parse_task_line(current_line)
+        const id_str = parts[0]
+        const done_str = parts[1]
+        const text = parts[2]
+
+        if @len(id_str) > 0 && parse_int(id_str) == task_id
+          found = true
+
+          if done_str == "1"
+            @println(`Task ${@to_string(task_id)} is already done`)
+            return
+          end
+
+          new_content = new_content + `${id_str}|1|${text}` + "\n"
+          @println(`Completed: ${text}`)
+        else
+          new_content = new_content + current_line + "\n"
+        end
+      end
+
+      current_line = ""
+    else if c != "\r"
+      current_line = current_line + c
+    end
+
+    i = i + 1
+  end
+
+  # Check last line
+  if @len(current_line) > 0
+    const parts = parse_task_line(current_line)
+    const id_str = parts[0]
+    const done_str = parts[1]
+    const text = parts[2]
+
+    if @len(id_str) > 0 && parse_int(id_str) == task_id
+      found = true
+
+      if done_str == "1"
+        @println(`Task ${@to_string(task_id)} is already done`)
+        return
+      end
+
+      new_content = new_content + `${id_str}|1|${text}` + "\n"
+      @println(`Completed: ${text}`)
+    else
+      new_content = new_content + current_line + "\n"
+    end
+  end
+
+  if not found
+    @eprintln(`todo: task ${@to_string(task_id)} not found`)
+    @exit(1)
+  end
+
+  write_todo_file(new_content)
+end
+
+## Remove a task
+def cmd_remove(task_id: Int) -> Void
+  const content = read_todo_file()
+  var new_content = ""
+  var found = false
+  var removed_text = ""
+  var current_line = ""
+  var i = 0
+
+  while i < @len(content)
+    const c = content[i]
+
+    if c == "\n"
+      if @len(current_line) > 0
+        const parts = parse_task_line(current_line)
+        const id_str = parts[0]
+        const text = parts[2]
+
+        if @len(id_str) > 0 && parse_int(id_str) == task_id
+          found = true
+          removed_text = text
+          # Don't add this line to new_content
+        else
+          new_content = new_content + current_line + "\n"
+        end
+      end
+
+      current_line = ""
+    else if c != "\r"
+      current_line = current_line + c
+    end
+
+    i = i + 1
+  end
+
+  # Check last line
+  if @len(current_line) > 0
+    const parts = parse_task_line(current_line)
+    const id_str = parts[0]
+    const text = parts[2]
+
+    if @len(id_str) > 0 && parse_int(id_str) == task_id
+      found = true
+      removed_text = text
+    else
+      new_content = new_content + current_line + "\n"
+    end
+  end
+
+  if not found
+    @eprintln(`todo: task ${@to_string(task_id)} not found`)
+    @exit(1)
+  end
+
+  write_todo_file(new_content)
+  @println(`Removed: ${removed_text}`)
+end
+
+## Main entry point
+def run() -> Void
+  const all_args = args.all()
+
+  if @len(all_args) < 1
+    print_usage()
+    @exit(1)
+  end
+
+  const command = all_args[0]
+
+  if command == "add"
+    if @len(all_args) < 2
+      @eprintln("todo: missing task text")
+      @eprintln("Usage: todo add <task>")
+      @exit(1)
+    end
+
+    const task_text = join_args(all_args, 1)
+    cmd_add(task_text)
+  else if command == "list" || command == "ls"
+    cmd_list()
+  else if command == "done"
+    if @len(all_args) < 2
+      @eprintln("todo: missing task ID")
+      @eprintln("Usage: todo done <id>")
+      @exit(1)
+    end
+
+    const tid = parse_int(all_args[1])
+    cmd_done(tid)
+  else if command == "remove" || command == "rm"
+    if @len(all_args) < 2
+      @eprintln("todo: missing task ID")
+      @eprintln("Usage: todo remove <id>")
+      @exit(1)
+    end
+
+    const tid = parse_int(all_args[1])
+    cmd_remove(tid)
+  else if command == "init"
+    init_todo_file()
+    @exit(0)
+  else if command == "help" || command == "--help" || command == "-h"
+    print_usage()
+    @exit(0)
+  else
+    @eprintln(`todo: unknown command '${command}'`)
+    print_usage()
+    @exit(1)
+  end
+end
+
+# Run the CLI
+run()

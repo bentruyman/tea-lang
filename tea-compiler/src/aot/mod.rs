@@ -606,6 +606,7 @@ struct LlvmCodeGenerator<'ctx> {
     function_can_throw_stack: Vec<bool>,
     loop_context: Option<LoopContext<'ctx>>,
     list_len_ffi_fn: Option<FunctionValue<'ctx>>,
+    string_len_ffi_fn: Option<FunctionValue<'ctx>>,
     dict_keys_fn: Option<FunctionValue<'ctx>>,
     dict_values_fn: Option<FunctionValue<'ctx>>,
     dict_entries_fn: Option<FunctionValue<'ctx>>,
@@ -1313,6 +1314,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             global_slots: HashMap::new(),
             loop_context: None,
             list_len_ffi_fn: None,
+            string_len_ffi_fn: None,
             dict_keys_fn: None,
             dict_values_fn: None,
             dict_entries_fn: None,
@@ -3145,36 +3147,35 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let body_block = self.context.append_basic_block(function, "loop_body");
         let exit_block = self.context.append_basic_block(function, "loop_exit");
 
-        // Identify variables that are mutated in the loop body
+        // Identify variables that are mutated in the loop body or condition
         let mut mutated_vars = std::collections::HashSet::new();
         self.find_mutated_in_statements(&statement.body.statements, &mut mutated_vars);
+        self.find_mutated_in_expression(cond_expr, &mut mutated_vars);
 
-        // Save the initial values and types of mutated variables
-        // We'll create PHI nodes for these
-        let mut phi_variables: Vec<(String, BasicValueEnum<'ctx>, ValueType, bool)> = Vec::new();
-
+        // Convert SSA variables to alloca-based storage to handle nested control flow
+        // (if statements, etc.) correctly. When variables are mutated inside nested
+        // blocks, using allocas ensures the mutations persist regardless of control flow.
         for var_name in &mutated_vars {
             if let Some(var) = locals.get(var_name) {
-                // Only create PHI for mutable variables that have a current value or pointer
-                if var.mutable {
-                    let initial_value = if let Some(ssa_value) = var.value {
-                        // Already an SSA value
-                        ssa_value
-                    } else if let Some(ptr) = var.pointer {
-                        // Load the current value from memory
-                        self.load_from_pointer(ptr, &var.ty, var_name)?
-                            .into_basic_value()
-                            .ok_or_else(|| anyhow!("Cannot create PHI for void type"))?
-                    } else {
-                        continue; // Skip variables without values
-                    };
-
-                    phi_variables.push((
-                        var_name.clone(),
-                        initial_value,
-                        var.ty.clone(),
-                        true, // was_pointer flag
-                    ));
+                if var.mutable && var.pointer.is_none() {
+                    // Variable uses SSA value, convert to alloca
+                    if let Some(ssa_value) = var.value {
+                        let alloca = self.create_entry_alloca(
+                            function,
+                            &format!("{}_while_loop", var_name),
+                            self.basic_type(&var.ty)?,
+                        )?;
+                        map_builder_error(self.builder.build_store(alloca, ssa_value))?;
+                        locals.insert(
+                            var_name.clone(),
+                            LocalVariable {
+                                pointer: Some(alloca),
+                                value: None,
+                                ty: var.ty.clone(),
+                                mutable: true,
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -3185,30 +3186,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         self.builder.position_at_end(cond_block);
-
-        // Create PHI nodes for all mutated variables
-        let mut phi_nodes: HashMap<String, (inkwell::values::PhiValue<'ctx>, ValueType)> =
-            HashMap::new();
-
-        for (var_name, initial_value, ty, _) in &phi_variables {
-            let phi = map_builder_error(
-                self.builder
-                    .build_phi(initial_value.get_type(), &format!("{}.phi", var_name)),
-            )?;
-            phi.add_incoming(&[(initial_value, current_block)]);
-            phi_nodes.insert(var_name.clone(), (phi, ty.clone()));
-
-            // Replace the variable in locals with the PHI value
-            locals.insert(
-                var_name.clone(),
-                LocalVariable {
-                    pointer: None,
-                    value: Some(phi.as_basic_value()),
-                    ty: ty.clone(),
-                    mutable: true,
-                },
-            );
-        }
 
         // Compile the loop condition
         let cond_value = self
@@ -3229,37 +3206,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             exit_block,
         });
 
-        // Create a map to track the "next" values for PHI variables
-        // Start with the PHI values themselves
-        let mut phi_next_values: HashMap<String, BasicValueEnum<'ctx>> = phi_nodes
-            .iter()
-            .map(|(name, (phi, _))| (name.clone(), phi.as_basic_value()))
-            .collect();
-
-        // Compile each statement in the loop body
-        // We need to track assignments to PHI variables manually
+        // Compile loop body - since mutated variables now use allocas, no PHI tracking needed
         for (idx, stmt) in statement.body.statements.iter().enumerate() {
-            // Before compiling, temporarily update locals to have latest PHI values
-            for (var_name, next_value) in &phi_next_values {
-                if let Some(var) = locals.get_mut(var_name) {
-                    var.value = Some(*next_value);
-                }
-            }
-
-            // Compile the statement
             let is_last = idx == statement.body.statements.len() - 1;
             let terminated =
                 self.compile_statement(stmt, function, locals, return_type, is_last)?;
-
-            // After compiling, check if any PHI variables were assigned
-            for (var_name, (_phi, _ty)) in &phi_nodes {
-                if let Some(var) = locals.get(var_name) {
-                    if let Some(new_value) = var.value {
-                        // Update the "next" value for this PHI variable
-                        phi_next_values.insert(var_name.clone(), new_value);
-                    }
-                }
-            }
 
             if terminated {
                 break;
@@ -3277,18 +3228,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .is_some();
 
         if !body_terminated {
-            let body_end_block = self
-                .builder
-                .get_insert_block()
-                .ok_or_else(|| anyhow!("missing loop body end block"))?;
-
-            // Add the incoming values from the loop body to the PHI nodes
-            for (var_name, (phi, _ty)) in &phi_nodes {
-                let phi_fallback = phi.as_basic_value();
-                let updated_value = phi_next_values.get(var_name).unwrap_or(&phi_fallback);
-                phi.add_incoming(&[(updated_value, body_end_block)]);
-            }
-
             let back_edge = map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
 
             // Add loop metadata for optimization hints
@@ -3296,30 +3235,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
 
         self.builder.position_at_end(exit_block);
-
-        // Restore pointer-based variables after loop (for variables that had pointers)
-        // This allows assignments outside the loop to work correctly
-        // Use the PHI nodes themselves (not the computed values from the loop body)
-        for (var_name, _, ty, was_pointer) in &phi_variables {
-            if *was_pointer {
-                if let Some((phi, _)) = phi_nodes.get(var_name) {
-                    // Allocate stack space and store the final PHI value
-                    let alloca =
-                        self.create_entry_alloca(function, var_name, self.basic_type(ty)?)?;
-                    map_builder_error(self.builder.build_store(alloca, phi.as_basic_value()))?;
-
-                    locals.insert(
-                        var_name.clone(),
-                        LocalVariable {
-                            pointer: Some(alloca),
-                            value: None,
-                            ty: ty.clone(),
-                            mutable: true,
-                        },
-                    );
-                }
-            }
-        }
 
         Ok(false)
     }
@@ -3642,6 +3557,22 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_list_len_ffi", fn_type, Some(Linkage::External));
         self.list_len_ffi_fn = Some(func);
+        func
+    }
+
+    /// Ensure the tea_string_len_ffi FFI function is declared
+    fn ensure_string_len_ffi_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_len_ffi_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .i64_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_string_len_ffi", fn_type, Some(Linkage::External));
+        self.string_len_ffi_fn = Some(func);
         func
     }
 
@@ -6534,28 +6465,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         match &value_expr {
             ExprValue::String(ptr) => {
                 // TeaString: { tag: i8, len: i8, data: [22 x i8] }
-                // Length is in field 1 as i8
-                let string_type = self
-                    .context
-                    .get_struct_type("TeaString")
-                    .ok_or_else(|| anyhow!("TeaString type not found"))?;
-                let len_ptr = map_builder_error(self.builder.build_struct_gep(
-                    string_type,
-                    *ptr,
-                    1,
-                    "len_ptr",
-                ))?;
-                let len_i8 = map_builder_error(self.builder.build_load(
-                    self.context.i8_type(),
-                    len_ptr,
-                    "len_i8",
-                ))?
-                .into_int_value();
-                let length = map_builder_error(self.builder.build_int_z_extend(
-                    len_i8,
-                    self.int_type(),
-                    "len",
-                ))?;
+                // For inline strings (tag=1): length is in field 1 as i8
+                // For heap strings (tag=0): length is in data[8..16] as i64
+                // Use FFI to handle both cases correctly
+                let func = self.ensure_string_len_ffi_fn();
+                let length = self
+                    .call_function(func, &[(*ptr).into()], "tea_string_len_ffi")?
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("tea_string_len_ffi returned no value"))?
+                    .into_int_value();
                 return Ok(ExprValue::Int(length));
             }
             ExprValue::List { pointer: ptr, .. } => {

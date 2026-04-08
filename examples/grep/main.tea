@@ -1,0 +1,229 @@
+## grep - Search for patterns in files
+##
+## A simplified implementation of grep in Tea.
+## Demonstrates regex matching, file I/O, and argument parsing.
+
+use args = "std.args"
+use fs = "std.fs"
+use regex = "std.regex"
+
+## Print usage information
+def print_usage() -> Void
+  @println("Usage: grep [OPTIONS] PATTERN FILE...")
+  @println("")
+  @println("Search for PATTERN in each FILE.")
+  @println("")
+  @println("Options:")
+  @println("  -n, --line-number    Print line numbers")
+  @println("  -i, --ignore-case    Case-insensitive matching")
+  @println("  -H, --with-filename  Print filename with matches")
+  @println("  -h, --help           Show this help message")
+  @println("")
+  @println("Exit status:")
+  @println("  0  Matches found")
+  @println("  1  No matches found")
+  @println("  2  Error occurred")
+end
+
+## Print a matching line with optional decorations
+def print_match(file: String, line_num: Int, line: String, show_lines: Bool, show_file: Bool) -> Void
+  var output = ""
+
+  if show_file
+    output = output + file + ":"
+  end
+
+  if show_lines
+    output = `${output}${@to_string(line_num)}:`
+  end
+
+  output = output + line
+  @println(output)
+end
+
+## Search a single file for matches
+def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) -> Bool
+  # Read the file contents
+  const content = fs.read_file(filepath)
+
+  var found = false
+  var current_line = ""
+  var line_num = 1
+  var i = 0
+
+  while i < @len(content)
+    const char = content[i]
+
+    if char == "\n"
+      # Process completed line
+      if regex.is_match(re, current_line)
+        found = true
+        print_match(filepath, line_num, current_line, show_lines, show_file)
+      end
+
+      current_line = ""
+      line_num = line_num + 1
+    else if char != "\r"
+      current_line = current_line + char
+    end
+
+    i = i + 1
+  end
+
+  # Check last line if not empty
+  if @len(current_line) > 0
+    if regex.is_match(re, current_line)
+      found = true
+      print_match(filepath, line_num, current_line, show_lines, show_file)
+    end
+  end
+
+  return found
+end
+
+# Main program
+
+# Parse options
+const show_line_numbers = args.has("-n") || args.has("--line-number")
+const case_insensitive = args.has("-i") || args.has("--ignore-case")
+const show_filename = args.has("-H") || args.has("--with-filename")
+const show_help = args.has("-h") || args.has("--help")
+
+if show_help
+  print_usage()
+  @exit(0)
+end
+
+# Get all arguments
+const all_args = args.all()
+
+# Find pattern and files by scanning args directly
+# Skip flags and their values
+var pattern = ""
+var pattern_found = false
+var file_count = 0
+var found_match = false
+var skip_next = false
+var ai = 0
+
+# First pass: find pattern
+while ai < @len(all_args)
+  const arg = all_args[ai]
+
+  if skip_next
+    skip_next = false
+  else if @len(arg) > 0 && arg[0] == "-"
+    # Skip flag values for options that take them
+    if ai + 1 < @len(all_args)
+      const next = all_args[ai + 1]
+
+      if @len(next) == 0 || next[0] != "-"
+        skip_next = true
+      end
+    end
+  else
+
+    if not pattern_found
+      pattern = arg
+      pattern_found = true
+    end
+  end
+
+  ai = ai + 1
+end
+
+if not pattern_found
+  @eprintln("grep: missing pattern")
+  print_usage()
+  @exit(2)
+end
+
+# Apply case-insensitive flag if needed
+if case_insensitive
+  pattern = `(?i)${pattern}`
+end
+
+# Compile the regex
+const re = regex.compile(pattern)
+
+# Second pass: count and process files
+skip_next = false
+var past_pattern = false
+ai = 0
+
+while ai < @len(all_args)
+  const arg2 = all_args[ai]
+
+  if skip_next
+    skip_next = false
+  else if @len(arg2) > 0 && arg2[0] == "-"
+    if ai + 1 < @len(all_args)
+      const next2 = all_args[ai + 1]
+
+      if @len(next2) == 0 || next2[0] != "-"
+        skip_next = true
+      end
+    end
+  else
+
+    if past_pattern
+      file_count = file_count + 1
+    else
+      past_pattern = true
+    end
+  end
+
+  ai = ai + 1
+end
+
+if file_count == 0
+  @eprintln("grep: missing file operand")
+  print_usage()
+  @exit(2)
+end
+
+# Determine if we should show filenames
+const multiple_files = file_count > 1 || show_filename
+
+# Third pass: actually process files
+skip_next = false
+past_pattern = false
+ai = 0
+
+while ai < @len(all_args)
+  const arg3 = all_args[ai]
+
+  if skip_next
+    skip_next = false
+  else if @len(arg3) > 0 && arg3[0] == "-"
+    if ai + 1 < @len(all_args)
+      const next3 = all_args[ai + 1]
+
+      if @len(next3) == 0 || next3[0] != "-"
+        skip_next = true
+      end
+    end
+  else
+
+    if past_pattern
+      # This is a file
+      const result = search_file(re, arg3, show_line_numbers, multiple_files)
+
+      if result
+        found_match = true
+      end
+    else
+
+      past_pattern = true
+    end
+  end
+
+  ai = ai + 1
+end
+
+# Exit with appropriate code
+if found_match
+  @exit(0)
+else
+  @exit(1)
+end

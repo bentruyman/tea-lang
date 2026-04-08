@@ -8,14 +8,16 @@ cd "${root_dir}"
 echo "Running tree-sitter grammar tests..."
 (
   cd "${root_dir}/tree-sitter-tea"
-  if [[ ! -d "node_modules" ]]; then
+  # Bun installs workspace dependencies at the repo root in this project, so
+  # a package-local node_modules directory is not a reliable install marker.
+  if [[ ! -x "${root_dir}/node_modules/.bin/tree-sitter" ]]; then
     if ! command -v bun >/dev/null 2>&1; then
       echo "error: bun is required to install tree-sitter dependencies" >&2
       exit 1
     fi
 
     echo "Installing tree-sitter dependencies..."
-    bun install >/tmp/tea-e2e-tree-sitter-install.log 2>&1
+    (cd "${root_dir}" && bun install) >/tmp/tea-e2e-tree-sitter-install.log 2>&1
   fi
 
   bunx tree-sitter test
@@ -56,6 +58,19 @@ while IFS= read -r example; do
       kill "${tea_pid}" 2>/dev/null || true
       wait "${tea_pid}" 2>/dev/null || true
     fi
+    ;;
+  "examples/echo/main.tea")
+    "${tea_bin}" "${example}" hello world >"${log_file}" 2>&1
+    ;;
+  "examples/grep/main.tea")
+    "${tea_bin}" "${example}" "def" "${example}" >"${log_file}" 2>&1
+    ;;
+  "examples/todo/main.tea")
+    # Test todo with init and list
+    TODO_FILE="/tmp/tea-e2e-todo.txt" "${tea_bin}" "${example}" init >"${log_file}" 2>&1
+    TODO_FILE="/tmp/tea-e2e-todo.txt" "${tea_bin}" "${example}" add "Test task" >>"${log_file}" 2>&1
+    TODO_FILE="/tmp/tea-e2e-todo.txt" "${tea_bin}" "${example}" list >>"${log_file}" 2>&1
+    rm -f /tmp/tea-e2e-todo.txt
     ;;
   *)
     "${tea_bin}" "${example}" >"${log_file}" 2>&1

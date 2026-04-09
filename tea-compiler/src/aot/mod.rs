@@ -136,7 +136,6 @@ pub struct ObjectCompileOptions<'a> {
     pub features: Option<&'a str>,
     pub opt_level: OptimizationLevel,
     pub entry_symbol: Option<&'a str>,
-    pub lto: bool,
 }
 
 impl<'a> Default for ObjectCompileOptions<'a> {
@@ -147,7 +146,6 @@ impl<'a> Default for ObjectCompileOptions<'a> {
             features: None,
             opt_level: OptimizationLevel::Aggressive, // O3 by default for maximum performance
             entry_symbol: None,
-            lto: false, // LTO disabled by default (slower compile time)
         }
     }
 }

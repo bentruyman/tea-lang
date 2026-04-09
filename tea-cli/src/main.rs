@@ -674,7 +674,7 @@ fn build_temporary_executable(
         None,
         None,
         &[],
-        object_options.lto,
+        false,
     )?;
 
     let _ = fs::remove_file(&object_path);
@@ -694,7 +694,6 @@ fn object_options_from_cli<'a>(cli: &'a BuildCli) -> Result<ObjectCompileOptions
     if let Some(level) = cli.opt_level.as_deref() {
         options.opt_level = parse_opt_level(level)?;
     }
-    options.lto = cli.lto;
     Ok(options)
 }
 

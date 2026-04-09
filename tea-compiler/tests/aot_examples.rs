@@ -27,12 +27,12 @@ fn llvm_backend_compiles_core_examples() {
             .compile(&source)
             .unwrap_or_else(|err| panic!("compile failed for {}: {err}", path.display()));
 
-        aot::compile_module_to_llvm_ir(&compilation.module)
+        aot::compile_compilation_to_llvm_ir(&compilation)
             .unwrap_or_else(|err| panic!("LLVM codegen failed for {}: {err}", path.display()));
 
         let object_path = temporary_object_path(&path);
-        match aot::compile_module_to_object(
-            &compilation.module,
+        match aot::compile_compilation_to_object(
+            &compilation,
             &object_path,
             &aot::ObjectCompileOptions::default(),
         ) {

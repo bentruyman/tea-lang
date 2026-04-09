@@ -405,7 +405,7 @@ fn run_program(cli: RunCli) -> Result<()> {
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        let ir = aot::compile_module_to_llvm_ir(&compilation.module)?;
+        let ir = aot::compile_compilation_to_llvm_ir(&compilation)?;
         println!("{ir}");
     }
 
@@ -416,8 +416,8 @@ fn run_program(cli: RunCli) -> Result<()> {
                 fs::create_dir_all(parent)?;
             }
         }
-        aot::compile_module_to_object(
-            &compilation.module,
+        aot::compile_compilation_to_object(
+            &compilation,
             &object_path,
             &ObjectCompileOptions::default(),
         )?;
@@ -590,7 +590,7 @@ fn build_with_llvm(
 
     let object_path = object_path_for_output(output);
     if let Err(err) =
-        aot::compile_module_to_object(&compilation.module, &object_path, &object_options)
+        aot::compile_compilation_to_object(&compilation, &object_path, &object_options)
     {
         if err
             .to_string()
@@ -609,7 +609,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        let ir = aot::compile_module_to_llvm_ir(&compilation.module)?;
+        let ir = aot::compile_compilation_to_llvm_ir(&compilation)?;
         println!("{ir}");
     }
 
@@ -656,7 +656,7 @@ fn build_temporary_executable(
 
     let mut object_path = output.to_path_buf();
     object_path.set_extension(object_extension());
-    aot::compile_module_to_object(&compilation.module, &object_path, &object_options)?;
+    aot::compile_compilation_to_object(compilation, &object_path, &object_options)?;
 
     let stub_path = object_path.with_extension("stub.rs");
     fs::write(&stub_path, STUB_SOURCE)?;

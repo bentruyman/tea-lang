@@ -1,6 +1,8 @@
+mod analysis;
 mod ast;
 mod compiler;
 mod diagnostics;
+mod expansion;
 mod formatter;
 mod lexer;
 mod parser;
@@ -9,6 +11,7 @@ mod source;
 mod stdlib;
 mod typechecker;
 
+pub use crate::analysis::SemanticAnalysis;
 pub use crate::ast::{
     AssignmentExpression, BinaryExpression, BinaryOperator, Block, BreakStatement, CallExpression,
     CatchArm, CatchClause, CatchHandler, CatchKind, ConditionalKind, ConditionalStatement,
@@ -22,8 +25,9 @@ pub use crate::ast::{
     TryExpression, TypeExpression, UnaryExpression, UnaryOperator, UseStatement, VarBinding,
     VarStatement,
 };
-pub use crate::compiler::{Compilation, CompileOptions, Compiler};
+pub use crate::compiler::{Compilation, CompileOptions, Compiler, ParsedModule, ResolvedModule};
 pub use crate::diagnostics::{Diagnostic, DiagnosticLevel, Diagnostics};
+pub use crate::expansion::ExpandedModule;
 pub use crate::formatter::format_source;
 pub use crate::lexer::{Keyword, Lexer, Token, TokenKind};
 pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};

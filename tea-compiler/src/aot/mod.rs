@@ -18,6 +18,7 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
 pub type OptimizationLevel = inkwell::OptimizationLevel;
 
+use crate::analysis::SemanticAnalysis;
 use crate::ast::{
     BinaryExpression, BinaryOperator, CallExpression, CatchHandler, CatchKind,
     ConditionalExpression, ConditionalStatement, Expression, ExpressionKind, ForPattern,
@@ -26,7 +27,7 @@ use crate::ast::{
     ReturnStatement, SourceSpan, Statement, ThrowStatement, TryExpression, TypeExpression,
     UseStatement, VarStatement,
 };
-use crate::resolver::{Resolver, ResolverOutput};
+use crate::compiler::{Compilation, CompileOptions, Compiler};
 use crate::stdlib::{self, StdFunctionKind};
 
 mod helpers;
@@ -35,7 +36,6 @@ mod types;
 
 use crate::typechecker::{
     ErrorDefinition, FunctionInstance, StructDefinition, StructInstance, StructType, Type,
-    TypeChecker,
 };
 use helpers::{add_function_attr, build_tea_value, LoopMetadataBuilder, TeaValueTag};
 use intrinsics::Intrinsic;
@@ -58,74 +58,56 @@ struct SemanticMetadata {
     type_test_metadata: HashMap<SourceSpan, Type>,
 }
 
-fn collect_semantic_metadata(module_ast: &AstModule) -> Result<SemanticMetadata> {
-    let mut resolver = Resolver::new();
-    resolver.resolve_module(module_ast);
-    let ResolverOutput {
-        diagnostics: resolve_diagnostics,
-        lambda_captures,
-        ..
-    } = resolver.into_parts();
-    if resolve_diagnostics.has_errors() {
-        bail!("Name resolution failed for LLVM lowering");
-    }
+impl SemanticMetadata {
+    fn from_analysis(analysis: &SemanticAnalysis) -> Result<Self> {
+        let mut lambda_signatures = HashMap::new();
+        for (id, ty) in analysis.lambda_types() {
+            let Type::Function(params, return_type) = ty else {
+                bail!("lambda {id} did not resolve to a function type");
+            };
 
-    let mut type_checker = TypeChecker::new();
-    type_checker.check_module(module_ast);
-    let lambda_types = type_checker.lambda_types().clone();
-    let struct_definitions = type_checker.struct_definitions();
-    let error_definitions = type_checker.error_definitions();
-    let function_instances = type_checker.function_instances().clone();
-    let struct_instances = type_checker.struct_instances().clone();
-    let function_call_metadata = type_checker.function_call_metadata().clone();
-    let struct_call_metadata = type_checker.struct_call_metadata().clone();
-    let binding_types = type_checker.binding_types().clone();
-    let type_test_metadata = type_checker.type_test_metadata().clone();
-    let type_diagnostics = type_checker.into_diagnostics();
-    if type_diagnostics.has_errors() {
-        bail!("Type checking failed for LLVM lowering");
-    }
-
-    let mut lambda_signatures = HashMap::new();
-    for (id, ty) in lambda_types {
-        let Type::Function(params, return_type) = ty else {
-            bail!("lambda {id} did not resolve to a function type");
-        };
-
-        let mut lowered_params = Vec::with_capacity(params.len());
-        for param in params {
-            lowered_params.push(type_to_value_type(&param)?);
+            let mut lowered_params = Vec::with_capacity(params.len());
+            for param in params {
+                lowered_params.push(type_to_value_type(param)?);
+            }
+            let lowered_return = type_to_value_type(return_type)?;
+            lambda_signatures.insert(
+                *id,
+                LambdaSignature {
+                    param_types: lowered_params,
+                    return_type: lowered_return,
+                },
+            );
         }
-        let lowered_return = type_to_value_type(&return_type)?;
-        lambda_signatures.insert(
-            id,
-            LambdaSignature {
-                param_types: lowered_params,
-                return_type: lowered_return,
-            },
-        );
-    }
 
-    Ok(SemanticMetadata {
-        lambda_captures,
-        lambda_signatures,
-        struct_definitions,
-        error_definitions,
-        function_instances,
-        struct_instances,
-        function_call_metadata,
-        struct_call_metadata,
-        binding_types,
-        type_test_metadata,
-    })
+        Ok(Self {
+            lambda_captures: analysis.lambda_captures().clone(),
+            lambda_signatures,
+            struct_definitions: analysis.struct_definitions().clone(),
+            error_definitions: analysis.error_definitions().clone(),
+            function_instances: analysis.function_instances().clone(),
+            struct_instances: analysis.struct_instances().clone(),
+            function_call_metadata: analysis.function_call_metadata().clone(),
+            struct_call_metadata: analysis.struct_call_metadata().clone(),
+            binding_types: analysis.typed_binding_types().clone(),
+            type_test_metadata: analysis.typed_type_test_metadata().clone(),
+        })
+    }
 }
 
-pub fn compile_module_to_llvm_ir(module_ast: &AstModule) -> Result<String> {
+pub fn compile_compilation_to_llvm_ir(compilation: &Compilation) -> Result<String> {
+    compile_module_to_llvm_ir_with_analysis(&compilation.module, &compilation.analysis)
+}
+
+fn compile_module_to_llvm_ir_with_analysis(
+    module_ast: &AstModule,
+    analysis: &SemanticAnalysis,
+) -> Result<String> {
     let context = Context::create();
     let module = context.create_module("tea_module");
     let builder = context.create_builder();
 
-    let metadata = collect_semantic_metadata(module_ast)?;
+    let metadata = SemanticMetadata::from_analysis(analysis)?;
     let mut generator = LlvmCodeGenerator::new(&context, module, builder, metadata);
     generator.compile(module_ast)?;
     let module = generator.into_module();
@@ -267,8 +249,6 @@ pub fn compile_source_to_object(
     output_path: &std::path::Path,
     options: &ObjectCompileOptions<'_>,
 ) -> Result<()> {
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
     use crate::source::{SourceFile, SourceId};
     use std::fs;
 
@@ -276,17 +256,27 @@ pub fn compile_source_to_object(
         .with_context(|| format!("failed to read source file: {}", source_path.display()))?;
 
     let source = SourceFile::new(SourceId(0), source_path.to_path_buf(), source_code);
-    let mut lexer = Lexer::new(&source)?;
-    let tokens = lexer.tokenize()?;
-
-    let mut parser = Parser::new(&source, tokens);
-    let module_ast = parser.parse()?;
-
-    compile_module_to_object(&module_ast, output_path, options)
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let compilation = compiler.compile(&source)?;
+    compile_compilation_to_object(&compilation, output_path, options)
 }
 
-pub fn compile_module_to_object(
+pub fn compile_compilation_to_object(
+    compilation: &Compilation,
+    output_path: &std::path::Path,
+    options: &ObjectCompileOptions<'_>,
+) -> Result<()> {
+    compile_module_to_object_with_analysis(
+        &compilation.module,
+        &compilation.analysis,
+        output_path,
+        options,
+    )
+}
+
+fn compile_module_to_object_with_analysis(
     module_ast: &AstModule,
+    analysis: &SemanticAnalysis,
     output_path: &std::path::Path,
     options: &ObjectCompileOptions<'_>,
 ) -> Result<()> {
@@ -294,7 +284,7 @@ pub fn compile_module_to_object(
     let module = context.create_module("tea_module");
     let builder = context.create_builder();
 
-    let metadata = collect_semantic_metadata(module_ast)?;
+    let metadata = SemanticMetadata::from_analysis(analysis)?;
     let mut generator = LlvmCodeGenerator::new(&context, module, builder, metadata);
     generator.compile(module_ast)?;
     let module = generator.into_module();

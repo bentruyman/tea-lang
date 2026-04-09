@@ -130,13 +130,7 @@ end
 "#,
         );
 
-        let analysis = collect_symbols(
-            &compilation.module,
-            &compilation.module_aliases,
-            &compilation.binding_types,
-            &compilation.argument_types,
-            &compilation.match_exhaustiveness,
-        );
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
 
         let assert_binding = analysis
             .module_aliases
@@ -175,13 +169,7 @@ end
 "#,
         );
 
-        let analysis = collect_symbols(
-            &compilation.module,
-            &compilation.module_aliases,
-            &compilation.binding_types,
-            &compilation.argument_types,
-            &compilation.match_exhaustiveness,
-        );
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
 
         let flag_symbol = analysis
             .symbols
@@ -206,13 +194,7 @@ struct Team {
 "#,
         );
 
-        let analysis = collect_symbols(
-            &compilation.module,
-            &compilation.module_aliases,
-            &compilation.binding_types,
-            &compilation.argument_types,
-            &compilation.match_exhaustiveness,
-        );
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
 
         let team_info = analysis
             .structs
@@ -255,13 +237,7 @@ end
 "#,
         );
 
-        let analysis = collect_symbols(
-            &compilation.module,
-            &compilation.module_aliases,
-            &compilation.binding_types,
-            &compilation.argument_types,
-            &compilation.match_exhaustiveness,
-        );
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
 
         let team_symbol = analysis
             .symbols
@@ -296,13 +272,7 @@ end
 "#,
         );
 
-        let analysis = collect_symbols(
-            &compilation.module,
-            &compilation.module_aliases,
-            &compilation.binding_types,
-            &compilation.argument_types,
-            &compilation.match_exhaustiveness,
-        );
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
 
         // Check dict iteration variables
         let key_symbol = analysis
@@ -806,31 +776,11 @@ impl TeaLanguageServer {
     }
 }
 
-fn collect_symbols(
-    module: &Module,
-    module_aliases: &HashMap<String, ModuleAliasBinding>,
-    binding_types: &HashMap<tea_compiler::SourceSpan, String>,
-    argument_types: &HashMap<tea_compiler::SourceSpan, String>,
-    match_exhaustiveness: &HashMap<tea_compiler::SourceSpan, Vec<String>>,
-) -> DocumentAnalysis {
-    let mut alias_bindings = module_aliases.clone();
-    for binding in alias_bindings.values_mut() {
-        if binding.module_path.starts_with("std.") {
-            if let Some(module) = tea_compiler::stdlib_find_module(&binding.module_path) {
-                if binding.docstring.is_none() && !module.docstring.is_empty() {
-                    binding.docstring = Some(module.docstring.to_string());
-                }
-                for function in module.functions {
-                    if !function.docstring.is_empty() {
-                        binding
-                            .export_docs
-                            .entry(function.name.to_string())
-                            .or_insert_with(|| function.docstring.to_string());
-                    }
-                }
-            }
-        }
-    }
+fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -> DocumentAnalysis {
+    let alias_bindings = analysis.module_aliases().clone();
+    let binding_types = analysis.binding_type_descriptions();
+    let argument_types = analysis.argument_type_descriptions();
+    let match_exhaustiveness = analysis.match_exhaustiveness();
 
     struct Collector<'a> {
         symbols: Vec<SymbolInfo>,
@@ -2098,13 +2048,7 @@ impl TeaLanguageServer {
 
         let output = match compile_result {
             Ok(compilation) => {
-                let analysis = collect_symbols(
-                    &compilation.module,
-                    &compilation.module_aliases,
-                    &compilation.binding_types,
-                    &compilation.argument_types,
-                    &compilation.match_exhaustiveness,
-                );
+                let analysis = collect_symbols(&compilation.module, &compilation.analysis);
                 BlockingCompileOutput {
                     analysis: Some(analysis),
                     dependencies: collect_dependencies(&source.path, &compilation.module),

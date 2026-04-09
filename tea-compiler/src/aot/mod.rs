@@ -234,7 +234,7 @@ fn optimize_module_with_opt<'ctx>(
         optimized_ir.push('\n');
     }
 
-    let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
+    let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(
         optimized_ir.as_bytes(),
         "optimized_ir",
     );

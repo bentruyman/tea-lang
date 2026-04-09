@@ -29,6 +29,45 @@ end
     "end"))
 
 ================================================================================
+Loops
+================================================================================
+
+for item in items
+  total = total + item
+end
+
+for key, value in entries
+  log(key, value)
+end
+--------------------------------------------------------------------------------
+(source_file
+  (for_statement
+    pattern: (identifier)
+    iterator: (identifier)
+    body: (block
+      (expression_statement
+        (assignment
+          left: (identifier)
+          right: (binary_expression
+            left: (identifier)
+            operator: "+"
+            right: (identifier)))))
+    "end")
+  (for_statement
+    pattern: (for_pair_pattern
+      key: (identifier)
+      value: (identifier))
+    iterator: (identifier)
+    body: (block
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (argument (identifier))
+            (argument (identifier))))))
+    "end"))
+
+================================================================================
 Error Declarations
 ================================================================================
 

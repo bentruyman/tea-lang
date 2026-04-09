@@ -50,7 +50,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "unless_statement"
+          "name": "for_statement"
         },
         {
           "type": "SYMBOL",
@@ -58,7 +58,11 @@
         },
         {
           "type": "SYMBOL",
-          "name": "until_statement"
+          "name": "break_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "continue_statement"
         },
         {
           "type": "SYMBOL",
@@ -123,18 +127,6 @@
     "const_declaration": {
       "type": "SEQ",
       "members": [
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "pub"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
         {
           "type": "STRING",
           "value": "const"
@@ -350,18 +342,6 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "pub"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
           "type": "STRING",
           "value": "struct"
         },
@@ -439,18 +419,6 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "pub"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
           "type": "STRING",
           "value": "union"
         },
@@ -494,18 +462,6 @@
     "enum_definition": {
       "type": "SEQ",
       "members": [
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "pub"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
         {
           "type": "STRING",
           "value": "enum"
@@ -578,18 +534,6 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "STRING",
-                    "value": "pub"
-                  },
-                  {
-                    "type": "BLANK"
-                  }
-                ]
-              },
-              {
                 "type": "STRING",
                 "value": "error"
               },
@@ -615,18 +559,6 @@
         {
           "type": "SEQ",
           "members": [
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "pub"
-                },
-                {
-                  "type": "BLANK"
-                }
-              ]
-            },
             {
               "type": "STRING",
               "value": "error"
@@ -1271,16 +1203,28 @@
         }
       ]
     },
-    "unless_statement": {
+    "for_statement": {
       "type": "SEQ",
       "members": [
         {
           "type": "STRING",
-          "value": "unless"
+          "value": "for"
         },
         {
           "type": "FIELD",
-          "name": "condition",
+          "name": "pattern",
+          "content": {
+            "type": "SYMBOL",
+            "name": "for_pattern"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "in"
+        },
+        {
+          "type": "FIELD",
+          "name": "iterator",
           "content": {
             "type": "SYMBOL",
             "name": "_expression"
@@ -1297,6 +1241,44 @@
         {
           "type": "STRING",
           "value": "end"
+        }
+      ]
+    },
+    "for_pattern": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "for_pair_pattern"
+        }
+      ]
+    },
+    "for_pair_pattern": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "key",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": ","
+        },
+        {
+          "type": "FIELD",
+          "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
         }
       ]
     },
@@ -1329,34 +1311,13 @@
         }
       ]
     },
-    "until_statement": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "until"
-        },
-        {
-          "type": "FIELD",
-          "name": "condition",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_expression"
-          }
-        },
-        {
-          "type": "FIELD",
-          "name": "body",
-          "content": {
-            "type": "SYMBOL",
-            "name": "block"
-          }
-        },
-        {
-          "type": "STRING",
-          "value": "end"
-        }
-      ]
+    "break_statement": {
+      "type": "STRING",
+      "value": "break"
+    },
+    "continue_statement": {
+      "type": "STRING",
+      "value": "continue"
     },
     "match_statement": {
       "type": "SEQ",

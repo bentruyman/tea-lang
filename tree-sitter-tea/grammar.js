@@ -42,10 +42,8 @@ module.exports = grammar({
         $.enum_definition,
         $.error_definition,
         $.if_statement,
-        $.unless_statement,
         $.for_statement,
         $.while_statement,
-        $.until_statement,
         $.break_statement,
         $.continue_statement,
         $.test_block,
@@ -65,7 +63,6 @@ module.exports = grammar({
 
     const_declaration: ($) =>
       seq(
-        optional("pub"),
         "const",
         field("name", $.identifier),
         optional(seq(":", field("type", $.type_annotation))),
@@ -97,7 +94,6 @@ module.exports = grammar({
 
     struct_definition: ($) =>
       seq(
-        optional("pub"),
         "struct",
         field("name", $.identifier),
         optional(field("type_parameters", $.type_parameters)),
@@ -111,7 +107,6 @@ module.exports = grammar({
 
     union_definition: ($) =>
       seq(
-        optional("pub"),
         "union",
         field("name", $.identifier),
         "{",
@@ -123,7 +118,6 @@ module.exports = grammar({
 
     enum_definition: ($) =>
       seq(
-        optional("pub"),
         "enum",
         field("name", $.identifier),
         optional(field("type_parameters", $.type_parameters)),
@@ -139,13 +133,12 @@ module.exports = grammar({
         prec.dynamic(
           1,
           seq(
-            optional("pub"),
             "error",
             field("name", $.identifier),
             field("variants", $.error_variant_block),
           ),
         ),
-        seq(optional("pub"), "error", field("name", $.identifier)),
+        seq("error", field("name", $.identifier)),
       ),
 
     error_variant_block: ($) =>
@@ -210,35 +203,24 @@ module.exports = grammar({
         "end",
       ),
 
-    unless_statement: ($) =>
-      seq(
-        "unless",
-        field("condition", $._expression),
-        field("body", $.block),
-        "end",
-      ),
-
     for_statement: ($) =>
       seq(
         "for",
-        field("pattern", $.identifier),
-        "of",
+        field("pattern", $.for_pattern),
+        "in",
         field("iterator", $._expression),
         field("body", $.block),
         "end",
       ),
 
+    for_pattern: ($) => choice($.identifier, $.for_pair_pattern),
+
+    for_pair_pattern: ($) =>
+      seq(field("key", $.identifier), ",", field("value", $.identifier)),
+
     while_statement: ($) =>
       seq(
         "while",
-        field("condition", $._expression),
-        field("body", $.block),
-        "end",
-      ),
-
-    until_statement: ($) =>
-      seq(
-        "until",
         field("condition", $._expression),
         field("body", $.block),
         "end",

@@ -14,10 +14,8 @@ statement = use_statement
           | enum_definition
           | error_definition
           | if_statement
-          | unless_statement
           | for_statement
           | while_statement
-          | until_statement
           | break_statement
           | continue_statement
           | test_block
@@ -31,7 +29,7 @@ statement = use_statement
 
 use_statement = "use" identifier "=" ( string | template_string ) ;
 
-const_declaration = [ "pub" ] "const" identifier [ ":" type_annotation ] "=" expression ;
+const_declaration = "const" identifier [ ":" type_annotation ] "=" expression ;
 
 var_declaration = "var" identifier [ ":" type_annotation ] "=" expression ;
 
@@ -44,7 +42,7 @@ function_definition = [ "pub" ] "def" identifier
                       "end"
                       ;
 
-struct_definition = [ "pub" ] "struct" identifier
+struct_definition = "struct" identifier
                     [ type_parameters ]
                     "{"
                     { struct_field }
@@ -53,7 +51,7 @@ struct_definition = [ "pub" ] "struct" identifier
 
 struct_field = identifier ":" type_annotation ;
 
-union_definition = [ "pub" ] "union" identifier
+union_definition = "union" identifier
                    "{"
                    { union_member }
                    "}"
@@ -61,7 +59,7 @@ union_definition = [ "pub" ] "union" identifier
 
 union_member = type_annotation ;
 
-enum_definition = [ "pub" ] "enum" identifier
+enum_definition = "enum" identifier
                   [ type_parameters ]
                   "{"
                   { enum_variant }
@@ -70,7 +68,7 @@ enum_definition = [ "pub" ] "enum" identifier
 
 enum_variant = identifier ;
 
-error_definition = [ "pub" ] "error" identifier [ error_variant_block ] ;
+error_definition = "error" identifier [ error_variant_block ] ;
 
 error_variant_block = "{" { error_variant } "}" ;
 
@@ -102,13 +100,11 @@ error_type = identifier [ "." identifier ] ;
 
 if_statement = "if" expression block [ "else" block ] "end" ;
 
-unless_statement = "unless" expression block "end" ;
+for_statement = "for" for_pattern "in" expression block "end" ;
 
-for_statement = "for" ( identifier | identifier "," identifier ) "of" expression block "end" ;
+for_pattern = identifier | identifier "," identifier ;
 
 while_statement = "while" expression block "end" ;
-
-until_statement = "until" expression block "end" ;
 
 break_statement = "break" ;
 

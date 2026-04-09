@@ -99,7 +99,6 @@ pub enum Keyword {
     Catch,
     Throw,
     For,
-    Of,
     While,
     Break,
     Continue,
@@ -1225,7 +1224,6 @@ fn keyword_from_lexeme(lexeme: &str) -> Option<Keyword> {
         "catch" => Some(Keyword::Catch),
         "throw" => Some(Keyword::Throw),
         "for" => Some(Keyword::For),
-        "of" => Some(Keyword::Of),
         "while" => Some(Keyword::While),
         "break" => Some(Keyword::Break),
         "continue" => Some(Keyword::Continue),
@@ -1314,5 +1312,16 @@ mod tests {
         assert_eq!(builtin_ids[0].lexeme, "@print");
         assert_eq!(regular_ids[1].lexeme, "foo");
         assert_eq!(builtin_ids[1].lexeme, "@foo");
+    }
+
+    #[test]
+    fn test_in_keyword_and_of_identifier() {
+        let source = SourceFile::new(SourceId(0), PathBuf::from("test.tea"), "in of".to_string());
+        let mut lexer = Lexer::new(&source).unwrap();
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Keyword(Keyword::In)));
+        assert!(matches!(tokens[1].kind, TokenKind::Identifier));
+        assert_eq!(tokens[1].lexeme, "of");
     }
 }

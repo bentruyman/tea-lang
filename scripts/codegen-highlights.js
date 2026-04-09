@@ -33,8 +33,12 @@ function generateHighlights() {
 
   // Generate contextual keywords
   tokens.tree_sitter.contextual_keywords.forEach(({ node, keyword }) => {
-    lines.push(`(${node}`);
-    lines.push(`  "${keyword}" @keyword)`);
+    if (keyword) {
+      lines.push(`(${node}`);
+      lines.push(`  "${keyword}" @keyword)`);
+    } else {
+      lines.push(`(${node}) @keyword`);
+    }
     lines.push("");
   });
 

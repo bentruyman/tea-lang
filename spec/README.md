@@ -1,6 +1,9 @@
 # Tea Language Specification
 
-This directory contains the canonical specifications for the Tea programming language. These files serve as the single source of truth for language structure and are used to generate code for various tools.
+This directory contains the maintained language specifications for Tea. These
+files document the intended surface syntax and feed some generated tooling, but
+the compiler, tree-sitter grammar, and docs still need to be kept in sync when
+the language changes.
 
 ## Files
 
@@ -60,9 +63,10 @@ See [docs/explanation/compiler-codegen.md](../docs/explanation/compiler-codegen.
 
 These specifications embody the principle that language design decisions should be:
 
-- **Documented once** in a canonical location
+- **Documented clearly** in a maintained reference location
 - **Machine-readable** for automation
 - **Version-controlled** alongside code
 - **Validated** through generated tests
 
-This approach ensures consistency across the compiler, tree-sitter grammar, LSP, and documentation.
+This approach helps keep the compiler, tree-sitter grammar, LSP, and
+documentation aligned.

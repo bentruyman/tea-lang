@@ -97,12 +97,20 @@ impl SemanticMetadata {
 }
 
 pub fn compile_compilation_to_llvm_ir(compilation: &Compilation) -> Result<String> {
-    compile_module_to_llvm_ir_with_analysis(&compilation.module, &compilation.analysis)
+    compile_compilation_to_llvm_ir_with_options(compilation, &ObjectCompileOptions::default())
+}
+
+pub fn compile_compilation_to_llvm_ir_with_options(
+    compilation: &Compilation,
+    options: &ObjectCompileOptions<'_>,
+) -> Result<String> {
+    compile_module_to_llvm_ir_with_analysis(&compilation.module, &compilation.analysis, options)
 }
 
 fn compile_module_to_llvm_ir_with_analysis(
     module_ast: &AstModule,
     analysis: &SemanticAnalysis,
+    options: &ObjectCompileOptions<'_>,
 ) -> Result<String> {
     let context = Context::create();
     let module = context.create_module("tea_module");
@@ -115,6 +123,10 @@ fn compile_module_to_llvm_ir_with_analysis(
     module
         .verify()
         .map_err(|e| anyhow!(format!("LLVM verification failed: {e}")))?;
+
+    let target_machine = configure_module_for_target(&module, options)?;
+    optimize_module_with_passes(&module, &target_machine, options.opt_level)?;
+
     Ok(module.print_to_string().to_string())
 }
 
@@ -165,6 +177,56 @@ fn optimize_module_with_passes(
         .map_err(|e| anyhow!("failed to run LLVM pass pipeline '{pass_pipeline}': {e}"))
 }
 
+fn configure_module_for_target(
+    module: &LlvmModule<'_>,
+    options: &ObjectCompileOptions<'_>,
+) -> Result<TargetMachine> {
+    Target::initialize_all(&InitializationConfig::default());
+
+    let raw_triple = options.triple.map(str::to_string).unwrap_or_else(|| {
+        TargetMachine::get_default_triple()
+            .as_str()
+            .to_str()
+            .unwrap_or("unknown-unknown-unknown")
+            .to_string()
+    });
+    let triple_str = normalize_target_triple(&raw_triple);
+    let target_triple = TargetTriple::create(&triple_str);
+    module.set_triple(&target_triple);
+
+    let target = Target::from_triple(&target_triple).map_err(|e| {
+        anyhow!(format!(
+            "failed to lookup target triple '{triple_str}': {e}"
+        ))
+    })?;
+
+    let cpu = options.cpu.unwrap_or("generic");
+    let features = options.features.unwrap_or("");
+    let opt_level = options.opt_level;
+
+    let reloc_mode = if triple_str.contains("windows") {
+        RelocMode::Default
+    } else {
+        RelocMode::PIC
+    };
+
+    let target_machine = target
+        .create_target_machine(
+            &target_triple,
+            cpu,
+            features,
+            opt_level,
+            reloc_mode,
+            CodeModel::Default,
+        )
+        .ok_or_else(|| anyhow!("failed to create target machine for '{triple_str}'"))?;
+
+    let data_layout = target_machine.get_target_data().get_data_layout();
+    module.set_data_layout(&data_layout);
+
+    Ok(target_machine)
+}
+
 pub fn compile_source_to_object(
     source_path: &std::path::Path,
     output_path: &std::path::Path,
@@ -212,51 +274,8 @@ fn compile_module_to_object_with_analysis(
     module
         .verify()
         .map_err(|e| anyhow!(format!("LLVM verification failed: {e}")))?;
-
-    Target::initialize_all(&InitializationConfig::default());
-
-    let raw_triple = options.triple.map(str::to_string).unwrap_or_else(|| {
-        TargetMachine::get_default_triple()
-            .as_str()
-            .to_str()
-            .unwrap_or("unknown-unknown-unknown")
-            .to_string()
-    });
-    let triple_str = normalize_target_triple(&raw_triple);
-    let target_triple = TargetTriple::create(&triple_str);
-    module.set_triple(&target_triple);
-
-    let target = Target::from_triple(&target_triple).map_err(|e| {
-        anyhow!(format!(
-            "failed to lookup target triple '{triple_str}': {e}"
-        ))
-    })?;
-
-    let cpu = options.cpu.unwrap_or("generic");
-    let features = options.features.unwrap_or("");
-    let opt_level = options.opt_level;
-
-    let reloc_mode = if triple_str.contains("windows") {
-        RelocMode::Default
-    } else {
-        RelocMode::PIC
-    };
-
-    let target_machine = target
-        .create_target_machine(
-            &target_triple,
-            cpu,
-            features,
-            opt_level,
-            reloc_mode,
-            CodeModel::Default,
-        )
-        .ok_or_else(|| anyhow!("failed to create target machine"))?;
-
-    let data_layout = target_machine.get_target_data().get_data_layout();
-    module.set_data_layout(&data_layout);
-
-    optimize_module_with_passes(&module, &target_machine, opt_level)?;
+    let target_machine = configure_module_for_target(&module, options)?;
+    optimize_module_with_passes(&module, &target_machine, options.opt_level)?;
 
     if let Some(symbol) = options.entry_symbol {
         if let Some(main_fn) = module.get_function("main") {

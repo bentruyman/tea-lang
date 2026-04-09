@@ -405,7 +405,10 @@ fn run_program(cli: RunCli) -> Result<()> {
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        let ir = aot::compile_compilation_to_llvm_ir(&compilation)?;
+        let ir = aot::compile_compilation_to_llvm_ir_with_options(
+            &compilation,
+            &ObjectCompileOptions::default(),
+        )?;
         println!("{ir}");
     }
 
@@ -609,7 +612,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        let ir = aot::compile_compilation_to_llvm_ir(&compilation)?;
+        let ir = aot::compile_compilation_to_llvm_ir_with_options(&compilation, &object_options)?;
         println!("{ir}");
     }
 

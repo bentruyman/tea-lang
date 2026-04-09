@@ -6,6 +6,7 @@ use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module as LlvmModule};
+use inkwell::passes::PassBuilderOptions;
 use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
@@ -139,109 +140,29 @@ impl<'a> Default for ObjectCompileOptions<'a> {
     }
 }
 
-/// Run LLVM optimization passes on the module using the opt tool
-/// This is CRITICAL for function inlining to work with alwaysinline attribute
-fn optimize_module_with_opt<'ctx>(
-    context: &'ctx Context,
-    module: LlvmModule<'ctx>,
+/// Run LLVM optimization passes in-process using LLVM's new pass manager.
+fn optimize_module_with_passes(
+    module: &LlvmModule<'_>,
+    target_machine: &TargetMachine,
     opt_level: OptimizationLevel,
-) -> Result<LlvmModule<'ctx>> {
-    // Skip optimization for level 0
+) -> Result<()> {
     if matches!(opt_level, OptimizationLevel::None) {
-        return Ok(module);
+        return Ok(());
     }
 
-    // Determine the opt level flag
-    let opt_flag = match opt_level {
-        OptimizationLevel::None => return Ok(module),
-        OptimizationLevel::Less => "-O1",
-        OptimizationLevel::Default => "-O2",
-        OptimizationLevel::Aggressive => "-O3",
+    let pass_pipeline = match opt_level {
+        OptimizationLevel::None => return Ok(()),
+        OptimizationLevel::Less => "default<O1>",
+        OptimizationLevel::Default => "default<O2>",
+        OptimizationLevel::Aggressive => "default<O3>",
     };
 
-    // Get the IR as a string
-    let ir_string = module.print_to_string().to_string();
+    let pass_options = PassBuilderOptions::create();
+    pass_options.set_verify_each(true);
 
-    // Try to find the opt tool
-    // Use LLVM 17 to match inkwell's version
-    let opt_paths = [
-        "/opt/homebrew/opt/llvm@17/bin/opt", // Homebrew LLVM 17 on Apple Silicon (matches inkwell)
-        "/usr/local/opt/llvm@17/bin/opt",    // Homebrew LLVM 17 on Intel Mac
-        "/opt/homebrew/opt/llvm/bin/opt",    // Homebrew on Apple Silicon (fallback)
-        "/usr/local/opt/llvm/bin/opt",       // Homebrew on Intel Mac (fallback)
-        "/usr/bin/opt",                      // Linux system install
-        "opt",                               // In PATH
-    ];
-
-    let mut opt_path = None;
-    for path in &opt_paths {
-        if Command::new(path).arg("--version").output().is_ok() {
-            opt_path = Some(*path);
-            break;
-        }
-    }
-
-    let opt_tool = match opt_path {
-        Some(path) => path,
-        None => {
-            // If opt tool is not found, just return the module
-            // WARNING: Without opt, function inlining (alwaysinline) will NOT work!
-            // This will result in significantly slower binaries.
-            eprintln!("Warning: LLVM opt tool not found. Function inlining disabled.");
-            eprintln!("Install LLVM 17 for optimal performance: brew install llvm@17");
-            return Ok(module);
-        }
-    };
-
-    // Run opt on the IR to perform optimizations including function inlining
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    let mut child = Command::new(opt_tool)
-        .arg(opt_flag)
-        .arg("-S") // Output textual IR
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| format!("failed to spawn opt process at {}", opt_tool))?;
-
-    // Write IR to stdin and explicitly close it
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(ir_string.as_bytes())
-            .context("failed to write IR to opt stdin")?;
-        // stdin is dropped here, closing the pipe
-    } else {
-        bail!("failed to open stdin for opt");
-    }
-
-    let output = child
-        .wait_with_output()
-        .context("failed to wait for opt process")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("opt failed: {}", stderr);
-    }
-
-    // Parse the optimized IR back into a module
-    let mut optimized_ir =
-        String::from_utf8(output.stdout).context("opt output was not valid UTF-8")?;
-
-    // Ensure the IR ends with a newline to avoid parsing issues
-    if !optimized_ir.ends_with('\n') {
-        optimized_ir.push('\n');
-    }
-
-    let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(
-        optimized_ir.as_bytes(),
-        "optimized_ir",
-    );
-
-    context
-        .create_module_from_ir(memory_buffer)
-        .map_err(|e| anyhow!("failed to parse optimized IR: {}", e))
+    module
+        .run_passes(pass_pipeline, target_machine, pass_options)
+        .map_err(|e| anyhow!("failed to run LLVM pass pipeline '{pass_pipeline}': {e}"))
 }
 
 pub fn compile_source_to_object(
@@ -292,9 +213,6 @@ fn compile_module_to_object_with_analysis(
         .verify()
         .map_err(|e| anyhow!(format!("LLVM verification failed: {e}")))?;
 
-    // Run LLVM IR optimizations
-    let module = optimize_module_with_opt(&context, module, options.opt_level)?;
-
     Target::initialize_all(&InitializationConfig::default());
 
     let raw_triple = options.triple.map(str::to_string).unwrap_or_else(|| {
@@ -338,6 +256,8 @@ fn compile_module_to_object_with_analysis(
     let data_layout = target_machine.get_target_data().get_data_layout();
     module.set_data_layout(&data_layout);
 
+    optimize_module_with_passes(&module, &target_machine, opt_level)?;
+
     if let Some(symbol) = options.entry_symbol {
         if let Some(main_fn) = module.get_function("main") {
             main_fn.as_global_value().set_name(symbol);
@@ -350,10 +270,6 @@ fn compile_module_to_object_with_analysis(
         }
     }
 
-    // Always emit regular object files
-    // Note: Function inlining with alwaysinline attribute happens during code generation
-    // at the optimization level specified. LLVM 17+ moved to a new PassManager API
-    // which is more complex. For now, we rely on the optimization level set on target_machine.
     target_machine
         .write_to_file(&module, FileType::Object, output_path)
         .map_err(|e| anyhow!(format!("failed to write object file: {e}")))

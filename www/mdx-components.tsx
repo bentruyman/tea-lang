@@ -5,7 +5,6 @@ import { ContentPage, ContentSection, PageIntro } from '@/components/site-shell'
 import { cn } from '@/lib/utils'
 import {
   CodeBlock,
-  CodeCard,
   QuickLinkCard,
   NextLink,
   TwoColumnGrid,
@@ -201,7 +200,6 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     ContentSection,
     PageIntro,
     CodeBlock,
-    CodeCard,
     QuickLinkCard,
     NextLink,
     TwoColumnGrid,

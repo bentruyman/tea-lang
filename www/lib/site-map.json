@@ -6,6 +6,7 @@
   },
   "topNav": [
     { "title": "Docs", "href": "/docs" },
+    { "title": "Playground", "href": "/playground" },
     { "title": "Examples", "href": "/examples" },
     { "title": "Reference", "href": "/reference" },
     { "title": "Community", "href": "/community" }

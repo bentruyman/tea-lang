@@ -1,22 +1,44 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{bail, Result};
 
 use crate::analysis::SemanticAnalysis;
 use crate::ast::{Module, SourceSpan};
+use crate::browser::validate_browser_target;
 use crate::diagnostics::Diagnostics;
 use crate::expansion::{ExpandedModule, ModuleExpander};
 use crate::lexer::{Lexer, LexerError};
+use crate::loader::ModuleLoader;
 use crate::parser::Parser;
 use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 use crate::source::SourceFile;
 use crate::typechecker::TypeChecker;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompileTarget {
+    Native,
+    Browser,
+}
+
+#[derive(Clone)]
 pub struct CompileOptions {
     pub dump_tokens: bool,
     pub module_overrides: HashMap<PathBuf, String>,
+    pub target: CompileTarget,
+    pub module_loader: Option<Arc<dyn ModuleLoader>>,
+}
+
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self {
+            dump_tokens: false,
+            module_overrides: HashMap::new(),
+            target: CompileTarget::Native,
+            module_loader: None,
+        }
+    }
 }
 
 pub struct Compilation {
@@ -117,8 +139,11 @@ impl Compiler {
         source: &SourceFile,
         parsed: ParsedModule,
     ) -> Result<ExpandedModule> {
-        let entry_path = source.path.canonicalize().unwrap_or(source.path.clone());
-        let mut expander = ModuleExpander::new(self.options.module_overrides.clone());
+        let entry_path = source.path.clone();
+        let mut expander = ModuleExpander::new(
+            self.options.module_overrides.clone(),
+            self.options.module_loader.clone(),
+        )?;
         let expanded_module = match expander.expand(&parsed.module, &entry_path) {
             Ok(module) => module,
             Err(err) => {
@@ -205,7 +230,17 @@ impl Compiler {
             bail!("Type checking failed");
         }
 
-        Ok(Compilation { module, analysis })
+        let compilation = Compilation { module, analysis };
+        if self.options.target == CompileTarget::Browser {
+            let diagnostics = validate_browser_target(&compilation.module, &compilation.analysis);
+            let has_errors = diagnostics.has_errors();
+            self.diagnostics.extend(diagnostics);
+            if has_errors {
+                bail!("Browser target validation failed");
+            }
+        }
+
+        Ok(compilation)
     }
 
     pub fn compile(&mut self, source: &SourceFile) -> Result<Compilation> {

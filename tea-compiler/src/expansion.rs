@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
@@ -10,9 +10,9 @@ use crate::ast::{
 };
 use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, TokenKind};
+use crate::loader::ModuleLoader;
 use crate::parser::Parser;
 use crate::source::{SourceFile, SourceId};
-use crate::stdlib;
 
 pub struct ExpandedModule {
     pub module: Module,
@@ -52,11 +52,15 @@ pub(crate) struct ModuleExpander {
     alias_export_renames: HashMap<String, HashMap<String, String>>,
     alias_export_docstrings: HashMap<String, HashMap<String, String>>,
     module_overrides: HashMap<PathBuf, String>,
+    loader: Arc<dyn ModuleLoader>,
 }
 
 impl ModuleExpander {
-    pub(crate) fn new(module_overrides: HashMap<PathBuf, String>) -> Self {
-        Self {
+    pub(crate) fn new(
+        module_overrides: HashMap<PathBuf, String>,
+        loader: Option<Arc<dyn ModuleLoader>>,
+    ) -> Result<Self> {
+        Ok(Self {
             visited: HashSet::new(),
             next_source_id: 1,
             diagnostics: Diagnostics::new(),
@@ -65,7 +69,8 @@ impl ModuleExpander {
             alias_export_renames: HashMap::new(),
             alias_export_docstrings: HashMap::new(),
             module_overrides,
-        }
+            loader: default_loader(loader)?,
+        })
     }
 
     pub(crate) fn expand(&mut self, module: &Module, path: &Path) -> Result<ExpandedModule> {
@@ -80,50 +85,6 @@ impl ModuleExpander {
 
     pub(crate) fn into_diagnostics(self) -> Diagnostics {
         self.diagnostics
-    }
-
-    /// Try to resolve a source-backed Tea stdlib module (e.g., "std.env" -> "stdlib/env/mod.tea")
-    fn try_resolve_tea_stdlib_module(
-        &self,
-        module_path: &str,
-        base_path: &Path,
-    ) -> Option<PathBuf> {
-        if !stdlib::is_source_stdlib_module(module_path) {
-            return None;
-        }
-
-        let module_name = module_path.strip_prefix("std.")?;
-        let mut roots = Vec::new();
-
-        let mut current = if base_path.is_dir() {
-            Some(base_path)
-        } else {
-            base_path.parent()
-        };
-        while let Some(path) = current {
-            roots.push(path.to_path_buf());
-            current = path.parent();
-        }
-
-        if let Ok(cwd) = std::env::current_dir() {
-            let mut current = Some(cwd.as_path());
-            while let Some(path) = current {
-                let path_buf = path.to_path_buf();
-                if !roots.contains(&path_buf) {
-                    roots.push(path_buf);
-                }
-                current = path.parent();
-            }
-        }
-
-        for root in roots {
-            let candidate = root.join("stdlib").join(module_name).join("mod.tea");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-
-        None
     }
 
     fn expand_module(&mut self, module: &Module, path: &Path) -> Result<Module> {
@@ -162,28 +123,21 @@ impl ModuleExpander {
                     result.push(statement.clone());
                     let path = &use_stmt.module_path;
 
-                    let resolved_path = if let Some(tea_stdlib_path) =
-                        self.try_resolve_tea_stdlib_module(path, base_path)
-                    {
-                        tea_stdlib_path
-                    } else if path.starts_with("std.") || path.starts_with("support.") {
-                        continue;
-                    } else {
-                        let span = use_stmt.module_span;
-                        match self.resolve_path(base_path, path) {
-                            Ok(resolved) => resolved,
-                            Err(err) => {
-                                self.diagnostics.push_error_with_span(
-                                    format!("could not resolve module '{}': {err}", path),
-                                    Some(span),
-                                );
-                                return Err(err);
-                            }
+                    let resolved_path = match self.loader.resolve_import(base_path, path) {
+                        Ok(Some(resolved_path)) => resolved_path,
+                        Ok(None) => continue,
+                        Err(err) => {
+                            let span = use_stmt.module_span;
+                            self.diagnostics.push_error_with_span(
+                                format!("could not resolve module '{}': {err}", path),
+                                Some(span),
+                            );
+                            return Err(err);
                         }
                     };
 
                     let span = use_stmt.module_span;
-                    let canonical = match resolved_path.canonicalize() {
+                    let canonical = match self.loader.canonicalize(&resolved_path) {
                         Ok(path) => path,
                         Err(err) => {
                             self.diagnostics.push_error_with_span(
@@ -898,28 +852,14 @@ impl ModuleExpander {
         }
     }
 
-    fn resolve_path(&self, base_path: &Path, import: &str) -> Result<PathBuf> {
-        let base_dir = base_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
-        let mut path = if Path::new(import).is_absolute() {
-            PathBuf::from(import)
-        } else {
-            base_dir.join(import)
-        };
-        if path.extension().is_none() {
-            path.set_extension("tea");
-        }
-        Ok(path)
-    }
-
     fn load_module(&mut self, path: &Path) -> Result<Module> {
         if let Some(contents) = self.module_overrides.get(path).cloned() {
             return self.load_module_from_contents(path, contents);
         }
 
-        let contents = fs::read_to_string(path)
+        let contents = self
+            .loader
+            .load_module(path)
             .with_context(|| format!("failed to read module at '{}'", path.display()))?;
         self.load_module_from_contents(path, contents)
     }
@@ -943,5 +883,21 @@ impl ModuleExpander {
             bail!(messages);
         }
         Ok(module)
+    }
+}
+
+fn default_loader(loader: Option<Arc<dyn ModuleLoader>>) -> Result<Arc<dyn ModuleLoader>> {
+    if let Some(loader) = loader {
+        return Ok(loader);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(Arc::new(crate::loader::NativeModuleLoader))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        bail!("an explicit module loader is required on wasm32 targets")
     }
 }

@@ -253,6 +253,27 @@
       ]
     },
     {
+      "slug": "json",
+      "kind": "module",
+      "title": "std.json",
+      "eyebrow": "Standard Library",
+      "summary": "JSON encoding and decoding utilities.",
+      "module_path": "std.json",
+      "source_path": "stdlib/json/mod.tea",
+      "functions": [
+        {
+          "name": "encode",
+          "signature_display": "pub def encode(value) -> String",
+          "summary": ""
+        },
+        {
+          "name": "decode",
+          "signature_display": "pub def decode(json_str: String)",
+          "summary": ""
+        }
+      ]
+    },
+    {
       "slug": "path",
       "kind": "module",
       "title": "std.path",

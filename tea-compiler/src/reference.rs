@@ -412,8 +412,8 @@ end
             .any(|entry| entry.slug == "builtins"));
         assert!(manifest.entries.iter().any(|entry| entry.slug == "args"));
         assert!(manifest.entries.iter().any(|entry| entry.slug == "assert"));
+        assert!(manifest.entries.iter().any(|entry| entry.slug == "json"));
         assert!(manifest.entries.iter().any(|entry| entry.slug == "string"));
-        assert!(manifest.entries.iter().all(|entry| entry.slug != "json"));
 
         Ok(())
     }

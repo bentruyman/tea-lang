@@ -23,6 +23,13 @@ const ASSERT_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "fail",
+        StdFunctionKind::AssertFail,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Void,
+    ),
+    std_function(
         "snapshot",
         StdFunctionKind::AssertSnapshot,
         StdArity::Range {

@@ -80,6 +80,13 @@ const PROCESS_FUNCTIONS: &[StdFunction] = &[
         &[StdType::Int],
         StdType::Void,
     ),
+    std_function(
+        "close",
+        StdFunctionKind::ProcessClose,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Void,
+    ),
 ];
 
 pub const MODULE: StdModule = std_module!(

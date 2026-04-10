@@ -55,7 +55,6 @@ def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) ->
     const char = content[i]
 
     if char == "\n"
-      # Process completed line
       if regex.is_match(re, current_line)
         found = true
         print_match(filepath, line_num, current_line, show_lines, show_file)
@@ -70,7 +69,6 @@ def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) ->
     i = i + 1
   end
 
-  # Check last line if not empty
   if @len(current_line) > 0
     if regex.is_match(re, current_line)
       found = true

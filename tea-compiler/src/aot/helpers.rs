@@ -9,7 +9,7 @@ use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, InstructionValu
 use super::map_builder_error;
 
 /// Tag values for TeaValue union type.
-/// Layout: { tag: i32, padding: i32, payload: i64 }
+/// Layout: { tag: i32, payload: i64 } with ABI padding inserted between fields.
 #[repr(u32)]
 #[derive(Clone, Copy)]
 pub enum TeaValueTag {
@@ -34,7 +34,7 @@ impl TeaValueTag {
 
 /// Build a TeaValue struct with given tag and i64 payload.
 ///
-/// TeaValue layout: { tag: i32, padding: i32, payload: i64 }
+/// TeaValue layout: { tag: i32, payload: i64 }.
 /// This uses alloca+store pattern to avoid insertvalue/undef issues with ARM64 ABI.
 pub fn build_tea_value<'ctx>(
     context: &'ctx Context,
@@ -57,14 +57,9 @@ pub fn build_tea_value<'ctx>(
         builder.build_store(tag_ptr, context.i32_type().const_int(tag.as_u64(), false)),
     )?;
 
-    // Store padding at field 1
-    let padding_ptr =
-        map_builder_error(builder.build_struct_gep(tea_value_type, alloca, 1, "padding_ptr"))?;
-    map_builder_error(builder.build_store(padding_ptr, context.i32_type().const_zero()))?;
-
-    // Store payload at field 2
+    // Store payload at field 1. LLVM inserts the required padding for alignment.
     let payload_ptr =
-        map_builder_error(builder.build_struct_gep(tea_value_type, alloca, 2, "payload_ptr"))?;
+        map_builder_error(builder.build_struct_gep(tea_value_type, alloca, 1, "payload_ptr"))?;
     map_builder_error(builder.build_store(payload_ptr, payload))?;
 
     // Load and return the complete struct

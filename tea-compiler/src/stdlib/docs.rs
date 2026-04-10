@@ -39,15 +39,34 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::MathSqrt => "Return the square root of a float.",
         StdFunctionKind::MathMin => "Return the minimum of two floats.",
         StdFunctionKind::MathMax => "Return the maximum of two floats.",
-        StdFunctionKind::EnvGet => "Lookup an environment variable (returns Nil if unset).",
+        StdFunctionKind::EnvGet => {
+            "Lookup an environment variable, returning an empty string when unset."
+        }
+        StdFunctionKind::EnvGetOr => {
+            "Lookup an environment variable, returning a fallback when unset."
+        }
+        StdFunctionKind::EnvHas => "Return true when the environment variable is set.",
+        StdFunctionKind::EnvRequire => "Return an environment variable or fail if it is unset.",
         StdFunctionKind::EnvSet => "Set an environment variable for child processes.",
+        StdFunctionKind::EnvUnset => "Unset an environment variable for child processes.",
         StdFunctionKind::EnvVars => "Return a dictionary of the current environment.",
         StdFunctionKind::EnvCwd => "Return the current working directory.",
+        StdFunctionKind::EnvSetCwd => "Change the current working directory.",
+        StdFunctionKind::EnvTempDir => "Return the platform temporary directory.",
+        StdFunctionKind::EnvHomeDir => "Return the user home directory when available.",
+        StdFunctionKind::EnvConfigDir => "Return the user configuration directory when available.",
         StdFunctionKind::FsReadText => "Read an entire text file into a string.",
         StdFunctionKind::FsWriteText => "Write a string to a file, replacing existing contents.",
-        StdFunctionKind::FsCreateDir => "Create a directory and intermediate folders as needed.",
+        StdFunctionKind::FsCreateDir => {
+            "Create a directory. Parent directories must already exist."
+        }
+        StdFunctionKind::FsEnsureDir => "Create a directory and all missing parent folders.",
         StdFunctionKind::FsRemove => "Remove a file or directory recursively.",
+        StdFunctionKind::FsExists => "Return true when a filesystem path exists.",
         StdFunctionKind::FsListDir => "List entries in a directory.",
+        StdFunctionKind::FsWalk => "Recursively walk a directory and return all entries.",
+        StdFunctionKind::FsGlob => "Return filesystem entries that match a glob pattern.",
+        StdFunctionKind::FsCopy => "Copy a file to a new location.",
         StdFunctionKind::FsRename => "Rename or move a file or directory.",
         StdFunctionKind::FsStat => "Get metadata information about a file or directory.",
         StdFunctionKind::PathJoin => "Join multiple path segments.",
@@ -55,6 +74,11 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::PathDirname => "Return the directory portion of a path.",
         StdFunctionKind::PathBasename => "Return the final component of a path.",
         StdFunctionKind::PathExtension => "Return the extension of a path if present.",
+        StdFunctionKind::PathNormalize => "Normalize a path by resolving '.' and '..' segments.",
+        StdFunctionKind::PathAbsolute => "Resolve a path to an absolute path.",
+        StdFunctionKind::PathRelative => "Compute the relative path from one location to another.",
+        StdFunctionKind::PathIsAbsolute => "Return true when the path is absolute.",
+        StdFunctionKind::PathSeparator => "Return the platform-specific path separator.",
         StdFunctionKind::AssertSnapshot => {
             "Compare actual text against a stored snapshot, with optional hint."
         }
@@ -78,9 +102,15 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::ProcessReadStderr => "Read data from a spawned process's stderr.",
         StdFunctionKind::ProcessWriteStdin => "Write data to a spawned process's stdin.",
         StdFunctionKind::ProcessCloseStdin => "Close a spawned process's stdin pipe.",
+        StdFunctionKind::ProcessClose => {
+            "Close a spawned process handle without waiting for completion."
+        }
         // Args intrinsics
         StdFunctionKind::ArgsAll => "Return all command-line arguments as a list of strings.",
         StdFunctionKind::ArgsProgram => "Return the program name (argv[0] with path stripped).",
+        StdFunctionKind::CliParse => {
+            "Parse command-line arguments using a declarative command spec."
+        }
         // Regex module
         StdFunctionKind::RegexCompile => "Compile a regex pattern and return a handle.",
         StdFunctionKind::RegexIsMatch => "Test if the pattern matches anywhere in the text.",

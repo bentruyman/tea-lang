@@ -15,6 +15,16 @@ const ARGS_FUNCTIONS: &[StdFunction] = &[
         &[],
         StdType::String,
     ),
+    std_function(
+        "parse",
+        StdFunctionKind::CliParse,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::Any, StdType::List],
+        StdType::Struct,
+    ),
     // Note: has, get, and positional are implemented in pure Tea
     // and don't need compiler-side registration
 ];

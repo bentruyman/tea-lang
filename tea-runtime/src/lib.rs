@@ -2290,6 +2290,21 @@ pub extern "C" fn tea_fs_glob(pattern: *const TeaString) -> *mut TeaList {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_fs_rename(source: *const TeaString, target: *const TeaString) {
+    let source_str = expect_path(source);
+    let target_str = expect_path(target);
+    tea_intrinsics::fs::rename(&source_str, &target_str)
+        .unwrap_or_else(|error| panic!("{}", error));
+}
+
+#[no_mangle]
+pub extern "C" fn tea_fs_copy(source: *const TeaString, target: *const TeaString) {
+    let source_str = expect_path(source);
+    let target_str = expect_path(target);
+    tea_intrinsics::fs::copy(&source_str, &target_str).unwrap_or_else(|error| panic!("{}", error));
+}
+
+#[no_mangle]
 pub extern "C" fn tea_fs_metadata(path: *const TeaString) -> TeaValue {
     let path_str = expect_path(path);
     let fs_path = PathBuf::from(&path_str);
@@ -2617,6 +2632,46 @@ pub extern "C" fn tea_string_index(string: *const TeaString, index: c_longlong) 
         let ch = chars[idx];
         alloc_tea_string(&ch.to_string())
     }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_index_of(
+    text: *const TeaString,
+    pattern: *const TeaString,
+) -> c_longlong {
+    let text_str = expect_string(text, "string.index_of expects a valid text string");
+    let pattern_str = expect_string(pattern, "string.index_of expects a valid pattern string");
+    text_str
+        .find(&pattern_str)
+        .map(|index| index as c_longlong)
+        .unwrap_or(-1)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_contains(text: *const TeaString, pattern: *const TeaString) -> c_int {
+    let text_str = expect_string(text, "string.contains expects a valid text string");
+    let pattern_str = expect_string(pattern, "string.contains expects a valid pattern string");
+    if text_str.contains(&pattern_str) {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_split(
+    text: *const TeaString,
+    delimiter: *const TeaString,
+) -> *mut TeaList {
+    let text_str = expect_string(text, "string.split expects a valid text string");
+    let delimiter_str = expect_string(delimiter, "string.split expects a valid delimiter string");
+    let parts: Vec<&str> = text_str.split(&delimiter_str).collect();
+    let list = tea_alloc_list(parts.len() as c_longlong);
+    for (index, part) in parts.iter().enumerate() {
+        let string_ptr = alloc_tea_string(part);
+        tea_list_set(list, index as c_longlong, tea_value_from_string(string_ptr));
+    }
+    list
 }
 
 #[no_mangle]

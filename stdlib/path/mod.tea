@@ -68,3 +68,50 @@ end
 pub def extension(file_path: String) -> String
   intrinsics.path_extension(file_path)
 end
+
+## Normalize a path by resolving redundant separators and dot segments.
+pub def normalize(file_path: String) -> String
+  intrinsics.path_normalize(file_path)
+end
+
+## Resolve a path to an absolute path using the current working directory.
+pub def absolute(file_path: String) -> String
+  intrinsics.path_absolute(file_path)
+end
+
+## Resolve a path to an absolute path using an explicit base directory.
+pub def absolute_from(file_path: String, base_path: String) -> String
+  intrinsics.path_absolute(file_path, base_path)
+end
+
+## Compute the relative path from a base location to a target.
+pub def relative(target_path: String, base_path: String) -> String
+  intrinsics.path_relative(target_path, base_path)
+end
+
+## Return true when a path is absolute.
+pub def is_absolute(file_path: String) -> Bool
+  intrinsics.path_is_absolute(file_path)
+end
+
+## Return the platform-specific path separator.
+pub def separator() -> String
+  intrinsics.path_separator()
+end
+
+## Alias for dirname().
+pub def parent(file_path: String) -> String
+  dirname(file_path)
+end
+
+## Return the file name without its final extension.
+pub def stem(file_path: String) -> String
+  const base = basename(file_path)
+  const ext = extension(base)
+
+  if @len(ext) == 0
+    return base
+  end
+
+  base[0..(@len(base) - @len(ext) - 1)]
+end

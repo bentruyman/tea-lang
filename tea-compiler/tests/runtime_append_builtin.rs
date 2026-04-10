@@ -1,51 +1,8 @@
-use std::env;
-use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+
+mod support;
 
 use tea_compiler::{aot, CompileOptions, Compiler, SourceFile, SourceId};
-use tempfile::tempdir;
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("workspace root")
-        .to_path_buf()
-}
-
-fn build_and_run(source: &str, file_name: &str) -> anyhow::Result<String> {
-    let tmp = tempdir()?;
-    let script_path = tmp.path().join(file_name);
-    let binary_path = tmp.path().join(file_name.trim_end_matches(".tea"));
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    fs::write(&script_path, source)?;
-
-    let build_output = Command::new(cargo)
-        .current_dir(workspace_root())
-        .args(["run", "-p", "tea-cli", "--", "build"])
-        .arg(&script_path)
-        .arg("-o")
-        .arg(&binary_path)
-        .output()
-        .expect("build tea script");
-
-    assert!(
-        build_output.status.success(),
-        "build should succeed: {}",
-        String::from_utf8_lossy(&build_output.stderr)
-    );
-
-    let output = Command::new(&binary_path)
-        .output()
-        .expect("run compiled tea binary");
-    assert!(
-        output.status.success(),
-        "binary should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    Ok(String::from_utf8(output.stdout)?)
-}
 
 #[test]
 fn append_builtin_executes_at_runtime() -> anyhow::Result<()> {
@@ -66,7 +23,7 @@ end
 @println(append_words())
 "#;
 
-    let stdout = build_and_run(source, "append_builtin_runtime.tea")?;
+    let stdout = support::build_and_run(source, "append_builtin_runtime.tea", &[])?;
     assert_eq!(stdout, "[1, 2, 3]\n[tea]\n");
 
     Ok(())

@@ -84,6 +84,13 @@ pub fn rename(source: &str, target: &str) -> Result<()> {
     })
 }
 
+/// Copies a file to a new location, replacing the destination when supported by the platform
+pub fn copy(source: &str, target: &str) -> Result<()> {
+    fs::copy(source, target).map(|_| ()).map_err(|error| {
+        anyhow::anyhow!("copy failed from '{}' to '{}': {}", source, target, error)
+    })
+}
+
 /// File metadata information
 #[derive(Debug, Clone)]
 pub struct FileInfo {

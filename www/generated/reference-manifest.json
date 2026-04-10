@@ -138,6 +138,16 @@
           "summary": "Return the program name (argv[0] with path stripped)."
         },
         {
+          "name": "parse",
+          "signature_display": "pub def parse[T](spec: T) -> CliParseResult",
+          "summary": "Parse command-line arguments using a declarative command spec."
+        },
+        {
+          "name": "parse_with",
+          "signature_display": "pub def parse_with[T](spec: T, argv: List[String]) -> CliParseResult",
+          "summary": "Parse an explicit argv list using a declarative command spec."
+        },
+        {
           "name": "has",
           "signature_display": "pub def has(flag: String) -> Bool",
           "summary": "Check if a flag is present in the arguments."
@@ -200,9 +210,29 @@
           "summary": "Get the value of an environment variable."
         },
         {
+          "name": "get_or",
+          "signature_display": "pub def get_or(name: String, fallback: String) -> String",
+          "summary": "Get the value of an environment variable, or a fallback when it is unset."
+        },
+        {
+          "name": "has",
+          "signature_display": "pub def has(name: String) -> Bool",
+          "summary": "Return true when an environment variable is set."
+        },
+        {
+          "name": "require",
+          "signature_display": "pub def require(name: String) -> String",
+          "summary": "Get an environment variable or fail when it is unset."
+        },
+        {
           "name": "set",
           "signature_display": "pub def set(name: String, value: String) -> Void",
           "summary": "Set an environment variable."
+        },
+        {
+          "name": "unset",
+          "signature_display": "pub def unset(name: String) -> Void",
+          "summary": "Unset an environment variable."
         },
         {
           "name": "vars",
@@ -213,6 +243,26 @@
           "name": "cwd",
           "signature_display": "pub def cwd() -> String",
           "summary": "Get the current working directory."
+        },
+        {
+          "name": "set_cwd",
+          "signature_display": "pub def set_cwd(path: String) -> Void",
+          "summary": "Change the current working directory."
+        },
+        {
+          "name": "temp_dir",
+          "signature_display": "pub def temp_dir() -> String",
+          "summary": "Return the platform temporary directory."
+        },
+        {
+          "name": "home_dir",
+          "signature_display": "pub def home_dir() -> String",
+          "summary": "Return the user home directory when available."
+        },
+        {
+          "name": "config_dir",
+          "signature_display": "pub def config_dir() -> String",
+          "summary": "Return the user configuration directory when available."
         }
       ]
     },
@@ -241,14 +291,74 @@
           "summary": "Create a directory."
         },
         {
+          "name": "ensure_dir",
+          "signature_display": "pub def ensure_dir(dir_path: String) -> Void",
+          "summary": "Create a directory and any missing parent directories."
+        },
+        {
+          "name": "mkdir_p",
+          "signature_display": "pub def mkdir_p(dir_path: String) -> Void",
+          "summary": "Alias for ensure_dir()."
+        },
+        {
           "name": "remove",
           "signature_display": "pub def remove(file_path: String) -> Void",
           "summary": "Remove a file or directory."
         },
         {
+          "name": "exists",
+          "signature_display": "pub def exists(file_path: String) -> Bool",
+          "summary": "Return true when a path exists."
+        },
+        {
           "name": "read_dir",
           "signature_display": "pub def read_dir(dir_path: String) -> List[String]",
           "summary": "List all entries in a directory."
+        },
+        {
+          "name": "walk",
+          "signature_display": "pub def walk(dir_path: String) -> List[String]",
+          "summary": "Recursively walk a directory and return full entry paths."
+        },
+        {
+          "name": "glob",
+          "signature_display": "pub def glob(pattern: String) -> List[String]",
+          "summary": "Return filesystem entries that match a glob pattern."
+        },
+        {
+          "name": "copy",
+          "signature_display": "pub def copy(source_path: String, target_path: String) -> Void",
+          "summary": "Copy a file to a new location."
+        },
+        {
+          "name": "rename",
+          "signature_display": "pub def rename(source_path: String, target_path: String) -> Void",
+          "summary": "Rename or move a file or directory."
+        },
+        {
+          "name": "metadata",
+          "signature_display": "pub def metadata(file_path: String) -> FileMetadata",
+          "summary": "Get metadata information for a file or directory."
+        },
+        {
+          "name": "stat",
+          "signature_display": "pub def stat(file_path: String) -> FileMetadata",
+          "summary": "Alias for metadata()."
+        },
+        {
+          "name": "read_lines",
+          "signature_display": "pub def read_lines(file_path: String) -> List[String]",
+          "summary": "Read a text file and split it into lines."
+        },
+        {
+          "name": "write_lines",
+          "signature_display": "pub def write_lines(file_path: String, lines: List[String]) -> Void",
+          "summary": "Write a list of lines to a file, joining them with \"\\n\"."
+        },
+        {
+          "name": "append_file",
+          "signature_display": "pub def append_file(file_path: String, content: String) -> Void",
+          "summary": "Append text to a file, creating it when it does not exist."
         }
       ]
     },
@@ -263,13 +373,23 @@
       "functions": [
         {
           "name": "encode",
-          "signature_display": "pub def encode(value) -> String",
+          "signature_display": "pub def encode[T](value: T) -> String",
           "summary": "Encode any Tea value to a JSON string."
         },
         {
           "name": "decode",
-          "signature_display": "pub def decode(json_str: String)",
+          "signature_display": "pub def decode[T](json_str: String) -> T",
           "summary": "Decode a JSON string to a Tea value."
+        },
+        {
+          "name": "read_file",
+          "signature_display": "pub def read_file[T](file_path: String) -> T",
+          "summary": "Read a JSON file and decode it."
+        },
+        {
+          "name": "write_file",
+          "signature_display": "pub def write_file[T](file_path: String, value: T) -> Void",
+          "summary": "Encode a value as JSON and write it to a file."
         }
       ]
     },
@@ -306,6 +426,46 @@
           "name": "extension",
           "signature_display": "pub def extension(file_path: String) -> String",
           "summary": "Get the extension of a path."
+        },
+        {
+          "name": "normalize",
+          "signature_display": "pub def normalize(file_path: String) -> String",
+          "summary": "Normalize a path by resolving redundant separators and dot segments."
+        },
+        {
+          "name": "absolute",
+          "signature_display": "pub def absolute(file_path: String) -> String",
+          "summary": "Resolve a path to an absolute path using the current working directory."
+        },
+        {
+          "name": "absolute_from",
+          "signature_display": "pub def absolute_from(file_path: String, base_path: String) -> String",
+          "summary": "Resolve a path to an absolute path using an explicit base directory."
+        },
+        {
+          "name": "relative",
+          "signature_display": "pub def relative(target_path: String, base_path: String) -> String",
+          "summary": "Compute the relative path from a base location to a target."
+        },
+        {
+          "name": "is_absolute",
+          "signature_display": "pub def is_absolute(file_path: String) -> Bool",
+          "summary": "Return true when a path is absolute."
+        },
+        {
+          "name": "separator",
+          "signature_display": "pub def separator() -> String",
+          "summary": "Return the platform-specific path separator."
+        },
+        {
+          "name": "parent",
+          "signature_display": "pub def parent(file_path: String) -> String",
+          "summary": "Alias for dirname()."
+        },
+        {
+          "name": "stem",
+          "signature_display": "pub def stem(file_path: String) -> String",
+          "summary": "Return the file name without its final extension."
         }
       ]
     },
@@ -377,6 +537,36 @@
           "name": "close_stdin",
           "signature_display": "pub def close_stdin(handle: Int) -> Void",
           "summary": "Close a spawned process's stdin pipe."
+        },
+        {
+          "name": "close",
+          "signature_display": "pub def close(handle: Int) -> Void",
+          "summary": "Close a spawned process handle without waiting for it."
+        },
+        {
+          "name": "check",
+          "signature_display": "pub def check(result: ProcessResult) -> ProcessResult",
+          "summary": "Require a process result to have exited successfully."
+        },
+        {
+          "name": "run_checked",
+          "signature_display": "pub def run_checked(command: String, args: List[String]) -> ProcessResult",
+          "summary": "Run a command and fail when it exits with a non-zero status."
+        },
+        {
+          "name": "run_checked_with_options",
+          "signature_display": "pub def run_checked_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String, stdin: String) -> ProcessResult",
+          "summary": "Run a command with full options and fail when it exits with a non-zero status."
+        },
+        {
+          "name": "stdout_lines",
+          "signature_display": "pub def stdout_lines(result: ProcessResult) -> List[String]",
+          "summary": "Split captured stdout into lines."
+        },
+        {
+          "name": "stderr_lines",
+          "signature_display": "pub def stderr_lines(result: ProcessResult) -> List[String]",
+          "summary": "Split captured stderr into lines."
         }
       ]
     },
@@ -436,6 +626,21 @@
       "source_path": "stdlib/string/mod.tea",
       "functions": [
         {
+          "name": "index_of",
+          "signature_display": "pub def index_of(text: String, pattern: String) -> Int",
+          "summary": "Find the first occurrence of a substring."
+        },
+        {
+          "name": "contains",
+          "signature_display": "pub def contains(text: String, pattern: String) -> Bool",
+          "summary": "Return true when the string contains a substring."
+        },
+        {
+          "name": "split",
+          "signature_display": "pub def split(text: String, delimiter: String) -> List[String]",
+          "summary": "Split a string by a delimiter."
+        },
+        {
           "name": "starts_with",
           "signature_display": "pub def starts_with(text: String, prefix: String) -> Bool",
           "summary": "Check if a string starts with a given prefix."
@@ -479,6 +684,21 @@
           "name": "to_upper",
           "signature_display": "pub def to_upper(text: String) -> String",
           "summary": "Convert a string to uppercase."
+        },
+        {
+          "name": "join",
+          "signature_display": "pub def join(parts: List[String], separator: String) -> String",
+          "summary": "Join a list of strings with a separator."
+        },
+        {
+          "name": "lines",
+          "signature_display": "pub def lines(text: String) -> List[String]",
+          "summary": "Split text into lines, trimming a trailing \"\\r\" from each line and dropping the final empty line produced by a trailing newline."
+        },
+        {
+          "name": "repeat",
+          "signature_display": "pub def repeat(text: String, count: Int) -> String",
+          "summary": "Repeat a string count times."
         }
       ]
     }

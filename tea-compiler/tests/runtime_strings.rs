@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
+mod support;
+
 #[test]
 fn interpolated_strings_emit_concat_instruction_and_execute() -> anyhow::Result<()> {
     let source = r#"
@@ -104,5 +106,24 @@ end
     // TODO: Add AOT test execution when implemented
     // For now, we verify that the code compiles without errors
 
+    Ok(())
+}
+
+#[test]
+fn string_helpers_execute_with_collection_utilities() -> anyhow::Result<()> {
+    let source = r#"
+use assert = "std.assert"
+use string = "std.string"
+
+assert.eq(string.index_of("hello", "ll"), 2)
+assert.ok(string.contains("hello", "ell"))
+assert.eq(@len(string.split("a,b,c", ",")), 3)
+assert.eq(string.join(["a", "b", "c"], "-"), "a-b-c")
+assert.eq(string.repeat("ha", 3), "hahaha")
+@println("ok")
+"#;
+
+    let stdout = support::run_script(source, "string_helpers.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
     Ok(())
 }

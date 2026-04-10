@@ -12,12 +12,32 @@ pub def get(name: String) -> String
   intrinsics.env_get(name)
 end
 
+## Get the value of an environment variable, or a fallback when it is unset.
+pub def get_or(name: String, fallback: String) -> String
+  intrinsics.env_get_or(name, fallback)
+end
+
+## Return true when an environment variable is set.
+pub def has(name: String) -> Bool
+  intrinsics.env_has(name)
+end
+
+## Get an environment variable or fail when it is unset.
+pub def require(name: String) -> String
+  intrinsics.env_require(name)
+end
+
 ## Set an environment variable.
 ##
 ## Examples:
 ##   env.set("MY_VAR", "my_value")
 pub def set(name: String, value: String) -> Void
   intrinsics.env_set(name, value)
+end
+
+## Unset an environment variable.
+pub def unset(name: String) -> Void
+  intrinsics.env_unset(name)
 end
 
 ## Get all environment variables as a dictionary.
@@ -34,4 +54,24 @@ end
 ##   var cwd = env.cwd()
 pub def cwd() -> String
   intrinsics.env_cwd()
+end
+
+## Change the current working directory.
+pub def set_cwd(path: String) -> Void
+  intrinsics.env_set_cwd(path)
+end
+
+## Return the platform temporary directory.
+pub def temp_dir() -> String
+  intrinsics.env_temp_dir()
+end
+
+## Return the user home directory when available.
+pub def home_dir() -> String
+  intrinsics.env_home_dir()
+end
+
+## Return the user configuration directory when available.
+pub def config_dir() -> String
+  intrinsics.env_config_dir()
 end

@@ -3,9 +3,141 @@ name: PR Checks
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  ci:
+  changes:
+    name: Classify changed files
     runs-on: ubuntu-latest
+    outputs:
+      needs_docs_ci: ${{ steps.classify.outputs.needs_docs_ci }}
+      needs_rust_ci: ${{ steps.classify.outputs.needs_rust_ci }}
+      needs_manifest_check: ${{ steps.classify.outputs.needs_manifest_check }}
+
+    steps:
+      - name: Classify PR paths
+        id: classify
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            })
+
+            const changedFiles = files.map((file) => file.filename)
+
+            function matches(file, rules) {
+              return rules.exact.includes(file) || rules.prefixes.some((prefix) => file.startsWith(prefix))
+            }
+
+            function matchesAny(rules) {
+              return changedFiles.some((file) => matches(file, rules))
+            }
+
+            const docsRules = {
+              exact: [
+                ".github/workflows/pr-ci.yml",
+                "tea-cli/src/main.rs",
+                "tea-compiler/src/reference.rs",
+                "www/generated/reference-manifest.json",
+              ],
+              prefixes: [
+                "examples/",
+                "stdlib/",
+                "tea-compiler/src/stdlib/",
+                "www/",
+              ],
+            }
+
+            const rustRules = {
+              exact: [
+                ".github/workflows/pr-ci.yml",
+                ".prototools",
+                "Cargo.lock",
+                "Cargo.toml",
+                "Makefile",
+                "bun.lock",
+                "package.json",
+                "scripts/codegen-ast.js",
+                "scripts/codegen-highlights.js",
+                "scripts/e2e.sh",
+                "www/generated/reference-manifest.json",
+              ],
+              prefixes: [
+                "examples/",
+                "spec/",
+                "stdlib/",
+                "tea-cli/",
+                "tea-compiler/",
+                "tea-intrinsics/",
+                "tea-lsp/",
+                "tea-runtime/",
+                "tea-support/",
+                "tests/",
+                "tree-sitter-tea/",
+              ],
+            }
+
+            const manifestRules = {
+              exact: [
+                "tea-cli/src/main.rs",
+                "tea-compiler/src/reference.rs",
+                "www/generated/reference-manifest.json",
+              ],
+              prefixes: [
+                "stdlib/",
+                "tea-compiler/src/stdlib/",
+              ],
+            }
+
+            const needsDocsCi = matchesAny(docsRules)
+            const needsRustCi = matchesAny(rustRules)
+            const needsManifestCheck = matchesAny(manifestRules)
+
+            core.info(`Changed files:\n${changedFiles.join("\n") || "(none)"}`)
+            core.info(`needs_docs_ci=${needsDocsCi}`)
+            core.info(`needs_rust_ci=${needsRustCi}`)
+            core.info(`needs_manifest_check=${needsManifestCheck}`)
+
+            core.setOutput("needs_docs_ci", String(needsDocsCi))
+            core.setOutput("needs_rust_ci", String(needsRustCi))
+            core.setOutput("needs_manifest_check", String(needsManifestCheck))
+
+  docs_ci:
+    name: Docs CI
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.needs_docs_ci == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install docs dependencies
+        run: bun install --cwd www --frozen-lockfile
+
+      - name: Audit docs site
+        run: bun run --cwd www audit
+
+      - name: Typecheck docs site
+        run: bun run --cwd www typecheck
+
+      - name: Build docs site
+        run: bun run --cwd www build
+
+  rust_ci:
+    name: Rust CI
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.needs_rust_ci == 'true'
     env:
       LLVM_SYS_170_PREFIX: /usr/lib/llvm-17
       LLVM_CONFIG_PATH: /usr/lib/llvm-17/bin/llvm-config
@@ -37,6 +169,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Verify tracked reference manifest
+        if: needs.changes.outputs.needs_manifest_check == 'true'
         run: |
           bun run --cwd www generate:reference
           git diff --exit-code -- www/generated/reference-manifest.json
@@ -52,3 +185,40 @@ jobs:
 
       - name: Run e2e sanity checks
         run: scripts/e2e.sh
+
+  ci:
+    name: PR Checks
+    runs-on: ubuntu-latest
+    needs:
+      - changes
+      - docs_ci
+      - rust_ci
+    if: always()
+
+    steps:
+      - name: Summarize job results
+        run: |
+          echo "changes=${{ needs.changes.result }}"
+          echo "docs_ci=${{ needs.docs_ci.result }}"
+          echo "rust_ci=${{ needs.rust_ci.result }}"
+
+      - name: Verify required jobs succeeded or were skipped
+        run: |
+          changes_result="${{ needs.changes.result }}"
+          docs_result="${{ needs.docs_ci.result }}"
+          rust_result="${{ needs.rust_ci.result }}"
+
+          if [[ "${changes_result}" != "success" ]]; then
+            echo "changes finished with unexpected result: ${changes_result}" >&2
+            exit 1
+          fi
+
+          if [[ "${docs_result}" != "success" && "${docs_result}" != "skipped" ]]; then
+            echo "docs_ci finished with unexpected result: ${docs_result}" >&2
+            exit 1
+          fi
+
+          if [[ "${rust_result}" != "success" && "${rust_result}" != "skipped" ]]; then
+            echo "rust_ci finished with unexpected result: ${rust_result}" >&2
+            exit 1
+          fi

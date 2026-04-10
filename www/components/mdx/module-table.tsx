@@ -26,7 +26,7 @@ export function ModuleTable({ children }: ModuleTableProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2 pr-4 text-accent">Module</th>
+              <th className="text-left py-2 pr-4 text-primary">Module</th>
               <th className="text-left py-2">Description</th>
             </tr>
           </thead>

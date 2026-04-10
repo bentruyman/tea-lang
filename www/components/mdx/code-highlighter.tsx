@@ -11,6 +11,8 @@ interface CodeHighlighterProps {
   language: string
 }
 
+const ACTIVE_THEME = 'rose-pine-dawn'
+
 // Singleton highlighter promise
 let highlighterPromise: Promise<Highlighter> | null = null
 
@@ -24,7 +26,7 @@ async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = (async () => {
       const highlighter = await createHighlighter({
-        themes: ['github-dark'],
+        themes: [ACTIVE_THEME],
         langs: [
           'javascript',
           'typescript',
@@ -50,7 +52,7 @@ const cache = new Map<string, string>()
 export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
   const [html, setHtml] = useState<string | null>(null)
   const trimmedCode = code.trim()
-  const cacheKey = `${language}:${trimmedCode}`
+  const cacheKey = `${ACTIVE_THEME}:${language}:${trimmedCode}`
 
   useEffect(() => {
     // Check cache first
@@ -78,7 +80,7 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
 
         const result = highlighter.codeToHtml(trimmedCode, {
           lang: langToUse,
-          theme: 'github-dark',
+          theme: ACTIVE_THEME,
         })
         cache.set(cacheKey, result)
         setHtml(result)
@@ -94,15 +96,15 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
   if (!html) {
     // Show unstyled code while loading or on error
     return (
-      <pre className="bg-[#24292e] p-4 rounded-md overflow-x-auto mb-4">
-        <code className="font-mono text-sm text-[#e1e4e8]">{trimmedCode}</code>
+      <pre className="overflow-x-auto rounded-[1.4rem] bg-[var(--code-background)] p-4 font-mono shadow-[inset_0_0_0_1px_var(--code-border),inset_0_1px_0_rgb(255_255_255_/_0.55),0_1px_2px_rgb(30_41_59_/_0.04)] md:p-5">
+        <code className="font-mono text-sm text-foreground">{trimmedCode}</code>
       </pre>
     )
   }
 
   return (
     <div
-      className="[&>pre]:p-4 [&>pre]:rounded-md [&>pre]:overflow-x-auto [&>pre]:mb-4 [&_code]:font-mono [&_code]:text-sm"
+      className="[&>pre]:mb-0 [&>pre]:overflow-x-auto [&>pre]:rounded-[1.4rem] [&>pre]:bg-[var(--code-background)] [&>pre]:p-4 [&>pre]:font-mono [&>pre]:shadow-[inset_0_0_0_1px_var(--code-border),inset_0_1px_0_rgb(255_255_255_/_0.55),0_1px_2px_rgb(30_41_59_/_0.04)] md:[&>pre]:p-5 [&_code]:font-mono [&_code]:text-sm"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )

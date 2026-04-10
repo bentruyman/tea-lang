@@ -1,0 +1,243 @@
+{
+  "repo": {
+    "name": "Tea Language",
+    "url": "https://github.com/bentruyman/tea-lang",
+    "clone": "git clone https://github.com/bentruyman/tea-lang.git"
+  },
+  "topNav": [
+    { "title": "Docs", "href": "/docs" },
+    { "title": "Examples", "href": "/examples" },
+    { "title": "Reference", "href": "/reference" },
+    { "title": "Community", "href": "/community" }
+  ],
+  "docsSections": [
+    {
+      "title": "Get Started",
+      "items": [
+        {
+          "slug": "install",
+          "title": "Installation",
+          "href": "/docs/install",
+          "summary": "Install Tea from source and verify the CLI."
+        },
+        {
+          "slug": "getting-started",
+          "title": "Getting Started",
+          "href": "/docs/getting-started",
+          "summary": "Run your first script and compile a binary."
+        },
+        {
+          "slug": "cli",
+          "title": "CLI",
+          "href": "/docs/cli",
+          "summary": "Run, build, format, and test Tea programs."
+        }
+      ]
+    },
+    {
+      "title": "Language",
+      "items": [
+        {
+          "slug": "syntax",
+          "title": "Syntax",
+          "href": "/docs/syntax",
+          "summary": "Bindings, blocks, strings, and core syntax."
+        },
+        {
+          "slug": "types",
+          "title": "Types",
+          "href": "/docs/types",
+          "summary": "Primitive values, lists, dicts, optionals, and inference."
+        },
+        {
+          "slug": "functions",
+          "title": "Functions",
+          "href": "/docs/functions",
+          "summary": "Named functions, lambdas, locals, and return values."
+        },
+        {
+          "slug": "structs",
+          "title": "Structs",
+          "href": "/docs/structs",
+          "summary": "Custom data types with named fields."
+        },
+        {
+          "slug": "generics",
+          "title": "Generics",
+          "href": "/docs/generics",
+          "summary": "Type parameters for functions and structs."
+        },
+        {
+          "slug": "pattern-matching",
+          "title": "Pattern Matching",
+          "href": "/docs/pattern-matching",
+          "summary": "Use `case` to branch on variants and values."
+        },
+        {
+          "slug": "error-handling",
+          "title": "Error Handling",
+          "href": "/docs/error-handling",
+          "summary": "Typed errors, `throw`, and `catch` blocks."
+        },
+        {
+          "slug": "modules",
+          "title": "Modules",
+          "href": "/docs/modules",
+          "summary": "Split code across files and import stdlib modules."
+        },
+        {
+          "slug": "testing",
+          "title": "Testing",
+          "href": "/docs/testing",
+          "summary": "Write `test` blocks and use `std.assert`."
+        }
+      ]
+    },
+    {
+      "title": "Project",
+      "items": [
+        {
+          "slug": "code-style",
+          "title": "Code Style",
+          "href": "/docs/code-style",
+          "summary": "Formatting and style conventions for Tea and Rust."
+        },
+        {
+          "slug": "contributing",
+          "title": "Contributing",
+          "href": "/docs/contributing",
+          "summary": "Build, test, and contribute to the compiler and docs."
+        }
+      ]
+    }
+  ],
+  "referenceSections": [
+    {
+      "title": "Language Runtime",
+      "items": [
+        {
+          "slug": "builtins",
+          "title": "Built-ins",
+          "href": "/reference/builtins",
+          "summary": "Global `@` intrinsics available in every Tea program.",
+          "sourcePath": "docs/reference/builtins.md"
+        }
+      ]
+    },
+    {
+      "title": "Standard Library",
+      "items": [
+        {
+          "slug": "args",
+          "title": "std.args",
+          "href": "/reference/args",
+          "summary": "Command-line argument helpers.",
+          "module": "std.args",
+          "sourcePath": "stdlib/args/mod.tea"
+        },
+        {
+          "slug": "assert",
+          "title": "std.assert",
+          "href": "/reference/assert",
+          "summary": "Assertions and snapshot helpers for tests.",
+          "module": "std.assert",
+          "sourcePath": "stdlib/assert/mod.tea"
+        },
+        {
+          "slug": "env",
+          "title": "std.env",
+          "href": "/reference/env",
+          "summary": "Environment variables and current directory.",
+          "module": "std.env",
+          "sourcePath": "stdlib/env/mod.tea"
+        },
+        {
+          "slug": "fs",
+          "title": "std.fs",
+          "href": "/reference/fs",
+          "summary": "Read, write, list, and remove files.",
+          "module": "std.fs",
+          "sourcePath": "stdlib/fs/mod.tea"
+        },
+        {
+          "slug": "json",
+          "title": "std.json",
+          "href": "/reference/json",
+          "summary": "Encode and decode JSON values.",
+          "module": "std.json",
+          "sourcePath": "stdlib/json/mod.tea"
+        },
+        {
+          "slug": "path",
+          "title": "std.path",
+          "href": "/reference/path",
+          "summary": "Join, split, and inspect filesystem paths.",
+          "module": "std.path",
+          "sourcePath": "stdlib/path/mod.tea"
+        },
+        {
+          "slug": "process",
+          "title": "std.process",
+          "href": "/reference/process",
+          "summary": "Run subprocesses and manage handles.",
+          "module": "std.process",
+          "sourcePath": "stdlib/process/mod.tea"
+        },
+        {
+          "slug": "regex",
+          "title": "std.regex",
+          "href": "/reference/regex",
+          "summary": "Compile regexes and transform text.",
+          "module": "std.regex",
+          "sourcePath": "stdlib/regex/mod.tea"
+        },
+        {
+          "slug": "string",
+          "title": "std.string",
+          "href": "/reference/string",
+          "summary": "Trim, replace, reverse, and change case.",
+          "module": "std.string",
+          "sourcePath": "stdlib/string/mod.tea"
+        }
+      ]
+    }
+  ],
+  "exampleSections": [
+    {
+      "title": "Runnable Examples",
+      "items": [
+        {
+          "slug": "echo",
+          "title": "echo",
+          "href": "/examples/echo",
+          "summary": "A small CLI that mirrors Unix `echo`.",
+          "sourcePath": "examples/echo/main.tea",
+          "readmePath": "examples/echo/README.md"
+        },
+        {
+          "slug": "grep",
+          "title": "grep",
+          "href": "/examples/grep",
+          "summary": "Regex search with stdlib args, fs, and regex.",
+          "sourcePath": "examples/grep/main.tea",
+          "readmePath": "examples/grep/README.md"
+        },
+        {
+          "slug": "todo",
+          "title": "todo",
+          "href": "/examples/todo",
+          "summary": "A persistent task list CLI built in Tea.",
+          "sourcePath": "examples/todo/main.tea",
+          "readmePath": "examples/todo/README.md"
+        },
+        {
+          "slug": "team-scoreboard",
+          "title": "team_scoreboard",
+          "href": "/examples/team-scoreboard",
+          "summary": "Structs, errors, lambdas, and loops in one file.",
+          "sourcePath": "examples/full/team_scoreboard.tea"
+        }
+      ]
+    }
+  ]
+}

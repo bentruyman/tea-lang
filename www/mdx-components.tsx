@@ -1,5 +1,6 @@
 import type { MDXComponents } from 'mdx/types'
 import { Card } from '@/components/ui/card'
+import { ContentPage, ContentSection, PageIntro } from '@/components/site-shell'
 import {
   CodeBlock,
   CodeCard,
@@ -17,8 +18,12 @@ import {
   GridLink,
   HelpCard,
   HelpLink,
+  KeyConceptCard,
+  NoteCard,
+  FeaturePill,
   KeyConceptsCard,
   KeyConcept,
+  NextSteps,
   AlertCard,
   TypeTable,
   TypeRow,
@@ -32,6 +37,7 @@ import {
   ContributionCard,
   ContributionGrid,
   DirectoryCard,
+  StdlibFunctionPanel,
 } from '@/components/mdx'
 import { CodeHighlighter } from '@/components/mdx/code-highlighter'
 import { Children, isValidElement, type ReactNode } from 'react'
@@ -61,16 +67,20 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {
     // Override default HTML elements with styled versions
     h1: ({ children }) => (
-      <h1 className="text-4xl font-bold text-balance mb-4">{children}</h1>
+      <h1 className="mb-4 font-display text-4xl font-semibold tracking-tight text-balance md:text-5xl">
+        {children}
+      </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-3xl font-bold mt-12 mb-6">{children}</h2>
+      <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+        {children}
+      </h2>
     ),
     h3: ({ children }) => (
-      <h3 className="text-xl font-semibold text-accent mb-3">{children}</h3>
+      <h3 className="font-display text-2xl font-semibold tracking-tight text-primary">{children}</h3>
     ),
     p: ({ children }) => (
-      <p className="text-muted-foreground leading-relaxed mb-4">{children}</p>
+      <p className="text-[1.02rem] leading-8 text-muted-foreground md:text-[1.05rem]">{children}</p>
     ),
     code: ({ children, className }) => {
       // If it has a language class, it's a code block (handled by pre wrapper)
@@ -78,7 +88,11 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
         return <code className={className}>{children}</code>
       }
       // Inline code
-      return <code className="text-accent bg-muted px-1.5 py-0.5 rounded text-sm">{children}</code>
+      return (
+        <code className="rounded-md border border-border/70 bg-background/70 px-1.5 py-0.5 text-[0.92em] text-foreground">
+          {children}
+        </code>
+      )
     },
     pre: ({ children }) => {
       // Extract the code element - check for both string 'code' type and component with className
@@ -108,30 +122,35 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
 
       // Fallback for non-code content
       return (
-        <pre className="bg-muted p-4 rounded-md overflow-x-auto mb-4">
+        <pre className="surface-card overflow-x-auto rounded-[1.2rem] border border-border/70 p-5">
           <code className="font-mono text-sm">{children}</code>
         </pre>
       )
     },
     ul: ({ children }) => (
-      <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-4">{children}</ul>
+      <ul className="list-disc space-y-2 pl-5 text-muted-foreground">{children}</ul>
     ),
     ol: ({ children }) => (
-      <ol className="list-decimal list-inside space-y-2 text-muted-foreground mb-4">{children}</ol>
+      <ol className="list-decimal space-y-2 pl-5 text-muted-foreground">{children}</ol>
     ),
     li: ({ children }) => (
-      <li className="leading-relaxed">{children}</li>
+      <li className="leading-8">{children}</li>
     ),
     a: ({ href, children }) => (
-      <a href={href} className="text-accent hover:underline">{children}</a>
+      <a href={href} className="font-medium text-primary decoration-primary/35 underline-offset-4 hover:underline">
+        {children}
+      </a>
     ),
     blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-accent pl-4 italic text-muted-foreground my-4">
+      <blockquote className="surface-quiet rounded-r-2xl border-l-4 border-primary/55 px-5 py-4 italic text-muted-foreground">
         {children}
       </blockquote>
     ),
     // Custom components available in MDX
     Card,
+    ContentPage,
+    ContentSection,
+    PageIntro,
     CodeBlock,
     CodeCard,
     QuickLinkCard,
@@ -148,8 +167,12 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     GridLink,
     HelpCard,
     HelpLink,
+    KeyConceptCard,
+    NoteCard,
+    FeaturePill,
     KeyConceptsCard,
     KeyConcept,
+    NextSteps,
     AlertCard,
     TypeTable,
     TypeRow,
@@ -163,6 +186,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     ContributionCard,
     ContributionGrid,
     DirectoryCard,
+    StdlibFunctionPanel,
     ...components,
   }
 }

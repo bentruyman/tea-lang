@@ -14,7 +14,7 @@ fn compute(n: i64) -> i64 {
 }
 
 fn main() {
-    let iterations = 1000;
+    let iterations = 20000;
     let n = 10000;
 
     let mut i = 0;

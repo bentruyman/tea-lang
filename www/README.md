@@ -1,30 +1,27 @@
-# Tea docs website
+# Tea Docs Website
 
-_Automatically synced with your [v0.app](https://v0.app) deployments_
+This directory contains the Next.js docs site for the Tea language repository.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/truyman/v0-tea-docs-website)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/eNlTYSmLdFZ)
+## Principles
 
-## Overview
+- Site content should be grounded in checked-in sources from the repo.
+- `stdlib/`, `examples/`, and `tea-cli/src/main.rs` are the primary inputs for the public docs surface.
+- Avoid placeholder pages for unsupported features.
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Useful Commands
 
-## Deployment
+```bash
+cd www
+npm run audit
+npm run typecheck
+npm run build
+```
 
-Your project is live at:
+## Audit Coverage
 
-**[https://vercel.com/truyman/v0-tea-docs-website](https://vercel.com/truyman/v0-tea-docs-website)**
+`npm run audit` validates:
 
-## Build your app
-
-Continue building your app on:
-
-**[https://v0.app/chat/eNlTYSmLdFZ](https://v0.app/chat/eNlTYSmLdFZ)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+- internal `href` values resolve to real routes
+- reference pages map to real stdlib sources
+- example pages map to real checked-in examples
+- banned stale snippet patterns are not present in the app source

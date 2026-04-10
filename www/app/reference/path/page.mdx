@@ -1,0 +1,19 @@
+<ContentPage
+  eyebrow="Standard Library"
+  title="std.path"
+  description="Join, split, and inspect filesystem paths."
+>
+  ## Module overview
+
+  Path joining and inspection helpers used throughout the repo’s examples and tests.
+
+  <CodeCard title="Import and use" language="tea">
+    {`use path = "std.path"
+
+const full = path.join(["tmp", "tea", "file.txt"])
+const dir = path.dirname(full)
+const ext = path.extension(full)`}
+  </CodeCard>
+
+  <StdlibFunctionPanel sourcePath="stdlib/path/mod.tea" />
+</ContentPage>

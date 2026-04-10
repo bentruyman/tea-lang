@@ -1,12 +1,14 @@
 {
-  "name": "my-v0-project",
+  "name": "tea-docs",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "audit": "node ./scripts/audit-site.mjs",
     "build": "next build",
+    "check": "node ./scripts/audit-site.mjs && next build",
     "dev": "next dev",
-    "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

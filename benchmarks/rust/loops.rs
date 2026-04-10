@@ -12,13 +12,13 @@ fn sum_to_n(n: i64) -> i64 {
 }
 
 fn main() {
-    let iterations = 100000;
-    let n = 1000;
+    let iterations = 20000000;
+    let base_n = 1000;
     
     let mut i = 0;
     let mut result = 0;
     while i < iterations {
-        result = sum_to_n(n);
+        result += sum_to_n(base_n + i % 7);
         i = i + 1;
     }
     

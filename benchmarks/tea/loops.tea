@@ -15,11 +15,11 @@ end
 
 var i = 0
 var result = 0
-const iterations = 100000
-const n = 1000
+const iterations = 20000000
+const base_n = 1000
 
 while i < iterations
-  result = sum_to_n(n)
+  result = result + sum_to_n(base_n + i % 7)
   i = i + 1
 end
 

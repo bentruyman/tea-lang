@@ -10,7 +10,9 @@ export { PrerequisiteList, PrerequisiteItem } from "./prerequisite-list";
 export { Step } from "./step";
 export { GridLink } from "./grid-link";
 export { HelpCard, HelpLink } from "./help-card";
+export { KeyConceptCard, NoteCard, FeaturePill } from "./info-card";
 export { KeyConceptsCard, KeyConcept } from "./key-concept";
+export { NextSteps } from "./next-steps";
 export { AlertCard } from "./alert-card";
 export { TypeTable, TypeRow } from "./type-table";
 export {
@@ -25,3 +27,4 @@ export {
   ContributionGrid,
   DirectoryCard,
 } from "./contribution-card";
+export { StdlibFunctionPanel } from "./stdlib-function-panel";

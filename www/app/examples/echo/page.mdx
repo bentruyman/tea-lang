@@ -1,0 +1,100 @@
+<ContentPage
+  eyebrow="Runnable Examples"
+  title="echo"
+  description="A small CLI that mirrors Unix `echo`."
+>
+  <div className="grid gap-4 md:grid-cols-2">
+    <KeyConceptCard title="What it demonstrates">
+      <ul className="space-y-2">
+        <li>Uses raw built-ins like `@args`, `@print`, `@println`, and `@exit`.</li>
+        <li>Shows how far you can get without importing any modules.</li>
+      </ul>
+    </KeyConceptCard>
+    <CodeCard title="Run it" language="bash">
+      {`tea examples/echo/main.tea
+tea build examples/echo/main.tea
+./bin/main`}
+    </CodeCard>
+  </div>
+
+  ## README summary
+
+  A simple implementation of the Unix `echo` command in Tea. It prints arguments to standard output, separated by spaces, and optionally omits the trailing newline with the `-n` flag.
+
+  <div className="divider-section" />
+
+  <CodeCard title="echo/main.tea" language="tea">
+    {`## echo - Print arguments to standard output
+##
+## A simple implementation of the Unix echo command in Tea.
+## Demonstrates basic CLI argument handling and string operations.
+
+## Join a list of strings with a separator
+def join_strings(strings: List[String], sep: String) -> String
+  if @len(strings) == 0
+    return ""
+  end
+
+  var result = strings[0]
+  var i = 1
+
+  while i < @len(strings)
+    result = result + sep + strings[i]
+    i = i + 1
+  end
+
+  return result
+end
+
+## Build output string from args, starting at given index
+def build_output(args: List[String], start_index: Int) -> String
+  if start_index >= @len(args)
+    return ""
+  end
+
+  var result = args[start_index]
+  var i = start_index + 1
+
+  while i < @len(args)
+    result = result + " " + args[i]
+    i = i + 1
+  end
+
+  return result
+end
+
+# Main program
+const all_args = @args()
+
+# If no arguments, just print a newline
+if @len(all_args) == 0
+  @println("")
+  @exit(0)
+end
+
+# Check for -n flag (no trailing newline)
+var no_newline = false
+var start_index = 0
+
+if all_args[0] == "-n"
+  no_newline = true
+  start_index = 1
+end
+
+# Build and output the result
+const output = build_output(all_args, start_index)
+
+if no_newline
+  @print(output)
+else
+  @println(output)
+end`}
+  </CodeCard>
+
+  <div className="divider-section" />
+
+  <NextSteps title="Related pages">
+    <NextLink href="/reference/args" title="std.args" description="Compare the example to the stdlib helper surface." />
+    <NextLink href="/docs/getting-started" title="Getting Started" description="Run your first Tea program before moving to CLIs." />
+  </NextSteps>
+</ContentPage>

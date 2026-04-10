@@ -27,7 +27,7 @@ export function ContributionCard({ icon, title, children }: ContributionCardProp
     <Card className="p-6 bg-card border-border">
       <div className="flex items-start gap-4">
         <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-          <Icon className="h-5 w-5 text-accent" />
+          <Icon className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h3 className="font-semibold text-lg mb-2">{title}</h3>
@@ -64,7 +64,7 @@ export function DirectoryCard({ icon, title, description, children }: DirectoryC
     <Card className="p-6 bg-card border-border">
       <div className="flex items-start gap-4">
         <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-          <Icon className="h-5 w-5 text-accent" />
+          <Icon className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h3 className="font-semibold text-lg mb-2">{title}</h3>

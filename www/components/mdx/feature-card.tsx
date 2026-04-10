@@ -11,7 +11,7 @@ interface FeatureCardProps {
 export function FeatureCard({ title, description, children, className = '' }: FeatureCardProps) {
   return (
     <Card className={`p-6 bg-card border-border panel-inset ${className}`}>
-      <h3 className="font-semibold text-lg mb-3 text-accent">{title}</h3>
+      <h3 className="font-semibold text-lg mb-3 text-primary">{title}</h3>
       <p className="text-sm text-muted-foreground leading-relaxed mb-4">
         {description}
       </p>

@@ -11,7 +11,7 @@ export function AlertCard({ variant = 'info', children }: AlertCardProps) {
 
   return (
     <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-md">
-      <Icon className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+      <Icon className="h-5 w-5 text-primary shrink-0 mt-0.5" />
       <p className="text-sm text-muted-foreground">{children}</p>
     </div>
   )

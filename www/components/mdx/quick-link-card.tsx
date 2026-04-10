@@ -36,14 +36,14 @@ export function QuickLinkCard({
     <Card className="p-6 bg-card border-border hover:bg-muted/50 transition-colors panel-inset hover:glow-accent">
       <div className="flex items-center gap-3 mb-3">
         <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">
-          <IconComponent className="h-5 w-5 text-accent" />
+          <IconComponent className="h-5 w-5 text-primary" />
         </div>
         <h3 className="font-semibold text-lg">{title}</h3>
       </div>
       <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
         {description}
       </p>
-      <Button variant="ghost" size="sm" className="gap-2 text-accent hover:text-accent" asChild>
+      <Button variant="ghost" size="sm" className="gap-2 text-primary hover:text-primary" asChild>
         <Link href={href}>
           {buttonText}
           <ArrowRight className="h-4 w-4" />

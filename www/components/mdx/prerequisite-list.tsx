@@ -10,7 +10,7 @@ interface PrerequisiteItemProps {
 export function PrerequisiteItem({ title, children }: PrerequisiteItemProps) {
   return (
     <li className="flex items-start gap-3">
-      <CheckCircle2 className="h-5 w-5 text-accent mt-0.5 shrink-0" />
+      <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
       <span>
         <strong className="text-foreground">{title}</strong>
         {children && <span className="text-muted-foreground"> - {children}</span>}

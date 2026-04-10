@@ -31,7 +31,7 @@ export function CodeBlock({ children, title, language = 'tea', className = '' }:
   return (
     <div className={`mb-4 ${className}`}>
       {title && (
-        <div className="font-semibold text-accent mb-2">{title}</div>
+        <div className="font-semibold text-primary mb-2">{title}</div>
       )}
       <CodeHighlighter code={code} language={language} />
     </div>

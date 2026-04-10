@@ -10,7 +10,7 @@ interface RequirementItemProps {
 export function RequirementItem({ children, optional }: RequirementItemProps) {
   return (
     <li className="flex items-start gap-2">
-      <CheckCircle2 className={`h-5 w-5 mt-0.5 shrink-0 ${optional ? 'text-muted-foreground' : 'text-accent'}`} />
+      <CheckCircle2 className={`h-5 w-5 mt-0.5 shrink-0 ${optional ? 'text-muted-foreground' : 'text-primary'}`} />
       <span className="text-sm">{children}</span>
     </li>
   )
@@ -24,7 +24,7 @@ interface RequirementsSectionProps {
 export function RequirementsSection({ title, children }: RequirementsSectionProps) {
   return (
     <div>
-      <h3 className="font-semibold text-lg mb-3 text-accent">{title}</h3>
+      <h3 className="font-semibold text-lg mb-3 text-primary">{title}</h3>
       <ul className="space-y-2">
         {children}
       </ul>

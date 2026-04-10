@@ -1,0 +1,26 @@
+<ContentPage
+  eyebrow="Standard Library"
+  title="std.assert"
+  description="Assertions and snapshot helpers for tests."
+>
+  ## Module overview
+
+  Assertion helpers for tests and runtime checks.
+
+  <CodeCard title="Import and use" language="tea">
+    {`use assert = "std.assert"
+
+test "basic math"
+  assert.ok(1 + 1 == 2)
+  assert.eq("tea", "tea")
+end`}
+  </CodeCard>
+
+  <StdlibFunctionPanel sourcePath="stdlib/assert/mod.tea" />
+
+  <div className="divider-section" />
+
+  <NextSteps title="Related pages">
+    <NextLink href="/docs/testing" title="Testing" description="Write and run Tea test blocks." />
+  </NextSteps>
+</ContentPage>

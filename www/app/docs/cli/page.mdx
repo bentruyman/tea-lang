@@ -1,0 +1,64 @@
+<ContentPage
+  eyebrow="Get Started"
+  title="CLI"
+  description="The current `tea` CLI supports direct execution, native builds, formatting, and test discovery."
+>
+  The `tea` CLI covers the full everyday workflow: run a script, build a binary, format your files, and run tests. Most users only need a few commands to stay productive.
+
+  ```bash
+  tea hello.tea
+  tea build hello.tea
+  tea fmt .
+  tea test
+  ```
+
+  Start by running a source file directly. When you want a standalone executable, switch to `tea build`. The formatter and test runner use the same command shape, so the CLI stays consistent as projects grow.
+
+  ## Run a script
+
+  Running a Tea file directly is the fastest feedback loop. Pass the script path first, then any arguments you want to forward into the program.
+
+  ```bash
+  tea hello.tea
+  tea examples/echo/main.tea hello world
+  ```
+
+  ## Build a binary
+
+  Use `tea build` when you want a native executable you can run later without pointing back to the source file. By default, Tea writes the result under `bin/`.
+
+  ```bash
+  tea build hello.tea
+  ./bin/hello
+
+  tea build app.tea --output ./dist/app
+  ```
+
+  ## Format source files
+
+  The formatter rewrites Tea files in place. Run it on the current directory for a whole project, or point it at a specific file when you only want to clean up one source.
+
+  ```bash
+  tea fmt .
+  tea fmt src/main.tea
+  tea fmt . --check
+  ```
+
+  ## Run tests
+
+  The test runner discovers Tea `test` blocks from the paths you give it. You can run a whole test directory, list discovered tests, or narrow execution with a filter.
+
+  ```bash
+  tea test
+  tea test tests/
+  tea test --list
+  tea test --filter parser
+  ```
+
+  <div className="divider-section" />
+
+  <NextSteps>
+    <NextLink href="/docs/testing" title="Testing" description="Write `test` blocks and assertions." />
+    <NextLink href="/reference/args" title="std.args" description="Build argument-aware CLIs with stdlib helpers." />
+  </NextSteps>
+</ContentPage>

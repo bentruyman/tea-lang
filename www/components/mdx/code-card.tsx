@@ -1,5 +1,7 @@
 import { ReactNode, isValidElement, Children } from 'react'
-import { Card } from '@/components/ui/card'
+
+import { cn } from '@/lib/utils'
+
 import { CodeHighlighter } from './code-highlighter'
 
 interface CodeCardProps {
@@ -31,14 +33,16 @@ export function CodeCard({ title, description, children, language = 'tea', class
   const code = extractText(children)
 
   return (
-    <Card className={`p-6 bg-card border-border ${className}`}>
+    <section className={cn("space-y-3", className)}>
       {title && (
-        <h3 className="font-semibold text-lg mb-3 text-accent">{title}</h3>
+        <div>
+          <h2 className="font-display text-[1.9rem] font-semibold tracking-tight text-foreground">{title}</h2>
+        </div>
       )}
       {description && (
-        <p className="text-sm text-muted-foreground mb-4">{description}</p>
+        <p className="max-w-2xl text-sm leading-7 text-muted-foreground">{description}</p>
       )}
       <CodeHighlighter code={code} language={language} />
-    </Card>
+    </section>
   )
 }

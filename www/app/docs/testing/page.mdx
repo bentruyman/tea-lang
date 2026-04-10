@@ -1,245 +1,64 @@
-# Testing
+<ContentPage
+  eyebrow="Language"
+  title="Testing"
+  description='Write `test` blocks in Tea and run them with `tea test`. Assertions live in `std.assert`.'
+>
+  Tea tests live in ordinary Tea files. Define `test` blocks, import assertion helpers from `std.assert`, and run everything through `tea test`.
 
-Learn how to write and run tests for Tea programs and contribute tests to the Tea compiler.
+  ## Write a test block
 
-## Testing Tea Programs
+  A test block gives a named test case a small body of executable Tea code. Inside it, use assertion helpers to check expectations and fail fast when behavior changes.
 
-Use the `std.assert` module to write tests for your Tea code.
+  ```tea
+  use assert = "std.assert"
 
-<Card className="p-6 bg-card border-border mb-4">
+  test "list length stays stable"
+    var words = ["tea", "lang"]
 
-### Basic Assertions
-
-```tea
-use assert = "std.assert"
-
-# Assert a condition is true
-assert.ok(1 + 1 == 2)
-assert.ok(true)
-
-# Assert two values are equal
-assert.eq(1 + 1, 2)
-assert.eq("hello", "hello")
-
-# Assert two values are not equal
-assert.ne(1, 2)
-assert.ne("hello", "world")
-```
-
-</Card>
-
-<Card className="p-6 bg-card border-border mb-4">
-
-### Testing Functions
-
-```tea
-use assert = "std.assert"
-
-def add(a: Int, b: Int) -> Int
-  a + b
-end
-
-def factorial(n: Int) -> Int
-  if n <= 1
-    return 1
+    assert.ok(@len(words) == 2)
+    assert.eq(words[0], "tea")
+    assert.ne(words[1], "chai")
   end
-  n * factorial(n - 1)
-end
+  ```
 
-# Test the functions
-assert.eq(add(2, 3), 5)
-assert.eq(add(0, 0), 0)
-assert.eq(add(-1, 1), 0)
+  ## Assertion helpers
 
-assert.eq(factorial(0), 1)
-assert.eq(factorial(1), 1)
-assert.eq(factorial(5), 120)
-```
+  The standard assertion module covers the common cases: truthy checks, equality checks, inequality checks, and snapshot helpers when you want to compare output against stored expectations.
 
-</Card>
+  ```tea
+  use assert = "std.assert"
 
-<Card className="p-6 bg-card border-border">
+  test "basic assertions"
+    assert.ok(1 + 1 == 2)
+    assert.eq("tea", "tea")
+    assert.ne("tea", "chai")
+  end
+  ```
 
-### Testing Structs
+  ## Run tests
 
-```tea
-use assert = "std.assert"
+  Run the whole test suite or target a narrower path. The CLI can also list discovered tests or filter down to a subset when you only want to rerun one area.
 
-struct Point {
-  x: Int
-  y: Int
-}
+  ```bash
+  tea test
+  tea test tests/
+  tea test --list
+  tea test --filter strings
+  tea test --update-snapshots
+  ```
 
-def distance_from_origin(p: Point) -> Int
-  p.x * p.x + p.y * p.y
-end
+  <KeyConceptCard title="Current test surface">
+    <ul className="space-y-2">
+      <li>`std.assert` exports `ok`, `eq`, `ne`, and `snapshot`.</li>
+      <li>The CLI discovers Tea `test` blocks from paths you pass in.</li>
+      <li>Snapshot support exists in the stdlib and CLI surface, but backend support is still uneven.</li>
+    </ul>
+  </KeyConceptCard>
 
-var origin = Point(x: 0, y: 0)
-var point = Point(x: 3, y: 4)
+  <div className="divider-section" />
 
-assert.eq(distance_from_origin(origin), 0)
-assert.eq(distance_from_origin(point), 25)
-```
-
-</Card>
-
-## Running Tests
-
-<Card className="p-6 bg-card border-border">
-
-### Running a Test File
-
-```bash
-# Run a test file
-tea tests/my_test.tea
-
-# If all assertions pass, the program exits successfully
-# If any assertion fails, the program panics with an error
-```
-
-</Card>
-
-## Compiler Tests
-
-If you're contributing to the Tea compiler, here's how to run and write tests.
-
-<Card className="p-6 bg-card border-border mb-4">
-
-### Running All Tests
-
-```bash
-# Run all tests (Rust tests + E2E tests)
-make test
-
-# Run Rust tests only
-cargo test --workspace
-
-# Run E2E tests only
-./scripts/e2e.sh
-```
-
-</Card>
-
-<Card className="p-6 bg-card border-border mb-4">
-
-### Running Specific Tests
-
-```bash
-# Run a specific test by name
-cargo test -p tea-compiler test_name
-
-# Examples:
-cargo test -p tea-compiler interpolated_strings
-cargo test -p tea-compiler generics
-cargo test -p tea-compiler error_handling
-```
-
-</Card>
-
-<Card className="p-6 bg-card border-border">
-
-### Test Organization
-
-Compiler tests are organized by feature in `tea-compiler/tests/`.
-
-```
-tea-compiler/tests/
-├── aot_examples.rs     # AOT compilation tests
-├── generics.rs         # Generic type tests
-├── error_handling.rs   # Error handling tests
-├── strings.rs          # String operation tests
-└── ...
-```
-
-</Card>
-
-## Writing Compiler Tests
-
-<Card className="p-6 bg-card border-border mb-4">
-
-### Integration Test Structure
-
-```rust
-// tea-compiler/tests/my_feature.rs
-
-#[test]
-fn test_feature_works() {
-    let source = r#"
-        def add(a: Int, b: Int) -> Int
-          a + b
-        end
-
-        @println(add(1, 2))
-    "#;
-
-    // Compile and run the source
-    let result = compile_and_run(source);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().stdout, "3\n");
-}
-```
-
-</Card>
-
-<Card className="p-6 bg-card border-border">
-
-### Example Tests
-
-Add example programs to `examples/` that are automatically tested.
-
-```tea
-# examples/language/my_feature/test.tea
-# Expect: expected output
-
-use assert = "std.assert"
-
-# Your test code here
-var result = my_function()
-assert.eq(result, expected_value)
-
-@println("expected output")
-```
-
-</Card>
-
-## Best Practices
-
-<Card className="p-6 bg-card border-border">
-  <ul className="space-y-3 text-sm">
-    <li className="flex items-start gap-3">
-      <span className="text-accent">•</span>
-      <span className="text-muted-foreground">
-        Write tests for each new feature or bug fix
-      </span>
-    </li>
-    <li className="flex items-start gap-3">
-      <span className="text-accent">•</span>
-      <span className="text-muted-foreground">
-        Test edge cases and error conditions
-      </span>
-    </li>
-    <li className="flex items-start gap-3">
-      <span className="text-accent">•</span>
-      <span className="text-muted-foreground">
-        Keep tests focused and independent
-      </span>
-    </li>
-    <li className="flex items-start gap-3">
-      <span className="text-accent">•</span>
-      <span className="text-muted-foreground">
-        Use descriptive test names that explain what's being tested
-      </span>
-    </li>
-    <li className="flex items-start gap-3">
-      <span className="text-accent">•</span>
-      <span className="text-muted-foreground">
-        Run `make test` before submitting PRs
-      </span>
-    </li>
-  </ul>
-</Card>
-
-## Next Steps
-
-<NextLink href="/docs/contributing" title="Contributing Guide" description="Submit your tests with a pull request" />
-<NextLink href="/docs/code-style" title="Code Style" description="Format your test code correctly" />
+  <NextSteps>
+    <NextLink href="/reference/assert" title="std.assert" description="See the exact assertion helpers exported today." />
+    <NextLink href="/docs/contributing" title="Contributing" description="Run the full repo test workflow." />
+  </NextSteps>
+</ContentPage>

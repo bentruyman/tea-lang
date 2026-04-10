@@ -1,242 +1,143 @@
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Github, MessageCircle, BookOpen, Users, Heart, Code2 } from "lucide-react"
+
+import { ArrowRight, GitBranch, CircleDot, MessageSquare } from "lucide-react"
+
+import { Card } from "@/components/ui/card"
+import { PageIntro } from "@/components/site-shell"
+import { repo } from "@/lib/site"
+
+const channels = [
+  {
+    title: "Repository",
+    kicker: "Source code",
+    description: "Browse the compiler, stdlib, examples, and docs directly in the main repo.",
+    href: repo.url,
+    icon: GitBranch,
+    tone: "feature" as const,
+  },
+  {
+    title: "Issues",
+    kicker: "Bugs and features",
+    description: "Report bugs, request improvements, and track documentation or compiler work.",
+    href: `${repo.url}/issues`,
+    icon: CircleDot,
+    tone: "card" as const,
+  },
+  {
+    title: "Discussions",
+    kicker: "Conversation",
+    description: "Use discussions for design questions, examples, and general Tea workflow talk.",
+    href: `${repo.url}/discussions`,
+    icon: MessageSquare,
+    tone: "quiet" as const,
+  },
+]
+
+const steps = [
+  {
+    title: "Read the contributing guide",
+    description: "Understand the build system, test flow, and code style before jumping in.",
+    href: "/docs/contributing",
+    external: false,
+  },
+  {
+    title: "Browse open issues",
+    description: "Find bugs, feature requests, and documentation tasks that need attention.",
+    href: `${repo.url}/issues`,
+    external: true,
+  },
+  {
+    title: "Submit a pull request",
+    description: "Fork, branch, and open a PR against the main repo.",
+    href: `${repo.url}/pulls`,
+    external: true,
+  },
+]
 
 export default function CommunityPage() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-md bg-accent flex items-center justify-center">
-                <span className="font-bold text-accent-foreground">T</span>
-              </div>
-              <span className="font-semibold text-xl text-foreground">Tea</span>
+    <div className="container mx-auto space-y-12 px-4 py-10">
+      <div className="section-band texture-grid-fine surface-quiet p-6 md:p-10">
+        <div className="relative z-10 space-y-6">
+          <PageIntro
+            eyebrow="Community"
+            title="Contribute in the repository"
+            description="Tea is currently organized around its GitHub repository: issues, pull requests, and discussions are the real collaboration surface."
+          />
+          <div className="site-divider" />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {channels.map((item) => {
+          const Icon = item.icon
+          const cardClass =
+            item.tone === "feature"
+              ? "surface-feature texture-hatch border-primary/15"
+              : item.tone === "card"
+                ? "surface-card"
+                : "surface-quiet"
+
+          return (
+            <Link key={item.title} href={item.href} target="_blank" rel="noreferrer">
+              <Card
+                className={`${cardClass} h-full gap-4 rounded-[1.6rem] p-6 transition-all duration-200 hover:-translate-y-1 hover:border-primary/20`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">{item.kicker}</p>
+                  <span className="surface-quiet flex h-10 w-10 items-center justify-center rounded-xl border border-border/70">
+                    <Icon className="h-4 w-4 text-primary" />
+                  </span>
+                </div>
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">{item.title}</h2>
+                <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+                <div className="mt-auto flex items-center gap-2 text-sm font-semibold text-foreground">
+                  Open
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </Card>
             </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Docs
-              </Link>
-              <Link href="/examples" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Examples
-              </Link>
-              <Link href="/reference" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Reference
-              </Link>
-              <Link href="/playground" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Playground
-              </Link>
-            </nav>
-          </div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="https://github.com/special-tea/tea" target="_blank">
-              GitHub
+          )
+        })}
+      </div>
+
+      <div className="divider-section" />
+
+      <section className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
+        <div className="space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Get involved</p>
+          <h2 className="font-display text-4xl font-semibold tracking-tight text-balance">
+            Start contributing to Tea.
+          </h2>
+          <p className="max-w-xl text-lg leading-8 text-muted-foreground">
+            Whether you're fixing a bug, adding a stdlib module, or improving the docs, the path is the same: fork,
+            build, test, PR.
+          </p>
+          <div className="site-divider max-w-sm" />
+        </div>
+
+        <div className="space-y-4">
+          {steps.map((step, index) => (
+            <Link
+              key={step.href}
+              href={step.href}
+              className="group block"
+              {...(step.external ? { target: "_blank", rel: "noreferrer" } : {})}
+            >
+              <div className="surface-card grid gap-4 rounded-[1.5rem] border border-border/70 p-5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/20 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+                <div className="surface-quiet flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 text-sm font-semibold text-primary">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <div className="space-y-1">
+                  <h3 className="font-display text-2xl font-semibold tracking-tight text-foreground">{step.title}</h3>
+                  <p className="text-sm leading-6 text-muted-foreground">{step.description}</p>
+                </div>
+                <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground" />
+              </div>
             </Link>
-          </Button>
+          ))}
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
-        <div className="max-w-5xl mx-auto space-y-12">
-          {/* Header */}
-          <div className="space-y-4 text-center">
-            <h1 className="text-4xl font-bold text-balance">Join the Tea Community</h1>
-            <p className="text-xl text-muted-foreground text-pretty leading-relaxed max-w-2xl mx-auto">
-              Connect with other Tea developers, get help, share your projects, and help shape the future of the language.
-            </p>
-          </div>
-
-          {/* Main Links */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card className="p-6 bg-card border-border hover:bg-muted/50 transition-colors">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                  <Github className="h-6 w-6 text-accent" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold mb-2">GitHub</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Star the repo, report issues, contribute code, and follow development.
-                  </p>
-                  <Button className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
-                    <Link href="https://github.com/special-tea/tea" target="_blank">
-                      View on GitHub
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-6 bg-card border-border hover:bg-muted/50 transition-colors">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                  <MessageCircle className="h-6 w-6 text-accent" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold mb-2">Discussions</h2>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Ask questions, share ideas, and discuss Tea with the community.
-                  </p>
-                  <Button variant="outline" asChild>
-                    <Link href="https://github.com/special-tea/tea/discussions" target="_blank">
-                      Join Discussions
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Ways to Participate */}
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">Ways to Participate</h2>
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <Card className="p-5 bg-card border-border">
-                <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
-                  <Code2 className="h-5 w-5 text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">Contribute Code</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Fix bugs, add features, or improve the compiler and standard library.
-                </p>
-                <Button variant="ghost" size="sm" className="text-accent" asChild>
-                  <Link href="/docs/contributing">Contributing Guide</Link>
-                </Button>
-              </Card>
-
-              <Card className="p-5 bg-card border-border">
-                <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
-                  <BookOpen className="h-5 w-5 text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">Improve Docs</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Help make the documentation clearer, more complete, and beginner-friendly.
-                </p>
-                <Button variant="ghost" size="sm" className="text-accent" asChild>
-                  <Link href="/docs">Browse Docs</Link>
-                </Button>
-              </Card>
-
-              <Card className="p-5 bg-card border-border">
-                <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
-                  <Users className="h-5 w-5 text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">Help Others</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Answer questions, review pull requests, and welcome new contributors.
-                </p>
-                <Button variant="ghost" size="sm" className="text-accent" asChild>
-                  <Link href="https://github.com/special-tea/tea/issues" target="_blank">
-                    View Issues
-                  </Link>
-                </Button>
-              </Card>
-            </div>
-          </div>
-
-          {/* Share Your Work */}
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">Share Your Work</h2>
-
-            <Card className="p-6 bg-card border-border">
-              <div className="space-y-4">
-                <p className="text-muted-foreground">
-                  Built something cool with Tea? We'd love to see it! Here's how you can share:
-                </p>
-
-                <ul className="space-y-3 text-sm">
-                  <li className="flex items-start gap-3">
-                    <span className="text-accent">•</span>
-                    <span className="text-muted-foreground">
-                      <strong className="text-foreground">GitHub Discussions</strong> - Share your projects in the "Show and Tell" category
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-accent">•</span>
-                    <span className="text-muted-foreground">
-                      <strong className="text-foreground">Examples</strong> - Contribute example code to the official examples directory
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-accent">•</span>
-                    <span className="text-muted-foreground">
-                      <strong className="text-foreground">Blog Posts</strong> - Write about your experience using Tea
-                    </span>
-                  </li>
-                </ul>
-              </div>
-            </Card>
-          </div>
-
-          {/* Code of Conduct */}
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-center">Community Guidelines</h2>
-
-            <Card className="p-6 bg-card border-border">
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                  <Heart className="h-5 w-5 text-accent" />
-                </div>
-                <div>
-                  <p className="text-muted-foreground mb-4">
-                    The Tea community is committed to being welcoming, inclusive, and respectful.
-                    We expect all community members to:
-                  </p>
-
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2">
-                      <span className="text-accent">•</span>
-                      Be respectful and considerate in all interactions
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-accent">•</span>
-                      Welcome newcomers and help them get started
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-accent">•</span>
-                      Focus on constructive feedback and collaboration
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-accent">•</span>
-                      Respect differing viewpoints and experiences
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Get Started */}
-          <Card className="p-6 bg-muted/30 border-border text-center">
-            <h2 className="text-xl font-semibold mb-3">Ready to Get Involved?</h2>
-            <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
-              Whether you're new to Tea or an experienced contributor, there's a place for you in our community.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Button className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
-                <Link href="/docs/getting-started">Get Started with Tea</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/docs/contributing">Start Contributing</Link>
-              </Button>
-            </div>
-          </Card>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border mt-20">
-        <div className="container mx-auto px-4 py-12">
-          <div className="text-center text-sm text-muted-foreground">
-            © 2025 Tea Language. Open source under MIT License.
-          </div>
-        </div>
-      </footer>
+      </section>
     </div>
   )
 }

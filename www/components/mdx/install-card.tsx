@@ -11,7 +11,7 @@ interface InstallStepProps {
 export function InstallStep({ title, children }: InstallStepProps) {
   return (
     <div>
-      <h3 className="font-semibold text-accent mb-2">{title}</h3>
+      <h3 className="font-semibold text-primary mb-2">{title}</h3>
       <pre className="bg-muted p-4 rounded-md overflow-x-auto texture-grid-fine">
         <code className="font-mono text-sm text-foreground">{children}</code>
       </pre>

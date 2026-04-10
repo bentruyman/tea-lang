@@ -50,6 +50,23 @@ require_command() {
   exit 1
 }
 
+activate_proto() {
+  if ! command -v proto >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ ! -f "${REPO_ROOT}/.prototools" && ! -f "${REPO_ROOT}/.tool-versions" ]]; then
+    return 0
+  fi
+
+  local proto_exports
+  proto_exports="$(cd "${REPO_ROOT}" && proto activate bash --export)"
+  if [[ -n "${proto_exports}" ]]; then
+    eval "${proto_exports}"
+    log_info "Activated repo toolchains with proto"
+  fi
+}
+
 configure_llvm() {
   local llvm_prefix=""
   local llvm_config_path=""
@@ -115,6 +132,7 @@ main() {
   require_repo_root
 
   log_info "Validating development prerequisites..."
+  activate_proto
   require_command "bun" "curl -fsSL https://bun.sh/install | bash"
   require_command "cargo" "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
   require_command "rustc" "rustup toolchain install stable"

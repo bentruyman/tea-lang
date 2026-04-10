@@ -3,9 +3,9 @@
 import { startTransition, useEffect, useRef, useState } from "react"
 import { AlertTriangle, LoaderCircle, Play, RotateCcw, Sparkles } from "lucide-react"
 
+import { TeaEditor } from "@/components/playground/tea-editor"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
 
 type PlaygroundDiagnostic = {
   message: string
@@ -271,12 +271,7 @@ export function PlaygroundClient() {
             ))}
           </div>
 
-          <Textarea
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-            spellCheck={false}
-            className="min-h-[32rem] rounded-[1.4rem] border-border/70 bg-[#121516] px-4 py-4 font-mono text-[0.95rem] leading-7 text-[#f2efe6] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-          />
+          <TeaEditor value={source} onChange={setSource} />
         </Card>
 
         <div className="grid gap-6">

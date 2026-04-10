@@ -50,7 +50,7 @@ Or manually:
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
-./install.sh
+./scripts/install.sh
 ```
 
 See the [Getting Started Guide](getting-started.md#installation) for details.

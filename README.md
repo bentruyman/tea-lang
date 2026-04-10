@@ -67,7 +67,7 @@ Or clone and run locally:
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
-./install.sh
+./scripts/install.sh
 ```
 
 #### Prerequisites

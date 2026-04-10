@@ -41,7 +41,7 @@ Or clone and install locally:
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
-./install.sh
+./scripts/install.sh
 ```
 
 This will:

@@ -17,6 +17,7 @@ pub use builtins::BUILTINS;
 pub enum StdFunctionKind {
     Print,
     Println,
+    Append,
     Length,
     Assert,
     AssertEq,

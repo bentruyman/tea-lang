@@ -2441,6 +2441,18 @@ unsafe fn tea_list_items_mut(list_ref: &mut TeaList) -> (*mut TeaValue, i64, i64
     }
 }
 
+unsafe fn tea_list_store_heap_metadata(
+    list_ref: &mut TeaList,
+    len: i64,
+    capacity: i64,
+    items: *mut TeaValue,
+) {
+    let data_ptr = list_ref.data.as_mut_ptr() as *mut u8;
+    std::ptr::copy_nonoverlapping(len.to_ne_bytes().as_ptr(), data_ptr, 8);
+    std::ptr::copy_nonoverlapping(capacity.to_ne_bytes().as_ptr(), data_ptr.add(8), 8);
+    std::ptr::copy_nonoverlapping((items as usize).to_ne_bytes().as_ptr(), data_ptr.add(16), 8);
+}
+
 // Helper function to get immutable access to list items
 unsafe fn tea_list_items(list_ref: &TeaList) -> (*const TeaValue, i64) {
     if list_ref.tag == 1 {
@@ -2514,6 +2526,59 @@ pub extern "C" fn tea_list_set(list: *mut TeaList, index: c_longlong, value: Tea
             panic!("index out of bounds");
         }
         *items.add(index as usize) = value;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_list_append(list: *mut TeaList, value: *const TeaValue) {
+    unsafe {
+        if list.is_null() {
+            panic!("null list");
+        }
+        if value.is_null() {
+            panic!("null list append value");
+        }
+
+        let value = *value;
+
+        let list_ref = &mut *list;
+        if list_ref.tag == 1 {
+            let len = list_ref.len as usize;
+            if len < 8 {
+                list_ref.data[len] = value;
+                list_ref.len += 1;
+                return;
+            }
+
+            let capacity = 16usize;
+            let mut items = vec![tea_value_nil(); capacity];
+            items[..8].copy_from_slice(&list_ref.data);
+            items[8] = value;
+            let items_ptr = items.as_mut_ptr();
+            std::mem::forget(items);
+
+            list_ref.tag = 0;
+            list_ref.len = 0;
+            list_ref.padding = [0; 6];
+            tea_list_store_heap_metadata(list_ref, 9, capacity as i64, items_ptr);
+            return;
+        }
+
+        let (items_ptr, len, capacity) = tea_list_items_mut(list_ref);
+        if len < capacity {
+            *items_ptr.add(len as usize) = value;
+            tea_list_store_heap_metadata(list_ref, len + 1, capacity, items_ptr);
+            return;
+        }
+
+        let old_capacity = capacity as usize;
+        let mut items = Vec::from_raw_parts(items_ptr, old_capacity, old_capacity);
+        let new_capacity = old_capacity.max(4) * 2;
+        items.resize(new_capacity, tea_value_nil());
+        items[len as usize] = value;
+        let new_ptr = items.as_mut_ptr();
+        std::mem::forget(items);
+        tea_list_store_heap_metadata(list_ref, len + 1, new_capacity as i64, new_ptr);
     }
 }
 

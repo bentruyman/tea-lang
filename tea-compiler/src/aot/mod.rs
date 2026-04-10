@@ -5974,6 +5974,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::Println => {
                 self.compile_println_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::Append => self.compile_append_call(&call.arguments, function, locals),
             StdFunctionKind::ToString => {
                 self.compile_to_string_call(&call.arguments, function, locals)
             }
@@ -10710,6 +10711,40 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         self.compile_util_len_call(arguments, function, locals)
     }
 
+    fn compile_append_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("append expects exactly 2 arguments");
+        }
+        if arguments.iter().any(|argument| argument.name.is_some()) {
+            bail!("named arguments are not supported for append");
+        }
+
+        let list_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let list_ptr = match list_expr {
+            ExprValue::List { pointer, .. } => pointer,
+            _ => bail!("append expects a List as its first argument"),
+        };
+
+        let value_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let tea_value = self.expr_to_tea_value(value_expr)?;
+        let tea_value_tmp =
+            self.create_entry_alloca(function, "append_value", self.value_type().into())?;
+        map_builder_error(self.builder.build_store(tea_value_tmp, tea_value))?;
+        let append_fn = self.ensure_list_append_fn();
+        self.call_function(
+            append_fn,
+            &[list_ptr.into(), tea_value_tmp.into()],
+            "append",
+        )?;
+
+        Ok(ExprValue::Void)
+    }
+
     fn build_numeric_add(
         &mut self,
         left: ExprValue<'ctx>,
@@ -11453,6 +11488,50 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         target: &ValueType,
     ) -> Result<ExprValue<'ctx>> {
         match target {
+            ValueType::List(target_inner) => match value {
+                ExprValue::List {
+                    pointer,
+                    element_type,
+                } if *element_type == ValueType::Void || *element_type == **target_inner => {
+                    Ok(ExprValue::List {
+                        pointer,
+                        element_type: target_inner.clone(),
+                    })
+                }
+                other => {
+                    if other.ty() == *target {
+                        Ok(other)
+                    } else {
+                        bail!(
+                            "type mismatch: expected {:?}, found {:?}",
+                            target,
+                            other.ty()
+                        );
+                    }
+                }
+            },
+            ValueType::Dict(target_inner) => match value {
+                ExprValue::Dict {
+                    pointer,
+                    value_type,
+                } if *value_type == ValueType::Void || *value_type == **target_inner => {
+                    Ok(ExprValue::Dict {
+                        pointer,
+                        value_type: target_inner.clone(),
+                    })
+                }
+                other => {
+                    if other.ty() == *target {
+                        Ok(other)
+                    } else {
+                        bail!(
+                            "type mismatch: expected {:?}, found {:?}",
+                            target,
+                            other.ty()
+                        );
+                    }
+                }
+            },
             ValueType::Optional(inner) => match value {
                 ExprValue::Optional {
                     inner: ref current, ..
@@ -12597,10 +12676,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if let Some(func) = self.builtin_list_append_fn {
             return func;
         }
-        let fn_type = self.list_ptr_type().fn_type(
-            &[self.list_ptr_type().into(), self.value_type().into()],
-            false,
-        );
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.list_ptr_type().into(), self.ptr_type.into()], false);
         let func = self
             .module
             .add_function("tea_list_append", fn_type, Some(Linkage::External));

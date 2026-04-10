@@ -2612,7 +2612,13 @@ impl TypeChecker {
             .iter()
             .map(|param| self.std_type_to_type(*param))
             .collect();
+        let mut type_parameters = Vec::new();
         match function.kind {
+            StdFunctionKind::Append => {
+                let generic = Type::GenericParameter("T".to_string());
+                params = vec![Type::List(Box::new(generic.clone())), generic];
+                type_parameters.push("T".to_string());
+            }
             StdFunctionKind::PathJoin => {
                 if let Some(first) = params.get_mut(0) {
                     *first = Type::List(Box::new(Type::String));
@@ -2643,7 +2649,7 @@ impl TypeChecker {
             params,
             return_type,
             arity: function.arity,
-            type_parameters: Vec::new(),
+            type_parameters,
         }
     }
 

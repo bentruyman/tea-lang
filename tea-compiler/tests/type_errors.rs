@@ -162,6 +162,51 @@ fn rejects_argument_type_mismatch() {
 }
 
 #[test]
+fn rejects_append_on_non_list() {
+    let source = r#"
+var value = 1
+@append(value, 2)
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("append_non_list.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(result.is_err(), "expected compilation to fail");
+}
+
+#[test]
+fn rejects_append_with_wrong_element_type() {
+    let source = r#"
+var numbers = [1, 2, 3]
+@append(numbers, "tea")
+"#;
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("append_wrong_type.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(result.is_err(), "expected compilation to fail");
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("argument 2 to function 'append'")),
+        "expected append type mismatch diagnostic, found {:?}",
+        messages
+    );
+}
+
+#[test]
 fn reports_generic_function_type_argument_mismatch() {
     let source = r#"
 def pair[T, U](left: T, right: U) -> T

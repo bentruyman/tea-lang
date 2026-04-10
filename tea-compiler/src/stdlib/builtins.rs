@@ -17,6 +17,13 @@ pub const BUILTINS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "append",
+        StdFunctionKind::Append,
+        StdArity::Exact(2),
+        &[StdType::Any, StdType::Any],
+        StdType::Void,
+    ),
+    std_function(
         "to_string",
         StdFunctionKind::ToString,
         StdArity::Exact(1),

@@ -78,6 +78,24 @@ var user = User(name: "Alice")
 @println(@type_of(user))  # Output: User
 ```
 
+### `@append(list: List[T], value: T) -> Void`
+
+Append a value to a mutable list in place.
+
+```tea
+var numbers = [1, 2]
+@append(numbers, 3)
+@println(numbers)  # Output: [1, 2, 3]
+```
+
+The appended value must match the list element type:
+
+```tea
+var words: List[String] = []
+@append(words, "tea")
+@println(words)  # Output: ["tea"]
+```
+
 ### `@len(collection: Any) -> Int`
 
 Get the length of a collection or string.

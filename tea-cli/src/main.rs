@@ -1021,20 +1021,33 @@ fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>
         return Ok(None);
     }
 
+    let mut newest_match: Option<(std::time::SystemTime, PathBuf)> = None;
+
     for entry in
         fs::read_dir(&deps_dir).with_context(|| format!("failed to read {}", deps_dir.display()))?
     {
         let path = entry?.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("rlib") {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.contains("tea_runtime") {
-                    return Ok(Some(path));
-                }
-            }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rlib") {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.contains("tea_runtime") {
+            continue;
+        }
+
+        let modified = fs::metadata(&path)
+            .and_then(|metadata| metadata.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        match &newest_match {
+            Some((current_modified, _)) if modified <= *current_modified => {}
+            _ => newest_match = Some((modified, path)),
         }
     }
 
-    Ok(None)
+    Ok(newest_match.map(|(_, path)| path))
 }
 
 fn build_runtime_archive(target_dir: &Path) -> Result<()> {
@@ -1056,10 +1069,6 @@ fn build_runtime_archive(target_dir: &Path) -> Result<()> {
 
 fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     let target_dir = runtime_target_dir();
-    if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
-        return Ok(path);
-    }
-
     build_runtime_archive(&target_dir)?;
 
     if let Some(path) = find_runtime_rlib(profile, &target_dir)? {

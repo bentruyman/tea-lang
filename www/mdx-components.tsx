@@ -1,6 +1,8 @@
 import type { MDXComponents } from 'mdx/types'
+import { Link2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { ContentPage, ContentSection, PageIntro } from '@/components/site-shell'
+import { cn } from '@/lib/utils'
 import {
   CodeBlock,
   CodeCard,
@@ -39,7 +41,7 @@ import {
   DirectoryCard,
 } from '@/components/mdx'
 import { CodeHighlighter } from '@/components/mdx/code-highlighter'
-import { Children, isValidElement, type ReactNode } from 'react'
+import { Children, isValidElement, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
 // Helper to extract text content from React children
 function extractTextContent(children: ReactNode): string {
@@ -62,22 +64,70 @@ function extractLanguage(className?: string): string {
   return match ? match[1] : 'tea'
 }
 
+function slugifyHeading(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export function useMDXComponents(components: MDXComponents): MDXComponents {
+  const headingSlugCounts = new Map<string, number>()
+
+  function createHeading(level: 'h1' | 'h2' | 'h3', baseClassName: string) {
+    const Heading = ({
+      children,
+      id,
+      className,
+      ...props
+    }: ComponentPropsWithoutRef<'h1'> | ComponentPropsWithoutRef<'h2'> | ComponentPropsWithoutRef<'h3'>) => {
+      const headingText = extractTextContent(children)
+      const baseSlug = id ?? slugifyHeading(headingText)
+      const slugCount = !id && baseSlug ? (headingSlugCounts.get(baseSlug) ?? 0) : 0
+      const slug = id ?? (baseSlug ? `${baseSlug}${slugCount > 0 ? `-${slugCount + 1}` : ''}` : undefined)
+
+      if (!id && baseSlug) {
+        headingSlugCounts.set(baseSlug, slugCount + 1)
+      }
+
+      const Tag = level
+
+      return (
+        <Tag id={slug} className={cn('group scroll-mt-24', baseClassName, className)} {...props}>
+          {children}
+          {slug ? (
+            <a
+              href={`#${slug}`}
+              aria-label={`Permalink to ${headingText}`}
+              className="ml-2 inline-flex size-7 translate-y-[-0.06em] items-center justify-center rounded-full border border-border/60 bg-background/85 align-middle text-muted-foreground opacity-0 transition hover:border-primary/35 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              <Link2 className="size-3.5" />
+            </a>
+          ) : null}
+        </Tag>
+      )
+    }
+
+    Heading.displayName = `${level.toUpperCase()}WithPermalink`
+
+    return Heading
+  }
+
   return {
     // Override default HTML elements with styled versions
-    h1: ({ children }) => (
-      <h1 className="mb-4 font-display text-4xl font-semibold tracking-tight text-balance md:text-5xl">
-        {children}
-      </h1>
+    h1: createHeading(
+      'h1',
+      'mb-4 font-display text-4xl font-semibold tracking-tight text-balance text-foreground md:text-5xl',
     ),
-    h2: ({ children }) => (
-      <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-        {children}
-      </h2>
+    h2: createHeading(
+      'h2',
+      'font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl',
     ),
-    h3: ({ children }) => (
-      <h3 className="font-display text-2xl font-semibold tracking-tight text-primary">{children}</h3>
-    ),
+    h3: createHeading('h3', 'font-display text-2xl font-semibold tracking-tight text-primary'),
     p: ({ children }) => (
       <p className="text-[1.02rem] leading-8 text-muted-foreground md:text-[1.05rem]">{children}</p>
     ),

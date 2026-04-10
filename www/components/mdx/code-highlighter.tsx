@@ -2,49 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
-import { createHighlighter, type Highlighter, type LanguageRegistration } from 'shiki'
 
-// Import grammar statically for bundling
-import teaGrammar from '@/lib/tea.tmLanguage.json'
+import {
+  DOCS_HIGHLIGHT_THEME,
+  getDocsHighlighter,
+  normalizeHighlightedLanguage,
+} from '@/lib/docs-highlighter'
 
 interface CodeHighlighterProps {
   code: string
   language: string
-}
-
-const ACTIVE_THEME = 'rose-pine-dawn'
-
-// Singleton highlighter promise
-let highlighterPromise: Promise<Highlighter> | null = null
-
-// Create a proper language registration for Tea
-const teaLanguage: LanguageRegistration = {
-  ...teaGrammar,
-  name: 'tea',
-} as LanguageRegistration
-
-async function getHighlighter(): Promise<Highlighter> {
-  if (!highlighterPromise) {
-    highlighterPromise = (async () => {
-      const highlighter = await createHighlighter({
-        themes: [ACTIVE_THEME],
-        langs: [
-          'javascript',
-          'typescript',
-          'json',
-          'bash',
-          'rust',
-          'yaml',
-          'toml',
-          'text',
-          teaLanguage,
-        ],
-      })
-
-      return highlighter
-    })()
-  }
-  return highlighterPromise
 }
 
 // Cache for highlighted code
@@ -54,7 +21,7 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
   const [html, setHtml] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const trimmedCode = code.trim()
-  const cacheKey = `${ACTIVE_THEME}:${language}:${trimmedCode}`
+  const cacheKey = `${DOCS_HIGHLIGHT_THEME}:${language}:${trimmedCode}`
 
   useEffect(() => {
     // Check cache first
@@ -64,25 +31,17 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
       return
     }
 
-    // Map language aliases
-    const langMap: Record<string, string> = {
-      sh: 'bash',
-      shell: 'bash',
-      ts: 'typescript',
-      js: 'javascript',
-    }
-
-    const effectiveLang = langMap[language] || language
+    const effectiveLang = normalizeHighlightedLanguage(language)
 
     const highlight = async () => {
       try {
-        const highlighter = await getHighlighter()
+        const highlighter = await getDocsHighlighter()
         const loadedLangs = highlighter.getLoadedLanguages()
         const langToUse = loadedLangs.includes(effectiveLang) ? effectiveLang : 'text'
 
         const result = highlighter.codeToHtml(trimmedCode, {
           lang: langToUse,
-          theme: ACTIVE_THEME,
+          theme: DOCS_HIGHLIGHT_THEME,
         })
         cache.set(cacheKey, result)
         setHtml(result)

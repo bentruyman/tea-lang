@@ -1,0 +1,209 @@
+"use client"
+
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react"
+import type { ThemedToken } from "shiki"
+
+import { getDocsHighlighter, DOCS_HIGHLIGHT_THEME } from "@/lib/docs-highlighter"
+import { cn } from "@/lib/utils"
+
+type TeaEditorProps = {
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}
+
+const FONT_STYLE_ITALIC = 1
+const FONT_STYLE_BOLD = 2
+const FONT_STYLE_UNDERLINE = 4
+const FONT_STYLE_STRIKETHROUGH = 8
+const EDITOR_LINE_HEIGHT = "1.35"
+
+const highlightCache = new Map<string, ThemedToken[][]>()
+
+function fallbackTokens(code: string) {
+  return code.split("\n").map((line) => (line ? [{ content: line, offset: 0 }] : []))
+}
+
+function getTokenStyle(token: ThemedToken): CSSProperties {
+  if (token.htmlStyle) {
+    return token.htmlStyle
+  }
+
+  const style: CSSProperties = {}
+  const fontStyle = token.fontStyle ?? 0
+  const decorations: string[] = []
+
+  if (token.color) {
+    style.color = token.color
+  }
+
+  if (fontStyle & FONT_STYLE_ITALIC) {
+    style.fontStyle = "italic"
+  }
+
+  if (fontStyle & FONT_STYLE_BOLD) {
+    style.fontWeight = 700
+  }
+
+  if (fontStyle & FONT_STYLE_UNDERLINE) {
+    decorations.push("underline")
+  }
+
+  if (fontStyle & FONT_STYLE_STRIKETHROUGH) {
+    decorations.push("line-through")
+  }
+
+  if (decorations.length > 0) {
+    style.textDecoration = decorations.join(" ")
+  }
+
+  return style
+}
+
+export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
+  const editorId = useId()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const highlightRef = useRef<HTMLDivElement>(null)
+  const deferredValue = useDeferredValue(value)
+  const [lines, setLines] = useState<ThemedToken[][]>(fallbackTokens(value))
+
+  useEffect(() => {
+    const cacheKey = `${DOCS_HIGHLIGHT_THEME}:${deferredValue}`
+    const cached = highlightCache.get(cacheKey)
+
+    if (cached) {
+      setLines(cached)
+      return
+    }
+
+    let cancelled = false
+
+    const highlight = async () => {
+      try {
+        const highlighter = await getDocsHighlighter()
+        const nextLines = highlighter.codeToTokensBase(deferredValue, {
+          lang: "tea" as Parameters<typeof highlighter.codeToTokensBase>[1]["lang"],
+          theme: DOCS_HIGHLIGHT_THEME,
+        })
+
+        if (cancelled) {
+          return
+        }
+
+        highlightCache.set(cacheKey, nextLines)
+        setLines(nextLines)
+      } catch (error) {
+        console.error("Tea editor highlighting failed:", error)
+
+        if (!cancelled) {
+          setLines(fallbackTokens(deferredValue))
+        }
+      }
+    }
+
+    highlight()
+
+    return () => {
+      cancelled = true
+    }
+  }, [deferredValue])
+
+  function syncHighlightScroll(target: HTMLTextAreaElement) {
+    if (!highlightRef.current) {
+      return
+    }
+
+    highlightRef.current.style.transform = `translate3d(${-target.scrollLeft}px, ${-target.scrollTop}px, 0)`
+  }
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    onChange(event.target.value)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Tab") {
+      return
+    }
+
+    event.preventDefault()
+
+    const textarea = event.currentTarget
+    const selectionStart = textarea.selectionStart
+    const selectionEnd = textarea.selectionEnd
+    const nextValue = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`
+    const nextCaret = selectionStart + 2
+
+    onChange(nextValue)
+
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) {
+        return
+      }
+
+      textareaRef.current.selectionStart = nextCaret
+      textareaRef.current.selectionEnd = nextCaret
+      syncHighlightScroll(textareaRef.current)
+    })
+  }
+
+  return (
+    <div className={cn("relative", className)}>
+      <label htmlFor={editorId} className="sr-only">
+        Tea playground source
+      </label>
+      <div className="relative min-h-[32rem] overflow-hidden rounded-[1.4rem] border border-border/70 bg-[#121516] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/20">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            ref={highlightRef}
+            className="px-4 py-3.5 font-mono text-[0.95rem] text-[#f2efe6] [tab-size:2] will-change-transform"
+            style={{ lineHeight: EDITOR_LINE_HEIGHT }}
+          >
+            <div className="min-h-[calc(32rem-2rem)] whitespace-pre-wrap break-words">
+              {lines.map((line, lineIndex) => (
+                <div
+                  key={`line-${lineIndex}`}
+                  className="min-h-[1.35em]"
+                  style={{ lineHeight: EDITOR_LINE_HEIGHT }}
+                >
+                  {line.length > 0 ? (
+                    line.map((token, tokenIndex) => (
+                      <span
+                        key={`token-${lineIndex}-${tokenIndex}-${token.offset}`}
+                        style={getTokenStyle(token)}
+                      >
+                        {token.content}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="select-none opacity-0"> </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <textarea
+          id={editorId}
+          ref={textareaRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onScroll={(event) => syncHighlightScroll(event.currentTarget)}
+          spellCheck={false}
+          className="min-h-[32rem] w-full resize-none border-0 bg-transparent px-4 py-3.5 font-mono text-[0.95rem] text-transparent caret-[#f2efe6] outline-none selection:bg-emerald-400/20 [tab-size:2]"
+          style={{ lineHeight: EDITOR_LINE_HEIGHT }}
+        />
+      </div>
+    </div>
+  )
+}

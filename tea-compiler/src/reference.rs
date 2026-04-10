@@ -167,7 +167,13 @@ fn extract_public_tea_functions(
                     .map(|doc| summarize_docstring(doc))
                     .filter(|doc| !doc.is_empty())
             })
-            .unwrap_or_default();
+            .ok_or_else(|| {
+                anyhow!(
+                    "public stdlib function '{}' in '{}' is missing documentation",
+                    function.name,
+                    path.display()
+                )
+            })?;
 
         functions.push(ReferenceFunction {
             name: function.name,
@@ -365,6 +371,10 @@ mod tests {
 #
 # Additional context that should not be included.
 
+## Public function summary.
+##
+## Examples:
+##   public_fn("tea")
 pub def public_fn(name: String) -> String
   name
 end
@@ -384,6 +394,7 @@ end
             entry.functions[0].signature_display,
             "pub def public_fn(name: String) -> String"
         );
+        assert_eq!(entry.functions[0].summary, "Public function summary.");
 
         Ok(())
     }

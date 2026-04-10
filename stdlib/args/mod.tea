@@ -22,42 +22,42 @@
 #   const files = args.positional()
 use intrinsics = "std.intrinsics"
 
-# Return all command-line arguments as a list of strings.
-#
-# Returns arguments passed after the program name. Does not include
-# the program name itself (use `program()` for that).
-#
-# Examples:
-#   # Running: tea script.tea arg1 arg2
-#   const all = args.all()  # ["arg1", "arg2"]
+## Return all command-line arguments as a list of strings.
+##
+## Returns arguments passed after the program name. Does not include
+## the program name itself (use `program()` for that).
+##
+## Examples:
+##   # Running: tea script.tea arg1 arg2
+##   const all = args.all()  # ["arg1", "arg2"]
 pub def all() -> List[String]
   @args()
 end
 
-# Return the program name (argv[0] with path stripped).
-#
-# Examples:
-#   # Running: tea script.tea
-#   const name = args.program()  # "script"
-#
-#   # Running: ./bin/myapp
-#   const name = args.program()  # "myapp"
+## Return the program name (argv[0] with path stripped).
+##
+## Examples:
+##   # Running: tea script.tea
+##   const name = args.program()  # "script"
+##
+##   # Running: ./bin/myapp
+##   const name = args.program()  # "myapp"
 pub def program() -> String
   intrinsics.args_program()
 end
 
-# Check if a flag is present in the arguments.
-#
-# Searches for an exact match of the flag string in the argument list.
-#
-# Examples:
-#   if args.has("--verbose")
-#     @println("Verbose mode enabled")
-#   end
-#
-#   if args.has("-v") || args.has("--verbose")
-#     verbose = true
-#   end
+## Check if a flag is present in the arguments.
+##
+## Searches for an exact match of the flag string in the argument list.
+##
+## Examples:
+##   if args.has("--verbose")
+##     @println("Verbose mode enabled")
+##   end
+##
+##   if args.has("-v") || args.has("--verbose")
+##     verbose = true
+##   end
 pub def has(flag: String) -> Bool
   const arguments = @args()
 
@@ -70,21 +70,21 @@ pub def has(flag: String) -> Bool
   false
 end
 
-# Get the value of an option argument.
-#
-# Looks for the option in the argument list and returns the following
-# argument as its value. Returns nil if the option is not found or
-# has no value.
-#
-# Examples:
-#   # Running: tea script.tea --output result.txt
-#   const output = args.get("--output")  # "result.txt"
-#
-#   # Running: tea script.tea --verbose
-#   const output = args.get("--output")  # nil
-#
-#   # With default value
-#   const output = args.get("--output") ?? "default.txt"
+## Get the value of an option argument.
+##
+## Looks for the option in the argument list and returns the following
+## argument as its value. Returns nil if the option is not found or
+## has no value.
+##
+## Examples:
+##   # Running: tea script.tea --output result.txt
+##   const output = args.get("--output")  # "result.txt"
+##
+##   # Running: tea script.tea --verbose
+##   const output = args.get("--output")  # nil
+##
+##   # With default value
+##   const output = args.get("--output") ?? "default.txt"
 pub def get(option: String) -> String?
   const arguments = @args()
   var i = 0
@@ -101,17 +101,17 @@ pub def get(option: String) -> String?
   return nil
 end
 
-# Return positional arguments (arguments that are not flags or option values).
-#
-# Filters out arguments starting with "-" and their associated values.
-# Useful for extracting file paths or other positional parameters.
-#
-# Examples:
-#   # Running: tea script.tea --verbose file1.txt file2.txt
-#   const files = args.positional()  # ["file1.txt", "file2.txt"]
-#
-#   # Running: tea script.tea -o output.txt input.txt
-#   const files = args.positional()  # ["input.txt"]
+## Return positional arguments (arguments that are not flags or option values).
+##
+## Filters out arguments starting with "-" and their associated values.
+## Useful for extracting file paths or other positional parameters.
+##
+## Examples:
+##   # Running: tea script.tea --verbose file1.txt file2.txt
+##   const files = args.positional()  # ["file1.txt", "file2.txt"]
+##
+##   # Running: tea script.tea -o output.txt input.txt
+##   const files = args.positional()  # ["input.txt"]
 pub def positional() -> List[String]
   const arguments = @args()
   # Start with empty sentinel that we'll remove, to get proper typing

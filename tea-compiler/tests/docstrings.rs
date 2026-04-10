@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::{fs, path::Path};
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId, Statement};
 
@@ -97,6 +98,55 @@ end
             );
         }
         other => panic!("expected var statement, found {:?}", other),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn public_stdlib_functions_have_docstrings() -> anyhow::Result<()> {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root");
+
+    for path in [
+        "stdlib/args/mod.tea",
+        "stdlib/assert/mod.tea",
+        "stdlib/env/mod.tea",
+        "stdlib/fs/mod.tea",
+        "stdlib/json/mod.tea",
+        "stdlib/path/mod.tea",
+        "stdlib/process/mod.tea",
+        "stdlib/regex/mod.tea",
+        "stdlib/string/mod.tea",
+    ] {
+        let absolute_path = workspace_root.join(path);
+        let source_text = fs::read_to_string(&absolute_path)?;
+        let source = SourceFile::new(SourceId(0), absolute_path.clone(), source_text);
+        let mut compiler = Compiler::new(CompileOptions::default());
+        let parsed = compiler.parse_source(&source)?;
+
+        assert!(
+            !compiler.diagnostics().has_errors(),
+            "unexpected diagnostics for {}: {:?}",
+            path,
+            compiler.diagnostics()
+        );
+
+        for statement in parsed.into_module().statements {
+            let Statement::Function(function) = statement else {
+                continue;
+            };
+            if function.is_public {
+                let doc = function.docstring.as_deref().unwrap_or("").trim();
+                assert!(
+                    !doc.is_empty(),
+                    "public stdlib function {} in {} is missing a docstring",
+                    function.name,
+                    path
+                );
+            }
+        }
     }
 
     Ok(())

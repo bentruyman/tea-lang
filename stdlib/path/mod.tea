@@ -17,55 +17,54 @@
 
 use intrinsics = "std.intrinsics"
 
-# Join path components into a single path.
-#
-# Examples:
-#   var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
+## Join path components into a single path.
+##
+## Examples:
+##   var path = path.join(["usr", "local", "bin"])  # => "usr/local/bin"
 pub def join(parts: List[String]) -> String
   intrinsics.path_join(parts)
 end
 
-# Split a path into its components.
-#
-# Examples:
-#   var parts = path.split("/usr/local/bin")  # => ["usr", "local", "bin"]
-#   var parts = path.split("usr/local/")  # => ["usr", "local"]
-#
-# Pure Tea implementation - splits by separator and filters empty strings.
+## Split a path into its components.
+##
+## Examples:
+##   var parts = path.split("/usr/local/bin")  # => ["usr", "local", "bin"]
+##   var parts = path.split("usr/local/")  # => ["usr", "local"]
+##
+## Pure Tea implementation - splits by separator and filters empty strings.
 pub def split(file_path: String) -> List[String]
   intrinsics.path_components(file_path)
 end
 
-# Get the directory part of a path.
-#
-# Examples:
-#   var dir = path.dirname("/usr/local/bin/tea")  # => "/usr/local/bin"
-#   var dir = path.dirname("/usr/local/")  # => "/usr/local"
-#   var dir = path.dirname("file.txt")  # => ""
-#   var dir = path.dirname("/")  # => "/"
+## Get the directory part of a path.
+##
+## Examples:
+##   var dir = path.dirname("/usr/local/bin/tea")  # => "/usr/local/bin"
+##   var dir = path.dirname("/usr/local/")  # => "/usr/local"
+##   var dir = path.dirname("file.txt")  # => ""
+##   var dir = path.dirname("/")  # => "/"
 pub def dirname(file_path: String) -> String
   intrinsics.path_dirname(file_path)
 end
 
-# Get the filename part of a path.
-#
-# Examples:
-#   var name = path.basename("/usr/local/bin/tea")  # => "tea"
-#   var name = path.basename("/usr/local/")  # => "local"
-#   var name = path.basename("file.txt")  # => "file.txt"
-#   var name = path.basename("/")  # => ""
+## Get the filename part of a path.
+##
+## Examples:
+##   var name = path.basename("/usr/local/bin/tea")  # => "tea"
+##   var name = path.basename("/usr/local/")  # => "local"
+##   var name = path.basename("file.txt")  # => "file.txt"
+##   var name = path.basename("/")  # => ""
 pub def basename(file_path: String) -> String
   intrinsics.path_basename(file_path)
 end
 
-# Get the extension of a path.
-#
-# Examples:
-#   var ext = path.extension("file.tea")  # => "tea"
-#   var ext = path.extension("file.tar.gz")  # => "gz"
-#   var ext = path.extension(".env")  # => ""
-#   var ext = path.extension("file")  # => ""
+## Get the extension of a path.
+##
+## Examples:
+##   var ext = path.extension("file.tea")  # => "tea"
+##   var ext = path.extension("file.tar.gz")  # => "gz"
+##   var ext = path.extension(".env")  # => ""
+##   var ext = path.extension("file")  # => ""
 pub def extension(file_path: String) -> String
   intrinsics.path_extension(file_path)
 end
-

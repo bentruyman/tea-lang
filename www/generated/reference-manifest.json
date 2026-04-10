@@ -140,17 +140,17 @@
         {
           "name": "has",
           "signature_display": "pub def has(flag: String) -> Bool",
-          "summary": ""
+          "summary": "Check if a flag is present in the arguments."
         },
         {
           "name": "get",
           "signature_display": "pub def get(option: String) -> String?",
-          "summary": ""
+          "summary": "Get the value of an option argument."
         },
         {
           "name": "positional",
           "signature_display": "pub def positional() -> List[String]",
-          "summary": ""
+          "summary": "Return positional arguments (arguments that are not flags or option values)."
         }
       ]
     },
@@ -166,22 +166,22 @@
         {
           "name": "ok",
           "signature_display": "pub def ok(value)",
-          "summary": "Assert that a condition holds; optionally provide a failure message."
+          "summary": "Asserts that a value is truthy."
         },
         {
           "name": "eq",
           "signature_display": "pub def eq(left, right)",
-          "summary": "Assert that two values are equal."
+          "summary": "Asserts that two values are equal."
         },
         {
           "name": "ne",
           "signature_display": "pub def ne(left, right)",
-          "summary": "Assert that two values are not equal."
+          "summary": "Asserts that two values are not equal."
         },
         {
           "name": "snapshot",
           "signature_display": "pub def snapshot(name, value, path)",
-          "summary": "Compare actual text against a stored snapshot, with optional hint."
+          "summary": "Asserts that a value matches a saved snapshot."
         }
       ]
     },
@@ -197,22 +197,22 @@
         {
           "name": "get",
           "signature_display": "pub def get(name: String) -> String",
-          "summary": "Lookup an environment variable (returns Nil if unset)."
+          "summary": "Get the value of an environment variable."
         },
         {
           "name": "set",
           "signature_display": "pub def set(name: String, value: String) -> Void",
-          "summary": "Set an environment variable for child processes."
+          "summary": "Set an environment variable."
         },
         {
           "name": "vars",
           "signature_display": "pub def vars() -> Dict[String, String]",
-          "summary": "Return a dictionary of the current environment."
+          "summary": "Get all environment variables as a dictionary."
         },
         {
           "name": "cwd",
           "signature_display": "pub def cwd() -> String",
-          "summary": "Return the current working directory."
+          "summary": "Get the current working directory."
         }
       ]
     },
@@ -228,27 +228,27 @@
         {
           "name": "read_file",
           "signature_display": "pub def read_file(file_path: String) -> String",
-          "summary": "Read an entire text file into a string."
+          "summary": "Read a text file."
         },
         {
           "name": "write_file",
           "signature_display": "pub def write_file(file_path: String, content: String) -> Void",
-          "summary": "Write a string to a file, replacing existing contents."
+          "summary": "Write text to a file."
         },
         {
           "name": "create_dir",
           "signature_display": "pub def create_dir(dir_path: String) -> Void",
-          "summary": "Create a directory and intermediate folders as needed."
+          "summary": "Create a directory."
         },
         {
           "name": "remove",
           "signature_display": "pub def remove(file_path: String) -> Void",
-          "summary": "Remove a file or directory recursively."
+          "summary": "Remove a file or directory."
         },
         {
           "name": "read_dir",
           "signature_display": "pub def read_dir(dir_path: String) -> List[String]",
-          "summary": "List entries in a directory."
+          "summary": "List all entries in a directory."
         }
       ]
     },
@@ -264,12 +264,12 @@
         {
           "name": "encode",
           "signature_display": "pub def encode(value) -> String",
-          "summary": ""
+          "summary": "Encode any Tea value to a JSON string."
         },
         {
           "name": "decode",
           "signature_display": "pub def decode(json_str: String)",
-          "summary": ""
+          "summary": "Decode a JSON string to a Tea value."
         }
       ]
     },
@@ -285,27 +285,27 @@
         {
           "name": "join",
           "signature_display": "pub def join(parts: List[String]) -> String",
-          "summary": "Join multiple path segments."
+          "summary": "Join path components into a single path."
         },
         {
           "name": "split",
           "signature_display": "pub def split(file_path: String) -> List[String]",
-          "summary": "Split a path into components."
+          "summary": "Split a path into its components."
         },
         {
           "name": "dirname",
           "signature_display": "pub def dirname(file_path: String) -> String",
-          "summary": "Return the directory portion of a path."
+          "summary": "Get the directory part of a path."
         },
         {
           "name": "basename",
           "signature_display": "pub def basename(file_path: String) -> String",
-          "summary": "Return the final component of a path."
+          "summary": "Get the filename part of a path."
         },
         {
           "name": "extension",
           "signature_display": "pub def extension(file_path: String) -> String",
-          "summary": "Return the extension of a path if present."
+          "summary": "Get the extension of a path."
         }
       ]
     },
@@ -321,22 +321,22 @@
         {
           "name": "run",
           "signature_display": "pub def run(command: String, args: List[String]) -> ProcessResult",
-          "summary": "Run a command synchronously and return its exit code, stdout, and stderr."
+          "summary": "Run a command synchronously and wait for it to complete."
         },
         {
           "name": "run_with_options",
           "signature_display": "pub def run_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String, stdin: String) -> ProcessResult",
-          "summary": ""
+          "summary": "Run a command with full options (env, cwd, stdin)."
         },
         {
           "name": "spawn",
           "signature_display": "pub def spawn(command: String, args: List[String]) -> Int",
-          "summary": "Start a command without waiting, returning a handle."
+          "summary": "Start a command without waiting for it to complete."
         },
         {
           "name": "spawn_with_options",
           "signature_display": "pub def spawn_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String) -> Int",
-          "summary": ""
+          "summary": "Spawn a command with full options (env, cwd)."
         },
         {
           "name": "wait",
@@ -356,7 +356,7 @@
         {
           "name": "read_stdout_bytes",
           "signature_display": "pub def read_stdout_bytes(handle: Int, bytes: Int) -> String",
-          "summary": ""
+          "summary": "Read up to the specified number of bytes from a spawned process's stdout."
         },
         {
           "name": "read_stderr",
@@ -366,7 +366,7 @@
         {
           "name": "read_stderr_bytes",
           "signature_display": "pub def read_stderr_bytes(handle: Int, bytes: Int) -> String",
-          "summary": ""
+          "summary": "Read up to the specified number of bytes from a spawned process's stderr."
         },
         {
           "name": "write_stdin",
@@ -438,47 +438,47 @@
         {
           "name": "starts_with",
           "signature_display": "pub def starts_with(text: String, prefix: String) -> Bool",
-          "summary": ""
+          "summary": "Check if a string starts with a given prefix."
         },
         {
           "name": "ends_with",
           "signature_display": "pub def ends_with(text: String, suffix: String) -> Bool",
-          "summary": ""
+          "summary": "Check if a string ends with a given suffix."
         },
         {
           "name": "trim_start",
           "signature_display": "pub def trim_start(text: String) -> String",
-          "summary": ""
+          "summary": "Trim whitespace from the start of a string."
         },
         {
           "name": "trim_end",
           "signature_display": "pub def trim_end(text: String) -> String",
-          "summary": ""
+          "summary": "Trim whitespace from the end of a string."
         },
         {
           "name": "trim",
           "signature_display": "pub def trim(text: String) -> String",
-          "summary": ""
+          "summary": "Trim whitespace from both ends of a string."
         },
         {
           "name": "reverse",
           "signature_display": "pub def reverse(text: String) -> String",
-          "summary": ""
+          "summary": "Reverse a string."
         },
         {
           "name": "replace",
           "signature_display": "pub def replace(text: String, pattern: String, replacement: String) -> String",
-          "summary": ""
+          "summary": "Replace all occurrences of a substring with another string."
         },
         {
           "name": "to_lower",
           "signature_display": "pub def to_lower(text: String) -> String",
-          "summary": ""
+          "summary": "Convert a string to lowercase."
         },
         {
           "name": "to_upper",
           "signature_display": "pub def to_upper(text: String) -> String",
-          "summary": ""
+          "summary": "Convert a string to uppercase."
         }
       ]
     }

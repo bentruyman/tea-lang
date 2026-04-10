@@ -153,6 +153,11 @@ function verifyReferenceSources() {
     assert(entry.summary, `Reference manifest entry has no summary: ${entry.slug}`)
     assert(Array.isArray(entry.functions), `Reference manifest entry has invalid functions: ${entry.slug}`)
     assert(entry.functions.length > 0, `Reference manifest entry has no functions: ${entry.slug}`)
+    for (const fn of entry.functions) {
+      assert(fn.name, `Reference function is missing a name in ${entry.slug}`)
+      assert(fn.signature_display, `Reference function is missing a signature in ${entry.slug}:${fn.name}`)
+      assert(fn.summary, `Reference function has no summary in ${entry.slug}:${fn.name}`)
+    }
   }
 
   console.log("reference manifest audit ok")

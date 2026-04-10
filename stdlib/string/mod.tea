@@ -6,11 +6,11 @@
 
 use intrinsics = "std.intrinsics"
 
-# Check if a string starts with a given prefix.
-#
-# Examples:
-#   string.starts_with("hello world", "hello")  # => true
-#   string.starts_with("hello world", "world")  # => false
+## Check if a string starts with a given prefix.
+##
+## Examples:
+##   string.starts_with("hello world", "hello")  # => true
+##   string.starts_with("hello world", "world")  # => false
 pub def starts_with(text: String, prefix: String) -> Bool
   var prefix_len = @len(prefix)
 
@@ -26,11 +26,11 @@ pub def starts_with(text: String, prefix: String) -> Bool
   extracted == prefix
 end
 
-# Check if a string ends with a given suffix.
-#
-# Examples:
-#   string.ends_with("hello world", "world")  # => true
-#   string.ends_with("hello world", "hello")  # => false
+## Check if a string ends with a given suffix.
+##
+## Examples:
+##   string.ends_with("hello world", "world")  # => true
+##   string.ends_with("hello world", "hello")  # => false
 pub def ends_with(text: String, suffix: String) -> Bool
   var suffix_len = @len(suffix)
 
@@ -49,11 +49,11 @@ pub def ends_with(text: String, suffix: String) -> Bool
   extracted == suffix
 end
 
-# Trim whitespace from the start of a string.
-#
-# Examples:
-#   string.trim_start("  hello  ")  # => "hello  "
-#   string.trim_start("\t\nhello")  # => "hello"
+## Trim whitespace from the start of a string.
+##
+## Examples:
+##   string.trim_start("  hello  ")  # => "hello  "
+##   string.trim_start("\t\nhello")  # => "hello"
 pub def trim_start(text: String) -> String
   var len = @len(text)
   var start = 0
@@ -72,11 +72,11 @@ pub def trim_start(text: String) -> String
   ""
 end
 
-# Trim whitespace from the end of a string.
-#
-# Examples:
-#   string.trim_end("  hello  ")  # => "  hello"
-#   string.trim_end("hello\n\t")  # => "hello"
+## Trim whitespace from the end of a string.
+##
+## Examples:
+##   string.trim_end("  hello  ")  # => "  hello"
+##   string.trim_end("hello\n\t")  # => "hello"
 pub def trim_end(text: String) -> String
   var len = @len(text)
   var end_pos = len
@@ -95,20 +95,20 @@ pub def trim_end(text: String) -> String
   ""
 end
 
-# Trim whitespace from both ends of a string.
-#
-# Examples:
-#   string.trim("  hello  ")  # => "hello"
-#   string.trim("\t\nhello\n\t")  # => "hello"
+## Trim whitespace from both ends of a string.
+##
+## Examples:
+##   string.trim("  hello  ")  # => "hello"
+##   string.trim("\t\nhello\n\t")  # => "hello"
 pub def trim(text: String) -> String
   trim_end(trim_start(text))
 end
 
-# Reverse a string.
-#
-# Examples:
-#   string.reverse("hello")  # => "olleh"
-#   string.reverse("ab")  # => "ba"
+## Reverse a string.
+##
+## Examples:
+##   string.reverse("hello")  # => "olleh"
+##   string.reverse("ab")  # => "ba"
 pub def reverse(text: String) -> String
   var len = @len(text)
   var result = ""
@@ -122,30 +122,29 @@ pub def reverse(text: String) -> String
   result
 end
 
-# Replace all occurrences of a substring with another string.
-#
-# Examples:
-#   string.replace("hello world", "world", "tea")  # => "hello tea"
-#   string.replace("foo bar foo", "foo", "baz")  # => "baz bar baz"
+## Replace all occurrences of a substring with another string.
+##
+## Examples:
+##   string.replace("hello world", "world", "tea")  # => "hello tea"
+##   string.replace("foo bar foo", "foo", "baz")  # => "baz bar baz"
 pub def replace(text: String, pattern: String, replacement: String) -> String
   intrinsics.string_replace(text, pattern, replacement)
 end
 
-# Convert a string to lowercase.
-#
-# Examples:
-#   string.to_lower("Hello World")  # => "hello world"
-#   string.to_lower("TEA")  # => "tea"
+## Convert a string to lowercase.
+##
+## Examples:
+##   string.to_lower("Hello World")  # => "hello world"
+##   string.to_lower("TEA")  # => "tea"
 pub def to_lower(text: String) -> String
   intrinsics.string_to_lower(text)
 end
 
-# Convert a string to uppercase.
-#
-# Examples:
-#   string.to_upper("Hello World")  # => "HELLO WORLD"
-#   string.to_upper("tea")  # => "TEA"
+## Convert a string to uppercase.
+##
+## Examples:
+##   string.to_upper("Hello World")  # => "HELLO WORLD"
+##   string.to_upper("tea")  # => "TEA"
 pub def to_upper(text: String) -> String
   intrinsics.string_to_upper(text)
 end
-

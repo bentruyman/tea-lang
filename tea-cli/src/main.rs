@@ -278,8 +278,9 @@ fn run_docs_manifest(cli: &DocsManifestCli) -> Result<()> {
         }
     }
 
-    let json =
+    let mut json =
         serde_json::to_vec_pretty(&manifest).context("failed to serialize reference manifest")?;
+    json.push(b'\n');
     fs::write(&output, json).with_context(|| format!("failed to write {}", output.display()))?;
     println!("{}", output.display());
 

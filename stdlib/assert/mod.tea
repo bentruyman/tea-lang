@@ -1,43 +1,43 @@
 # Assertion helpers for tests and runtime checks.
 
-# Asserts that a value is truthy.
-#
-# Examples:
-#   ok(1 + 1 == 2)
-#   ok(x > 0)
+## Asserts that a value is truthy.
+##
+## Examples:
+##   ok(1 + 1 == 2)
+##   ok(x > 0)
 pub def ok(value)
   if ! value
     @panic("assertion failed")
   end
 end
 
-# Asserts that two values are equal.
-#
-# Examples:
-#   eq(1 + 1, 2)
-#   eq("hello", "hello")
+## Asserts that two values are equal.
+##
+## Examples:
+##   eq(1 + 1, 2)
+##   eq("hello", "hello")
 pub def eq(left, right)
   if left != right
     @panic("assertion failed: `{left}` != `{right}`")
   end
 end
 
-# Asserts that two values are not equal.
-#
-# Examples:
-#   ne(1, 2)
-#   ne("hello", "world")
+## Asserts that two values are not equal.
+##
+## Examples:
+##   ne(1, 2)
+##   ne("hello", "world")
 pub def ne(left, right)
   if left == right
     @panic("assertion failed: `{left}` == `{right}`")
   end
 end
 
-# Asserts that a value matches a saved snapshot.
-#
-# Examples:
-#   snapshot("test_name", result)
-#   snapshot("test_name", result, "custom/path")
+## Asserts that a value matches a saved snapshot.
+##
+## Examples:
+##   snapshot("test_name", result)
+##   snapshot("test_name", result, "custom/path")
 pub def snapshot(name, value, path)
   if path == nil
     __intrinsic_assert_snapshot(name, value, "__snapshots__")

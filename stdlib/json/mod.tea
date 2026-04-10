@@ -5,32 +5,32 @@
 
 use intrinsics = "std.intrinsics"
 
-# Encode any Tea value to a JSON string.
-#
-# Supports: Int, Float, Bool, String, List, Dict, and nested structures.
-#
-# Examples:
-#   json.encode({"name": "tea", "version": 1})  # => '{"name":"tea","version":1}'
-#   json.encode([1, 2, 3])                       # => '[1,2,3]'
-#   json.encode(true)                            # => 'true'
+## Encode any Tea value to a JSON string.
+##
+## Supports: Int, Float, Bool, String, List, Dict, and nested structures.
+##
+## Examples:
+##   json.encode({"name": "tea", "version": 1})  # => '{"name":"tea","version":1}'
+##   json.encode([1, 2, 3])                       # => '[1,2,3]'
+##   json.encode(true)                            # => 'true'
 pub def encode(value) -> String
   return intrinsics.json_encode(value)
 end
 
-# Decode a JSON string to a Tea value.
-#
-# Returns the appropriate Tea type based on JSON content:
-#   - JSON object  -> Dict
-#   - JSON array   -> List
-#   - JSON string  -> String
-#   - JSON number  -> Int or Float
-#   - JSON boolean -> Bool
-#   - JSON null    -> nil
-#
-# Examples:
-#   json.decode('{"name":"tea"}')  # => {"name": "tea"}
-#   json.decode('[1, 2, 3]')       # => [1, 2, 3]
-#   json.decode('true')            # => true
+## Decode a JSON string to a Tea value.
+##
+## Returns the appropriate Tea type based on JSON content:
+##   - JSON object  -> Dict
+##   - JSON array   -> List
+##   - JSON string  -> String
+##   - JSON number  -> Int or Float
+##   - JSON boolean -> Bool
+##   - JSON null    -> nil
+##
+## Examples:
+##   json.decode('{"name":"tea"}')  # => {"name": "tea"}
+##   json.decode('[1, 2, 3]')       # => [1, 2, 3]
+##   json.decode('true')            # => true
 pub def decode(json_str: String)
   return intrinsics.json_decode(json_str)
 end

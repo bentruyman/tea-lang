@@ -4,42 +4,42 @@
 # delegating to low-level intrinsics and providing higher-level helpers.
 use intrinsics = "std.intrinsics"
 
-# Read a text file.
-#
-# Examples:
-#   var content = fs.read_file("file.txt")
+## Read a text file.
+##
+## Examples:
+##   var content = fs.read_file("file.txt")
 pub def read_file(file_path: String) -> String
   intrinsics.fs_read_text(file_path)
 end
 
-# Write text to a file.
-#
-# Examples:
-#   fs.write_file("file.txt", "Hello, world!")
+## Write text to a file.
+##
+## Examples:
+##   fs.write_file("file.txt", "Hello, world!")
 pub def write_file(file_path: String, content: String) -> Void
   intrinsics.fs_write_text(file_path, content)
 end
 
-# Create a directory.
-#
-# Examples:
-#   fs.create_dir("my_dir")
+## Create a directory.
+##
+## Examples:
+##   fs.create_dir("my_dir")
 pub def create_dir(dir_path: String) -> Void
   intrinsics.fs_create_dir(dir_path)
 end
 
-# Remove a file or directory.
-#
-# Examples:
-#   fs.remove("file.txt")
+## Remove a file or directory.
+##
+## Examples:
+##   fs.remove("file.txt")
 pub def remove(file_path: String) -> Void
   intrinsics.fs_remove(file_path)
 end
 
-# List all entries in a directory.
-#
-# Examples:
-#   var entries = fs.read_dir(".")
+## List all entries in a directory.
+##
+## Examples:
+##   var entries = fs.read_dir(".")
 pub def read_dir(dir_path: String) -> List[String]
   intrinsics.fs_list_dir(dir_path)
 end

@@ -158,6 +158,36 @@ end
     }
 
     #[test]
+    fn source_backed_std_module_member_contains_docstring() {
+        let compilation = compile_source(
+            r#"
+use string = "std.string"
+
+def main() -> Bool
+  string.starts_with("tea", "te")
+end
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+
+        let string_binding = analysis
+            .module_aliases
+            .get("string")
+            .expect("string alias to be present");
+
+        let export_doc = string_binding
+            .export_docs
+            .get("starts_with")
+            .map(String::as_str)
+            .expect("starts_with docstring to be present");
+        assert!(
+            export_doc.starts_with("Check if a string starts with a given prefix."),
+            "unexpected starts_with docstring: {export_doc}"
+        );
+    }
+
+    #[test]
     fn variable_docstring_appears_in_symbols() {
         let compilation = compile_source(
             r#"## Enable this to see the flag

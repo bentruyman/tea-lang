@@ -108,7 +108,7 @@ main() {
     if ! command_exists "llvm-config"; then
         log_warning "LLVM is not detected (optional, but recommended for AOT compilation)"
         if [ "$OS" = "macos" ]; then
-            echo "  Install with: brew install llvm"
+            echo "  Install with: brew install llvm@17"
         else
             echo "  Install with: apt-get install llvm-dev (Ubuntu/Debian) or yum install llvm-devel (RHEL/CentOS)"
         fi

@@ -4,7 +4,8 @@
 
 ### Build & Setup
 
-- **First-time setup**: `make setup` — Installs Bun dependencies and runs codegen
+- **Fresh worktree setup**: `./scripts/setup-worktree.sh` — Validates toolchain, installs root + docs deps, and runs codegen
+- **Repo-only bootstrap**: `make setup` — Installs root Bun dependencies and runs codegen
 - **Build**: `cargo build --release` or `make build` (runs codegen first)
 - **Install locally**: `make install` — Copies binaries to `~/.cargo/bin`
 - **During development**: `cargo run -p tea-cli -- script.tea` — Run without installing

@@ -15,7 +15,7 @@ help:
 
 setup:
 	@echo "Installing dependencies with Bun..."
-	@bun install
+	@bun install --frozen-lockfile
 	@echo "Generating code from specifications..."
 	@$(MAKE) codegen
 	@echo ""

@@ -23,8 +23,8 @@ Before installing Tea, you'll need:
 - **Rust** (1.70+) - Install from [rustup.rs](https://rustup.rs)
 - **Bun** - Install from [bun.sh](https://bun.sh)
 - **Make** - Usually pre-installed on macOS/Linux
-- **LLVM** (optional but recommended) - For AOT compilation
-  - macOS: `brew install llvm`
+- **LLVM 17** (optional but recommended) - For AOT compilation
+  - macOS: `brew install llvm@17`
   - Ubuntu/Debian: `apt-get install llvm-dev`
   - RHEL/CentOS: `yum install llvm-devel`
 
@@ -65,9 +65,9 @@ If you prefer more control:
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
-make setup              # Install dependencies and generate code
-cargo build --release   # Build the compiler
-make install            # Install to ~/.cargo/bin
+./scripts/setup-worktree.sh  # Bootstrap a fresh dev checkout/worktree
+cargo build --release        # Build the compiler
+make install                 # Install to ~/.cargo/bin
 ```
 
 ### Verify Installation
@@ -241,7 +241,7 @@ Tea has a Language Server Protocol (LSP) implementation for editor integration. 
 
 **LLVM errors during build**
 
-- Install LLVM: `brew install llvm` (macOS) or `apt-get install llvm-dev` (Ubuntu)
+- Install LLVM 17: `brew install llvm@17` (macOS) or `apt-get install llvm-17-dev` (Ubuntu)
 - You can still run scripts without building: `tea script.tea`
 
 **Build fails with "failed to compile tea-runtime"**

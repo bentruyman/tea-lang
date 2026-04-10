@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { ArrowRight, BookOpenText, Boxes, Terminal } from "lucide-react"
+import { ArrowRight, BookOpenText, Boxes, Sparkles, Terminal } from "lucide-react"
 
 import { CodeCard } from "@/components/mdx/code-card"
 import { Button } from "@/components/ui/button"
@@ -8,18 +8,22 @@ import { Card } from "@/components/ui/card"
 import { referenceItems } from "@/lib/reference"
 import { docItems, exampleItems } from "@/lib/site"
 
-const homeSample = `use fs = "std.fs"
-use path = "std.path"
-use string = "std.string"
+const homeSample = `use string = "std.string"
 
-var root = "."
-var entries = fs.read_dir(root)
+struct User {
+  name: String
+  age: Int
+}
 
-for entry in entries
-  if string.ends_with(entry, ".tea")
-    @println(path.join([root, entry]))
-  end
-end`
+var user = User(name: "Ada", age: 37)
+var total = 0
+
+for value in [1, 2, 3, 4]
+  total = total + value
+end
+
+@println(string.to_upper(user.name))
+@println(total)`
 
 const destinations = [
   {
@@ -37,6 +41,14 @@ const destinations = [
     icon: Boxes,
     tone: "quiet" as const,
     kicker: "APIs and built-ins",
+  },
+  {
+    title: "Playground",
+    summary: "Edit and run browser-safe Tea in a WASM-backed playground embedded in the docs site.",
+    href: "/playground",
+    icon: Sparkles,
+    tone: "feature" as const,
+    kicker: "In-browser runner",
   },
   {
     title: "Examples",
@@ -70,11 +82,11 @@ export default function HomePage() {
               </h1>
               <p className="max-w-lg text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
                 A strongly typed scripting language with familiar syntax and native compilation. Start with the
-                basics, explore the standard library, and work through runnable examples.
+                browser runner, explore the standard library, and work through runnable examples.
               </p>
               <Button size="lg" className="rounded-full px-6 font-semibold shadow-sm" asChild>
-                <Link href="/docs/getting-started">
-                  Get started
+                <Link href="/playground">
+                  Open playground
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -83,9 +95,11 @@ export default function HomePage() {
             <div className="space-y-3">
               <CodeCard language="tea">{homeSample}</CodeCard>
               <div className="font-mono text-sm">
-                <span className="text-muted-foreground">$ </span>
-                <span className="text-foreground">tea build script.tea</span>
-                <span className="text-muted-foreground"> → ./bin/script</span>
+                <span className="text-muted-foreground">Run it in </span>
+                <Link href="/playground" className="text-foreground underline decoration-primary/40 underline-offset-4">
+                  /playground
+                </Link>
+                <span className="text-muted-foreground"> with the WASM runner</span>
               </div>
             </div>
           </div>

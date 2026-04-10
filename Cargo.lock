@@ -1260,6 +1260,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tea-eval"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "tea-compiler",
+]
+
+[[package]]
 name = "tea-intrinsics"
 version = "0.1.0"
 dependencies = [

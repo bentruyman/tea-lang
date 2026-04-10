@@ -11,7 +11,8 @@ use clap::{ArgAction, Parser, ValueEnum};
 use dirs_next::home_dir;
 use pathdiff::diff_paths;
 use tea_compiler::{
-    format_source, CompileOptions, Compiler, Diagnostic, DiagnosticLevel, SourceFile, SourceId,
+    build_reference_manifest, format_source, CompileOptions, Compiler, Diagnostic, DiagnosticLevel,
+    SourceFile, SourceId,
 };
 
 use tea_compiler::aot::{self, ObjectCompileOptions};
@@ -29,6 +30,7 @@ type HmacSha256 = Hmac<Sha256>;
 const RUN_AFTER_HELP: &str = "\
 Subcommands:
   tea build <INPUT>        Compile a tea-lang file to a native executable.
+  tea docs-manifest        Generate the docs reference manifest for the website.
   tea fmt [PATH]...       Format tea-lang sources in place (defaults to current directory).
   tea test [PATH]...       Discover and run tea-lang test blocks.
 
@@ -175,10 +177,33 @@ struct TestCli {
     update_snapshots: bool,
 }
 
+#[derive(Parser)]
+#[command(
+    name = "tea docs-manifest",
+    version,
+    about = "Generate the reference manifest consumed by the docs website."
+)]
+struct DocsManifestCli {
+    /// Destination for the generated manifest JSON.
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+
+    /// Override the manifest timestamp for reproducible outputs.
+    #[arg(long, value_name = "RFC3339")]
+    generated_at: Option<String>,
+}
+
 fn main() -> Result<()> {
     let mut raw: Vec<OsString> = std::env::args_os().collect();
     if raw.get(1).map(|arg| arg == "build").unwrap_or(false) {
         return handle_build(raw);
+    }
+    if raw
+        .get(1)
+        .map(|arg| arg == "docs-manifest")
+        .unwrap_or(false)
+    {
+        return handle_docs_manifest(raw);
     }
     if raw.get(1).map(|arg| arg == "fmt").unwrap_or(false) {
         return handle_fmt(raw);
@@ -213,6 +238,15 @@ fn handle_fmt(raw: Vec<OsString>) -> Result<()> {
     run_fmt(&cli)
 }
 
+fn handle_docs_manifest(raw: Vec<OsString>) -> Result<()> {
+    let mut args = raw.clone();
+    if !args.is_empty() {
+        args.remove(1); // drop the literal "docs-manifest"
+    }
+    let cli = DocsManifestCli::parse_from(args);
+    run_docs_manifest(&cli)
+}
+
 fn handle_test(raw: Vec<OsString>) -> Result<()> {
     let mut args = raw.clone();
     if !args.is_empty() {
@@ -220,6 +254,36 @@ fn handle_test(raw: Vec<OsString>) -> Result<()> {
     }
     let cli = TestCli::parse_from(args);
     run_test(&cli)
+}
+
+fn run_docs_manifest(cli: &DocsManifestCli) -> Result<()> {
+    let workspace_root = detect_workspace_root()?;
+    let generated_at = match &cli.generated_at {
+        Some(timestamp) => timestamp.clone(),
+        None => OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .context("failed to format manifest timestamp")?,
+    };
+    let manifest = build_reference_manifest(&workspace_root, generated_at)?;
+    let output = if cli.out.is_absolute() {
+        cli.out.clone()
+    } else {
+        workspace_root.join(&cli.out)
+    };
+
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+    }
+
+    let json =
+        serde_json::to_vec_pretty(&manifest).context("failed to serialize reference manifest")?;
+    fs::write(&output, json).with_context(|| format!("failed to write {}", output.display()))?;
+    println!("{}", output.display());
+
+    Ok(())
 }
 
 fn run_fmt(cli: &FmtCli) -> Result<()> {

@@ -1,1 +1,4 @@
+#!/bin/sh
+
+sh scripts/update-reference-manifest.sh
 bunx lint-staged

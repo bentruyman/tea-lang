@@ -36,6 +36,11 @@ jobs:
       - name: Cache cargo builds
         uses: Swatinem/rust-cache@v2
 
+      - name: Verify tracked reference manifest
+        run: |
+          bun run --cwd www generate:reference
+          git diff --exit-code -- www/generated/reference-manifest.json
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

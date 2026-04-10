@@ -4,8 +4,9 @@ interface FunctionSignatureCardProps {
 }
 
 export function FunctionSignatureCard({ signature, description }: FunctionSignatureCardProps) {
-  const nameMatch = signature.match(/^(pub\s+)?def\s+(\w+)/)
-  const fnName = nameMatch?.[2]
+  const defMatch = signature.match(/^(?:pub\s+)?def\s+(\w+)/)
+  const builtinMatch = signature.match(/^(@\w+)/)
+  const fnName = defMatch?.[1] ?? builtinMatch?.[1]
 
   let displaySignature
   if (fnName) {

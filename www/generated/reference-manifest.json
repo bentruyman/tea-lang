@@ -1,0 +1,486 @@
+{
+  "manifest_version": 1,
+  "generated_at": "1970-01-01T00:00:00Z",
+  "entries": [
+    {
+      "slug": "builtins",
+      "kind": "builtins",
+      "title": "Built-ins",
+      "eyebrow": "Language Runtime",
+      "summary": "Tea exposes a small set of global `@` intrinsics for output, script control, introspection, and math.",
+      "module_path": null,
+      "source_path": "tea-compiler/src/stdlib/builtins.rs",
+      "functions": [
+        {
+          "name": "print",
+          "signature_display": "@print(value: Any) -> Void",
+          "summary": "Write the string representation of a value to stdout."
+        },
+        {
+          "name": "println",
+          "signature_display": "@println(value: Any) -> Void",
+          "summary": "Write the string representation of a value to stdout with a newline."
+        },
+        {
+          "name": "append",
+          "signature_display": "@append(list: List[T], value: T) -> Void",
+          "summary": "Append a value to a mutable list in place."
+        },
+        {
+          "name": "to_string",
+          "signature_display": "@to_string(value: Any) -> String",
+          "summary": "Convert any value to its string representation."
+        },
+        {
+          "name": "type_of",
+          "signature_display": "@type_of(value: Any) -> String",
+          "summary": "Return the runtime type name of a value as a string."
+        },
+        {
+          "name": "panic",
+          "signature_display": "@panic(message: String) -> Void",
+          "summary": "Terminate the program immediately with an error message."
+        },
+        {
+          "name": "exit",
+          "signature_display": "@exit(code: Int) -> Void",
+          "summary": "Exit the program with the specified exit code."
+        },
+        {
+          "name": "args",
+          "signature_display": "@args() -> List",
+          "summary": "Return command-line arguments as a list of strings."
+        },
+        {
+          "name": "read_line",
+          "signature_display": "@read_line() -> String",
+          "summary": "Read a single line from stdin (without trailing newline)."
+        },
+        {
+          "name": "read_all",
+          "signature_display": "@read_all() -> String",
+          "summary": "Read all content from stdin as a string."
+        },
+        {
+          "name": "eprint",
+          "signature_display": "@eprint(value: Any) -> Void",
+          "summary": "Print a value to stderr without a trailing newline."
+        },
+        {
+          "name": "eprintln",
+          "signature_display": "@eprintln(value: Any) -> Void",
+          "summary": "Print a value to stderr with a trailing newline."
+        },
+        {
+          "name": "is_tty",
+          "signature_display": "@is_tty() -> Bool",
+          "summary": "Return true if stdin is connected to an interactive terminal."
+        },
+        {
+          "name": "len",
+          "signature_display": "@len(value: Any) -> Int",
+          "summary": "Return the number of elements in a String, List, or Dict."
+        },
+        {
+          "name": "floor",
+          "signature_display": "@floor(value: Float) -> Int",
+          "summary": "Round a float down to the nearest integer."
+        },
+        {
+          "name": "ceil",
+          "signature_display": "@ceil(value: Float) -> Int",
+          "summary": "Round a float up to the nearest integer."
+        },
+        {
+          "name": "round",
+          "signature_display": "@round(value: Float) -> Int",
+          "summary": "Round a float to the nearest integer."
+        },
+        {
+          "name": "abs",
+          "signature_display": "@abs(value: Float) -> Float",
+          "summary": "Return the absolute value of a float."
+        },
+        {
+          "name": "sqrt",
+          "signature_display": "@sqrt(value: Float) -> Float",
+          "summary": "Return the square root of a float."
+        },
+        {
+          "name": "max",
+          "signature_display": "@max(left: Float, right: Float) -> Float",
+          "summary": "Return the maximum of two floats."
+        },
+        {
+          "name": "min",
+          "signature_display": "@min(left: Float, right: Float) -> Float",
+          "summary": "Return the minimum of two floats."
+        }
+      ]
+    },
+    {
+      "slug": "args",
+      "kind": "module",
+      "title": "std.args",
+      "eyebrow": "Standard Library",
+      "summary": "Command-line argument parsing utilities.",
+      "module_path": "std.args",
+      "source_path": "stdlib/args/mod.tea",
+      "functions": [
+        {
+          "name": "all",
+          "signature_display": "pub def all() -> List[String]",
+          "summary": "Return all command-line arguments as a list of strings."
+        },
+        {
+          "name": "program",
+          "signature_display": "pub def program() -> String",
+          "summary": "Return the program name (argv[0] with path stripped)."
+        },
+        {
+          "name": "has",
+          "signature_display": "pub def has(flag: String) -> Bool",
+          "summary": ""
+        },
+        {
+          "name": "get",
+          "signature_display": "pub def get(option: String) -> String?",
+          "summary": ""
+        },
+        {
+          "name": "positional",
+          "signature_display": "pub def positional() -> List[String]",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "slug": "assert",
+      "kind": "module",
+      "title": "std.assert",
+      "eyebrow": "Standard Library",
+      "summary": "Assertion helpers for tests and runtime checks.",
+      "module_path": "std.assert",
+      "source_path": "stdlib/assert/mod.tea",
+      "functions": [
+        {
+          "name": "ok",
+          "signature_display": "pub def ok(value)",
+          "summary": "Assert that a condition holds; optionally provide a failure message."
+        },
+        {
+          "name": "eq",
+          "signature_display": "pub def eq(left, right)",
+          "summary": "Assert that two values are equal."
+        },
+        {
+          "name": "ne",
+          "signature_display": "pub def ne(left, right)",
+          "summary": "Assert that two values are not equal."
+        },
+        {
+          "name": "snapshot",
+          "signature_display": "pub def snapshot(name, value, path)",
+          "summary": "Compare actual text against a stored snapshot, with optional hint."
+        }
+      ]
+    },
+    {
+      "slug": "env",
+      "kind": "module",
+      "title": "std.env",
+      "eyebrow": "Standard Library",
+      "summary": "Environment variable access and working directory management.",
+      "module_path": "std.env",
+      "source_path": "stdlib/env/mod.tea",
+      "functions": [
+        {
+          "name": "get",
+          "signature_display": "pub def get(name: String) -> String",
+          "summary": "Lookup an environment variable (returns Nil if unset)."
+        },
+        {
+          "name": "set",
+          "signature_display": "pub def set(name: String, value: String) -> Void",
+          "summary": "Set an environment variable for child processes."
+        },
+        {
+          "name": "vars",
+          "signature_display": "pub def vars() -> Dict[String, String]",
+          "summary": "Return a dictionary of the current environment."
+        },
+        {
+          "name": "cwd",
+          "signature_display": "pub def cwd() -> String",
+          "summary": "Return the current working directory."
+        }
+      ]
+    },
+    {
+      "slug": "fs",
+      "kind": "module",
+      "title": "std.fs",
+      "eyebrow": "Standard Library",
+      "summary": "Filesystem operations for reading, writing, and managing files and directories.",
+      "module_path": "std.fs",
+      "source_path": "stdlib/fs/mod.tea",
+      "functions": [
+        {
+          "name": "read_file",
+          "signature_display": "pub def read_file(file_path: String) -> String",
+          "summary": "Read an entire text file into a string."
+        },
+        {
+          "name": "write_file",
+          "signature_display": "pub def write_file(file_path: String, content: String) -> Void",
+          "summary": "Write a string to a file, replacing existing contents."
+        },
+        {
+          "name": "create_dir",
+          "signature_display": "pub def create_dir(dir_path: String) -> Void",
+          "summary": "Create a directory and intermediate folders as needed."
+        },
+        {
+          "name": "remove",
+          "signature_display": "pub def remove(file_path: String) -> Void",
+          "summary": "Remove a file or directory recursively."
+        },
+        {
+          "name": "read_dir",
+          "signature_display": "pub def read_dir(dir_path: String) -> List[String]",
+          "summary": "List entries in a directory."
+        }
+      ]
+    },
+    {
+      "slug": "json",
+      "kind": "module",
+      "title": "std.json",
+      "eyebrow": "Standard Library",
+      "summary": "JSON encoding and decoding utilities.",
+      "module_path": "std.json",
+      "source_path": "stdlib/json/mod.tea",
+      "functions": [
+        {
+          "name": "encode",
+          "signature_display": "pub def encode(value) -> String",
+          "summary": ""
+        },
+        {
+          "name": "decode",
+          "signature_display": "pub def decode(json_str: String)",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "slug": "path",
+      "kind": "module",
+      "title": "std.path",
+      "eyebrow": "Standard Library",
+      "summary": "Path manipulation utilities for working with file paths.",
+      "module_path": "std.path",
+      "source_path": "stdlib/path/mod.tea",
+      "functions": [
+        {
+          "name": "join",
+          "signature_display": "pub def join(parts: List[String]) -> String",
+          "summary": "Join multiple path segments."
+        },
+        {
+          "name": "split",
+          "signature_display": "pub def split(file_path: String) -> List[String]",
+          "summary": "Split a path into components."
+        },
+        {
+          "name": "dirname",
+          "signature_display": "pub def dirname(file_path: String) -> String",
+          "summary": "Return the directory portion of a path."
+        },
+        {
+          "name": "basename",
+          "signature_display": "pub def basename(file_path: String) -> String",
+          "summary": "Return the final component of a path."
+        },
+        {
+          "name": "extension",
+          "signature_display": "pub def extension(file_path: String) -> String",
+          "summary": "Return the extension of a path if present."
+        }
+      ]
+    },
+    {
+      "slug": "process",
+      "kind": "module",
+      "title": "std.process",
+      "eyebrow": "Standard Library",
+      "summary": "Process execution for running subprocesses and capturing their output.",
+      "module_path": "std.process",
+      "source_path": "stdlib/process/mod.tea",
+      "functions": [
+        {
+          "name": "run",
+          "signature_display": "pub def run(command: String, args: List[String]) -> ProcessResult",
+          "summary": "Run a command synchronously and return its exit code, stdout, and stderr."
+        },
+        {
+          "name": "run_with_options",
+          "signature_display": "pub def run_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String, stdin: String) -> ProcessResult",
+          "summary": ""
+        },
+        {
+          "name": "spawn",
+          "signature_display": "pub def spawn(command: String, args: List[String]) -> Int",
+          "summary": "Start a command without waiting, returning a handle."
+        },
+        {
+          "name": "spawn_with_options",
+          "signature_display": "pub def spawn_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String) -> Int",
+          "summary": ""
+        },
+        {
+          "name": "wait",
+          "signature_display": "pub def wait(handle: Int) -> ProcessResult",
+          "summary": "Wait for a spawned process to complete and return its result."
+        },
+        {
+          "name": "kill",
+          "signature_display": "pub def kill(handle: Int) -> Bool",
+          "summary": "Terminate a spawned process."
+        },
+        {
+          "name": "read_stdout",
+          "signature_display": "pub def read_stdout(handle: Int) -> String",
+          "summary": "Read data from a spawned process's stdout."
+        },
+        {
+          "name": "read_stdout_bytes",
+          "signature_display": "pub def read_stdout_bytes(handle: Int, bytes: Int) -> String",
+          "summary": ""
+        },
+        {
+          "name": "read_stderr",
+          "signature_display": "pub def read_stderr(handle: Int) -> String",
+          "summary": "Read data from a spawned process's stderr."
+        },
+        {
+          "name": "read_stderr_bytes",
+          "signature_display": "pub def read_stderr_bytes(handle: Int, bytes: Int) -> String",
+          "summary": ""
+        },
+        {
+          "name": "write_stdin",
+          "signature_display": "pub def write_stdin(handle: Int, data: String) -> Void",
+          "summary": "Write data to a spawned process's stdin."
+        },
+        {
+          "name": "close_stdin",
+          "signature_display": "pub def close_stdin(handle: Int) -> Void",
+          "summary": "Close a spawned process's stdin pipe."
+        }
+      ]
+    },
+    {
+      "slug": "regex",
+      "kind": "module",
+      "title": "std.regex",
+      "eyebrow": "Standard Library",
+      "summary": "Regular expression pattern matching and text manipulation.",
+      "module_path": "std.regex",
+      "source_path": "stdlib/regex/mod.tea",
+      "functions": [
+        {
+          "name": "compile",
+          "signature_display": "pub def compile(pattern: String) -> Int",
+          "summary": "Compile a regex pattern and return a handle."
+        },
+        {
+          "name": "is_match",
+          "signature_display": "pub def is_match(handle: Int, text: String) -> Bool",
+          "summary": "Test if the pattern matches anywhere in the text."
+        },
+        {
+          "name": "find_all",
+          "signature_display": "pub def find_all(handle: Int, text: String) -> List[String]",
+          "summary": "Find all non-overlapping matches as a list of strings."
+        },
+        {
+          "name": "captures",
+          "signature_display": "pub def captures(handle: Int, text: String) -> List[String]",
+          "summary": "Get capture groups from the first match."
+        },
+        {
+          "name": "replace",
+          "signature_display": "pub def replace(handle: Int, text: String, replacement: String) -> String",
+          "summary": "Replace the first match with a replacement string."
+        },
+        {
+          "name": "replace_all",
+          "signature_display": "pub def replace_all(handle: Int, text: String, replacement: String) -> String",
+          "summary": "Replace all matches with a replacement string."
+        },
+        {
+          "name": "split",
+          "signature_display": "pub def split(handle: Int, text: String) -> List[String]",
+          "summary": "Split the text by the pattern into a list of strings."
+        }
+      ]
+    },
+    {
+      "slug": "string",
+      "kind": "module",
+      "title": "std.string",
+      "eyebrow": "Standard Library",
+      "summary": "String manipulation utilities for common text operations.",
+      "module_path": "std.string",
+      "source_path": "stdlib/string/mod.tea",
+      "functions": [
+        {
+          "name": "starts_with",
+          "signature_display": "pub def starts_with(text: String, prefix: String) -> Bool",
+          "summary": ""
+        },
+        {
+          "name": "ends_with",
+          "signature_display": "pub def ends_with(text: String, suffix: String) -> Bool",
+          "summary": ""
+        },
+        {
+          "name": "trim_start",
+          "signature_display": "pub def trim_start(text: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "trim_end",
+          "signature_display": "pub def trim_end(text: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "trim",
+          "signature_display": "pub def trim(text: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "reverse",
+          "signature_display": "pub def reverse(text: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "replace",
+          "signature_display": "pub def replace(text: String, pattern: String, replacement: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "to_lower",
+          "signature_display": "pub def to_lower(text: String) -> String",
+          "summary": ""
+        },
+        {
+          "name": "to_upper",
+          "signature_display": "pub def to_upper(text: String) -> String",
+          "summary": ""
+        }
+      ]
+    }
+  ]
+}

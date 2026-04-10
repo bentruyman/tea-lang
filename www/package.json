@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "generate:reference": "node ./scripts/generate-reference-manifest.mjs",
     "audit": "node ./scripts/audit-site.mjs",
     "build": "next build",
     "check": "node ./scripts/audit-site.mjs && next build",
     "dev": "next dev",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

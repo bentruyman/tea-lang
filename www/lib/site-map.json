@@ -117,10 +117,7 @@
       "items": [
         {
           "slug": "builtins",
-          "title": "Built-ins",
-          "href": "/reference/builtins",
-          "summary": "Global `@` intrinsics available in every Tea program.",
-          "sourcePath": "docs/reference/builtins.md"
+          "href": "/reference/builtins"
         }
       ]
     },
@@ -129,75 +126,39 @@
       "items": [
         {
           "slug": "args",
-          "title": "std.args",
-          "href": "/reference/args",
-          "summary": "Command-line argument helpers.",
-          "module": "std.args",
-          "sourcePath": "stdlib/args/mod.tea"
+          "href": "/reference/args"
         },
         {
           "slug": "assert",
-          "title": "std.assert",
-          "href": "/reference/assert",
-          "summary": "Assertions and snapshot helpers for tests.",
-          "module": "std.assert",
-          "sourcePath": "stdlib/assert/mod.tea"
+          "href": "/reference/assert"
         },
         {
           "slug": "env",
-          "title": "std.env",
-          "href": "/reference/env",
-          "summary": "Environment variables and current directory.",
-          "module": "std.env",
-          "sourcePath": "stdlib/env/mod.tea"
+          "href": "/reference/env"
         },
         {
           "slug": "fs",
-          "title": "std.fs",
-          "href": "/reference/fs",
-          "summary": "Read, write, list, and remove files.",
-          "module": "std.fs",
-          "sourcePath": "stdlib/fs/mod.tea"
+          "href": "/reference/fs"
         },
         {
           "slug": "json",
-          "title": "std.json",
-          "href": "/reference/json",
-          "summary": "Encode and decode JSON values.",
-          "module": "std.json",
-          "sourcePath": "stdlib/json/mod.tea"
+          "href": "/reference/json"
         },
         {
           "slug": "path",
-          "title": "std.path",
-          "href": "/reference/path",
-          "summary": "Join, split, and inspect filesystem paths.",
-          "module": "std.path",
-          "sourcePath": "stdlib/path/mod.tea"
+          "href": "/reference/path"
         },
         {
           "slug": "process",
-          "title": "std.process",
-          "href": "/reference/process",
-          "summary": "Run subprocesses and manage handles.",
-          "module": "std.process",
-          "sourcePath": "stdlib/process/mod.tea"
+          "href": "/reference/process"
         },
         {
           "slug": "regex",
-          "title": "std.regex",
-          "href": "/reference/regex",
-          "summary": "Compile regexes and transform text.",
-          "module": "std.regex",
-          "sourcePath": "stdlib/regex/mod.tea"
+          "href": "/reference/regex"
         },
         {
           "slug": "string",
-          "title": "std.string",
-          "href": "/reference/string",
-          "summary": "Trim, replace, reverse, and change case.",
-          "module": "std.string",
-          "sourcePath": "stdlib/string/mod.tea"
+          "href": "/reference/string"
         }
       ]
     }

@@ -1,5 +1,5 @@
 import { PageIntro, GroupedSectionCardGrid } from "@/components/site-shell"
-import { referenceSections } from "@/lib/site"
+import { referenceSections } from "@/lib/reference"
 
 export default function ReferencePage() {
   return (
@@ -7,7 +7,7 @@ export default function ReferencePage() {
       <PageIntro
         eyebrow="Reference"
         title="Reference"
-        description="Built-ins and stdlib modules that exist in the repo today, with exports read directly from checked-in Tea source."
+        description="Built-ins and stdlib modules generated from the compiler and checked-in Tea stdlib sources."
       />
       <GroupedSectionCardGrid sections={referenceSections} />
     </div>

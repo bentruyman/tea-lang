@@ -27,4 +27,3 @@ export {
   ContributionGrid,
   DirectoryCard,
 } from "./contribution-card";
-export { StdlibFunctionPanel } from "./stdlib-function-panel";

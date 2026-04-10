@@ -12,14 +12,19 @@ This directory contains the Next.js docs site for the Tea language repository.
 
 ```bash
 cd www
-npm run audit
-npm run typecheck
-npm run build
+bun run generate:reference
+bun run audit
+bun run typecheck
+bun run build
 ```
+
+The reference manifest in `generated/reference-manifest.json` is a checked-in artifact.
+Update it with `bun run generate:reference`; the pre-commit hook will do that automatically
+when staged changes affect the reference inputs, and CI verifies it is not stale.
 
 ## Audit Coverage
 
-`npm run audit` validates:
+`bun run audit` validates:
 
 - internal `href` values resolve to real routes
 - reference pages map to real stdlib sources

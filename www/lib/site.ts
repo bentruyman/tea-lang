@@ -13,9 +13,18 @@ type SectionItem = NavItem & {
   module?: string;
 };
 
+type ReferenceNavItem = NavItem & {
+  slug: string;
+};
+
 type SectionGroup = {
   title: string;
   items: SectionItem[];
+};
+
+type ReferenceSectionGroup = {
+  title: string;
+  items: ReferenceNavItem[];
 };
 
 type SiteMap = {
@@ -26,32 +35,32 @@ type SiteMap = {
   };
   topNav: NavItem[];
   docsSections: SectionGroup[];
-  referenceSections: SectionGroup[];
+  referenceSections: ReferenceSectionGroup[];
   exampleSections: SectionGroup[];
 };
 
 const map = siteMap as SiteMap;
 
-function flatten(sections: SectionGroup[]) {
+function flatten<T>(sections: { items: T[] }[]) {
   return sections.flatMap((section) => section.items);
 }
 
 export const repo = map.repo;
 export const topNav = map.topNav;
 export const docsSections = map.docsSections;
-export const referenceSections = map.referenceSections;
+export const referenceNavSections = map.referenceSections;
 export const exampleSections = map.exampleSections;
 
 export const docItems = flatten(docsSections);
-export const referenceItems = flatten(referenceSections);
+export const referenceNavItems = flatten(referenceNavSections);
 export const exampleItems = flatten(exampleSections);
 
 export function findDoc(slug: string) {
   return docItems.find((item) => item.slug === slug);
 }
 
-export function findReference(slug: string) {
-  return referenceItems.find((item) => item.slug === slug);
+export function findReferenceNav(slug: string) {
+  return referenceNavItems.find((item) => item.slug === slug);
 }
 
 export function findExample(slug: string) {

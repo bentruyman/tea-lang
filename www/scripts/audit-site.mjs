@@ -6,6 +6,7 @@ import siteMap from "../lib/site-map.json" with { type: "json" }
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const appRoot = path.resolve(scriptDir, "..")
 const repoRoot = path.resolve(appRoot, "..")
+const referenceManifestPath = path.join(appRoot, "generated", "reference-manifest.json")
 
 function walk(dir, acc = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -91,7 +92,6 @@ function collectHrefs() {
 function verifyContentFiles() {
   const sectionRoots = [
     ["docsSections", "docs"],
-    ["referenceSections", "reference"],
     ["exampleSections", "examples"],
   ]
 
@@ -111,6 +111,11 @@ function verifyContentFiles() {
   console.log("content file audit ok")
 }
 
+function loadReferenceManifest() {
+  assert(fs.existsSync(referenceManifestPath), "Missing generated reference manifest: generated/reference-manifest.json")
+  return JSON.parse(fs.readFileSync(referenceManifestPath, "utf8"))
+}
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message)
@@ -126,17 +131,31 @@ function verifyRoutes() {
 }
 
 function verifyReferenceSources() {
-  for (const section of siteMap.referenceSections) {
-    for (const item of section.items) {
-      const fullPath = path.join(repoRoot, item.sourcePath)
-      assert(fs.existsSync(fullPath), `Missing reference source: ${item.sourcePath}`)
-      if (item.slug !== "builtins") {
-        const source = fs.readFileSync(fullPath, "utf8")
-        assert(/^pub def /m.test(source), `Reference source has no exports: ${item.sourcePath}`)
-      }
-    }
+  const routeFile = path.join(appRoot, "app", "reference", "[slug]", "page.tsx")
+  assert(fs.existsSync(routeFile), "Missing dynamic reference route: app/reference/[slug]/page.tsx")
+
+  const manifest = loadReferenceManifest()
+  const manifestEntries = new Map(manifest.entries.map((entry) => [entry.slug, entry]))
+  const configuredSlugs = new Set(
+    siteMap.referenceSections.flatMap((section) => section.items.map((item) => item.slug)),
+  )
+
+  for (const slug of configuredSlugs) {
+    assert(manifestEntries.has(slug), `Missing reference manifest entry for slug: ${slug}`)
   }
-  console.log("reference source audit ok")
+
+  for (const slug of manifestEntries.keys()) {
+    assert(configuredSlugs.has(slug), `Reference manifest entry is not present in site-map.json: ${slug}`)
+  }
+
+  for (const entry of manifest.entries) {
+    assert(entry.title, `Reference manifest entry has no title: ${entry.slug}`)
+    assert(entry.summary, `Reference manifest entry has no summary: ${entry.slug}`)
+    assert(Array.isArray(entry.functions), `Reference manifest entry has invalid functions: ${entry.slug}`)
+    assert(entry.functions.length > 0, `Reference manifest entry has no functions: ${entry.slug}`)
+  }
+
+  console.log("reference manifest audit ok")
 }
 
 function verifyExampleSources() {

@@ -37,7 +37,6 @@ import {
   ContributionCard,
   ContributionGrid,
   DirectoryCard,
-  StdlibFunctionPanel,
 } from '@/components/mdx'
 import { CodeHighlighter } from '@/components/mdx/code-highlighter'
 import { Children, isValidElement, type ReactNode } from 'react'
@@ -186,7 +185,6 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     ContributionCard,
     ContributionGrid,
     DirectoryCard,
-    StdlibFunctionPanel,
     ...components,
   }
 }

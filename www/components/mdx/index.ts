@@ -1,5 +1,4 @@
 export { CodeBlock } from "./code-block";
-export { CodeCard } from "./code-card";
 export { QuickLinkCard } from "./quick-link-card";
 export { NextLink } from "./next-link";
 export { TwoColumnGrid, ThreeColumnGrid } from "./grid";

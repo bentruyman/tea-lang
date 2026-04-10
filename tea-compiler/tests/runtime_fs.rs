@@ -4,6 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
+mod support;
+
 fn unique_temp_dir() -> PathBuf {
     let mut base = env::temp_dir();
     let unique = SystemTime::now()
@@ -32,29 +34,32 @@ use assert = "std.assert"
 use fs = "std.fs"
 
 fs.create_dir("{dir}")
+fs.mkdir_p("{backups}")
+assert.ok(fs.exists("{dir}"))
 
 var before = fs.read_dir("{dir}")
-assert.eq(@len(before), 0)
+assert.eq(@len(before), 1)
 
 fs.write_file("{file}", "hello fs")
 
 var original = fs.read_file("{file}")
 assert.eq(original, "hello fs")
 
-var after_write = fs.read_dir("{dir}")
-assert.eq(@len(after_write), 1)
-assert.eq(after_write[0], "{file}")
+var after_write = fs.walk("{dir}")
+assert.eq(@len(after_write), 2)
 
-fs.create_dir("{backups}")
-fs.write_file("{copy}", "hello fs")
+fs.copy("{file}", "{copy}")
+fs.rename("{copy}", "{backups}/moved.txt")
 
-var after_copy = fs.read_dir("{dir}")
-assert.eq(@len(after_copy), 2)
+var after_copy = fs.walk("{dir}")
+assert.eq(@len(fs.glob("{dir}/*")), 2)
+assert.eq(@len(after_copy), 3)
 
-fs.remove("{copy}")
+fs.remove("{backups}/moved.txt")
 fs.remove("{backups}")
 fs.remove("{file}")
 fs.remove("{dir}")
+@println("ok")
 "#,
         dir = dir_str,
         file = file_str,
@@ -62,25 +67,8 @@ fs.remove("{dir}")
         copy = copy_str,
     );
 
-    let mut compiler = Compiler::new(CompileOptions::default());
-    let source_file = SourceFile::new(SourceId(0), PathBuf::from("fs.tea"), source);
-    compiler.compile(&source_file)?;
-    assert!(
-        compiler.diagnostics().is_empty(),
-        "expected no diagnostics, found {:?}",
-        compiler.diagnostics()
-    );
-
-    // Full test execution support via AOT is planned for the future
-    assert!(
-        compiler.diagnostics().is_empty(),
-        "expected no diagnostics, found {:?}",
-        compiler.diagnostics()
-    );
-
-    // TODO: Add AOT test execution when implemented
-    // For now, we verify that the code compiles without errors
-
+    let stdout = support::run_script(&source, "fs.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
     Ok(())
 }
 

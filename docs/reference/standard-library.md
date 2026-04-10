@@ -65,22 +65,12 @@ assert.ne(1, 2)
 assert.ne("hello", "world")
 ```
 
-### `gt(left: T, right: T) -> Void`
+### `fail(message: String) -> Void`
 
-Assert that left is greater than right.
-
-```tea
-assert.gt(10, 5)
-assert.gt(3.5, 2.1)
-```
-
-### `lt(left: T, right: T) -> Void`
-
-Assert that left is less than right.
+Unconditionally fail with the provided message.
 
 ```tea
-assert.lt(5, 10)
-assert.lt(2.1, 3.5)
+assert.fail("expected an initialized project")
 ```
 
 ### `snapshot(name: String, value: Any, path: String?) -> Void`
@@ -104,8 +94,6 @@ use assert = "std.assert"
 test "calculator operations"
   assert.eq(add(2, 3), 5)
   assert.ne(multiply(2, 3), 5)
-  assert.gt(10, 5)
-  assert.lt(5, 10)
 end
 ```
 
@@ -208,7 +196,7 @@ for entry in entries
 end
 ```
 
-Returns only the names, not full paths.
+Returns full paths sorted lexicographically.
 
 ### `create_dir(path: String) -> Void`
 
@@ -217,6 +205,71 @@ Create a directory. Parent directories must already exist.
 ```tea
 fs.create_dir("output")
 fs.create_dir("build/artifacts")  # Parent "build" must exist
+```
+
+### `ensure_dir(path: String) -> Void`
+
+Create a directory and any missing parent directories.
+
+```tea
+fs.ensure_dir("build/artifacts")
+fs.mkdir_p("cache/generated")
+```
+
+### `exists(path: String) -> Bool`
+
+Return `true` when a path exists.
+
+```tea
+if fs.exists("tea.toml")
+  @println("config present")
+end
+```
+
+### `walk(path: String) -> List[String]`
+
+Recursively walk a directory and return full entry paths.
+
+```tea
+for entry in fs.walk("src")
+  @println(entry)
+end
+```
+
+### `glob(pattern: String) -> List[String]`
+
+Return filesystem entries that match a glob pattern.
+
+```tea
+for file in fs.glob("src/**/*.tea")
+  @println(file)
+end
+```
+
+### `copy(source: String, target: String) -> Void`
+
+Copy a file to a new location.
+
+```tea
+fs.copy("tea.toml", "backup/tea.toml")
+```
+
+### `rename(source: String, target: String) -> Void`
+
+Rename or move a file or directory.
+
+```tea
+fs.rename("draft.txt", "archive/draft.txt")
+```
+
+### `metadata(path: String) -> FileMetadata`
+
+Return metadata for a file or directory.
+
+```tea
+var info = fs.metadata("tea.toml")
+@println(info.size)
+@println(info.is_file)
 ```
 
 ### `remove(path: String) -> Void`
@@ -239,9 +292,9 @@ var files = fs.read_dir("docs")
 
 for file in files
   if string.ends_with(file, ".txt")
-    var content = fs.read_file(path.join(["docs", file]))
-    var lines = @len(string.split(content, "\n"))
-    @println(`${file}: ${lines} lines`)
+    var content = fs.read_file(file)
+    var lines = @len(string.lines(content))
+    @println(`${path.basename(file)}: ${lines} lines`)
   end
 end
 ```
@@ -312,7 +365,7 @@ use env = "std.env"
 
 var source_file = "src/main.tea"
 var filename = path.basename(source_file)  # "main.tea"
-var name_only = path.split(filename)[0]    # "main"
+var name_only = path.stem(filename)        # "main"
 
 var output_dir = path.join([env.cwd(), "build"])
 var output_file = path.join([output_dir, name_only])
@@ -441,14 +494,12 @@ def process_directory(dir: String)
   var entries = fs.read_dir(dir)
 
   for entry in entries
-    var full_path = path.join([dir, entry])
-
     if string.ends_with(entry, ".tea")
-      var content = fs.read_file(full_path)
+      var content = fs.read_file(entry)
       var trimmed = string.trim(content)
 
       # Save processed file
-      var output_name = string.replace(entry, ".tea", ".processed.tea")
+      var output_name = string.replace(path.basename(entry), ".tea", ".processed.tea")
       var output_path = path.join([dir, output_name])
       fs.write_file(output_path, trimmed)
 

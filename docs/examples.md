@@ -62,19 +62,18 @@ def convert_all_files(input_dir: String, output_dir: String)
 
   for file in files
     if string.ends_with(file, ".txt")
-      var input_path = path.join([input_dir, file])
-      var content = fs.read_file(input_path)
+      var content = fs.read_file(file)
 
       # Process content
       var processed = string.to_upper(content)
       var trimmed = string.trim(processed)
 
       # Write output
-      var output_file = string.replace(file, ".txt", ".processed.txt")
+      var output_file = string.replace(path.basename(file), ".txt", ".processed.txt")
       var output_path = path.join([output_dir, output_file])
       fs.write_file(output_path, trimmed)
 
-      @println(`Converted: ${file}`)
+      @println(`Converted: ${path.basename(file)}`)
     end
   end
 end
@@ -91,14 +90,12 @@ use string = "std.string"
 
 def walk_directory(dir: String, extension: String) -> List[String]
   var results: List[String] = []
-  var entries = fs.read_dir(dir)
+  var entries = fs.walk(dir)
 
   for entry in entries
-    var full_path = path.join([dir, entry])
-
     if string.ends_with(entry, extension)
       # Add to results (in real code, append to list)
-      @println(`Found: ${full_path}`)
+      @println(`Found: ${entry}`)
     end
   end
 
@@ -116,18 +113,18 @@ walk_directory("src", ".tea")
 ### Simple CLI Tool
 
 ```tea
-use env = "std.env"
+use args = "std.args"
 use fs = "std.fs"
 
 def main()
-  var args = env.args()
+  var argv = args.all()
 
-  if @len(args) < 2
+  if @len(argv) < 1
     @println("Usage: tea script.tea <file>")
     return
   end
 
-  var file_path = args[1]
+  var file_path = argv[0]
 
   if !fs.exists(file_path)
     @println(`Error: File not found: ${file_path}`)

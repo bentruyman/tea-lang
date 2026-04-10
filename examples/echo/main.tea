@@ -3,23 +3,6 @@
 ## A simple implementation of the Unix echo command in Tea.
 ## Demonstrates basic CLI argument handling and string operations.
 
-## Join a list of strings with a separator
-def join_strings(strings: List[String], sep: String) -> String
-  if @len(strings) == 0
-    return ""
-  end
-
-  var result = strings[0]
-  var i = 1
-
-  while i < @len(strings)
-    result = result + sep + strings[i]
-    i = i + 1
-  end
-
-  return result
-end
-
 ## Build output string from args, starting at given index
 def build_output(args: List[String], start_index: Int) -> String
   if start_index >= @len(args)

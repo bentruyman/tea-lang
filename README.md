@@ -42,8 +42,7 @@ var entries = fs.read_dir(root)
 
 for entry in entries
   if string.ends_with(entry, ".tea")
-    var absolute = path.join([root, entry])
-    @print(`• ${absolute}`)
+    @print(`• ${entry}`)
   end
 end
 ```

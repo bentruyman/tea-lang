@@ -402,6 +402,9 @@ struct LlvmCodeGenerator<'ctx> {
     path_separator_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
     args_program_fn: Option<FunctionValue<'ctx>>,
+    string_replace_fn: Option<FunctionValue<'ctx>>,
+    string_to_lower_fn: Option<FunctionValue<'ctx>>,
+    string_to_upper_fn: Option<FunctionValue<'ctx>>,
     // Regex functions
     regex_compile_fn: Option<FunctionValue<'ctx>>,
     regex_is_match_fn: Option<FunctionValue<'ctx>>,
@@ -1109,6 +1112,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_separator_fn: None,
             cli_args_fn: None,
             args_program_fn: None,
+            string_replace_fn: None,
+            string_to_lower_fn: None,
+            string_to_upper_fn: None,
             // Regex functions
             regex_compile_fn: None,
             regex_is_match_fn: None,
@@ -1662,6 +1668,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             for function in module.functions {
                 entry.insert(function.name.to_string(), function.kind);
             }
+            Ok(())
+        } else if stdlib::is_source_stdlib_module(module_path) {
+            // Source-backed stdlib modules are expanded into normal Tea functions
+            // before AOT registration, so there is no compiler-side builtin table
+            // to populate here.
             Ok(())
         } else {
             bail!(format!("unknown module '{module_path}'"));
@@ -6543,29 +6554,94 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn compile_string_replace_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_replace is not supported by the LLVM backend yet")
+        if arguments.len() != 3 {
+            bail!("string_replace expects exactly 3 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for string_replace");
+            }
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "string_replace expects the text to be a String")?;
+        let pattern_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let pattern_ptr = self.expect_string_pointer(
+            pattern_expr,
+            "string_replace expects the pattern to be a String",
+        )?;
+        let replacement_expr =
+            self.compile_expression(&arguments[2].expression, function, locals)?;
+        let replacement_ptr = self.expect_string_pointer(
+            replacement_expr,
+            "string_replace expects the replacement to be a String",
+        )?;
+        let func = self.ensure_string_replace_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[text_ptr.into(), pattern_ptr.into(), replacement_ptr.into()],
+                "tea_string_replace",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_replace returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
     }
 
     fn compile_string_to_lower_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_to_lower is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("string_to_lower expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for string_to_lower");
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "string_to_lower expects the text to be a String")?;
+        let func = self.ensure_string_to_lower_fn();
+        let pointer = self
+            .call_function(func, &[text_ptr.into()], "tea_string_to_lower")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_to_lower returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
     }
 
     fn compile_string_to_upper_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_to_upper is not supported by the LLVM backend yet")
+        if arguments.len() != 1 {
+            bail!("string_to_upper expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for string_to_upper");
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "string_to_upper expects the text to be a String")?;
+        let func = self.ensure_string_to_upper_fn();
+        let pointer = self
+            .call_function(func, &[text_ptr.into()], "tea_string_to_upper")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_to_upper returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
     }
 
     fn compile_math_floor_call(
@@ -14083,6 +14159,53 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_args_program", fn_type, Some(Linkage::External));
         self.args_program_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_replace_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_replace_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_string_replace", fn_type, Some(Linkage::External));
+        self.string_replace_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_to_lower_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_to_lower_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_string_to_lower", fn_type, Some(Linkage::External));
+        self.string_to_lower_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_to_upper_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_to_upper_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_string_to_upper", fn_type, Some(Linkage::External));
+        self.string_to_upper_fn = Some(func);
         func
     }
 

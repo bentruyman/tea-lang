@@ -3,7 +3,6 @@
 # This module provides a Tea-native interface to filesystem operations,
 # delegating to low-level intrinsics and providing higher-level helpers.
 use intrinsics = "std.intrinsics"
-use path = "std.path"
 
 # Read a text file.
 #
@@ -44,4 +43,3 @@ end
 pub def read_dir(dir_path: String) -> List[String]
   intrinsics.fs_list_dir(dir_path)
 end
-

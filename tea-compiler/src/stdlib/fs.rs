@@ -18,11 +18,8 @@ const FS_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "create_dir",
         StdFunctionKind::FsCreateDir,
-        StdArity::Range {
-            min: 1,
-            max: Some(2),
-        },
-        &[StdType::String, StdType::Bool],
+        StdArity::Exact(1),
+        &[StdType::String],
         StdType::Void,
     ),
     std_function(
@@ -38,13 +35,6 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
-    ),
-    std_function(
-        "rename",
-        StdFunctionKind::FsRename,
-        StdArity::Exact(2),
-        &[StdType::String, StdType::String],
-        StdType::Void,
     ),
 ];
 

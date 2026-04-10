@@ -12,6 +12,7 @@ use crate::diagnostics::Diagnostics;
 use crate::lexer::{Lexer, TokenKind};
 use crate::parser::Parser;
 use crate::source::{SourceFile, SourceId};
+use crate::stdlib;
 
 pub struct ExpandedModule {
     pub module: Module,
@@ -81,30 +82,42 @@ impl ModuleExpander {
         self.diagnostics
     }
 
-    /// Try to resolve a Tea stdlib module (e.g., "std.env" -> "stdlib/env/mod.tea")
-    fn try_resolve_tea_stdlib_module(&self, module_path: &str) -> Option<PathBuf> {
-        if !module_path.starts_with("std.") {
+    /// Try to resolve a source-backed Tea stdlib module (e.g., "std.env" -> "stdlib/env/mod.tea")
+    fn try_resolve_tea_stdlib_module(
+        &self,
+        module_path: &str,
+        base_path: &Path,
+    ) -> Option<PathBuf> {
+        if !stdlib::is_source_stdlib_module(module_path) {
             return None;
         }
 
         let module_name = module_path.strip_prefix("std.")?;
+        let mut roots = Vec::new();
 
-        let rust_only_modules = ["intrinsics", "assert", "util"];
-        if rust_only_modules.contains(&module_name) {
-            return None;
+        let mut current = if base_path.is_dir() {
+            Some(base_path)
+        } else {
+            base_path.parent()
+        };
+        while let Some(path) = current {
+            roots.push(path.to_path_buf());
+            current = path.parent();
         }
 
-        let stdlib_candidates = vec![
-            PathBuf::from("stdlib").join(module_name).join("mod.tea"),
-            PathBuf::from("../../stdlib")
-                .join(module_name)
-                .join("mod.tea"),
-            PathBuf::from("../../../stdlib")
-                .join(module_name)
-                .join("mod.tea"),
-        ];
+        if let Ok(cwd) = std::env::current_dir() {
+            let mut current = Some(cwd.as_path());
+            while let Some(path) = current {
+                let path_buf = path.to_path_buf();
+                if !roots.contains(&path_buf) {
+                    roots.push(path_buf);
+                }
+                current = path.parent();
+            }
+        }
 
-        for candidate in stdlib_candidates {
+        for root in roots {
+            let candidate = root.join("stdlib").join(module_name).join("mod.tea");
             if candidate.exists() {
                 return Some(candidate);
             }
@@ -149,24 +162,25 @@ impl ModuleExpander {
                     result.push(statement.clone());
                     let path = &use_stmt.module_path;
 
-                    let resolved_path =
-                        if let Some(tea_stdlib_path) = self.try_resolve_tea_stdlib_module(path) {
-                            tea_stdlib_path
-                        } else if path.starts_with("std.") || path.starts_with("support.") {
-                            continue;
-                        } else {
-                            let span = use_stmt.module_span;
-                            match self.resolve_path(base_path, path) {
-                                Ok(resolved) => resolved,
-                                Err(err) => {
-                                    self.diagnostics.push_error_with_span(
-                                        format!("could not resolve module '{}': {err}", path),
-                                        Some(span),
-                                    );
-                                    return Err(err);
-                                }
+                    let resolved_path = if let Some(tea_stdlib_path) =
+                        self.try_resolve_tea_stdlib_module(path, base_path)
+                    {
+                        tea_stdlib_path
+                    } else if path.starts_with("std.") || path.starts_with("support.") {
+                        continue;
+                    } else {
+                        let span = use_stmt.module_span;
+                        match self.resolve_path(base_path, path) {
+                            Ok(resolved) => resolved,
+                            Err(err) => {
+                                self.diagnostics.push_error_with_span(
+                                    format!("could not resolve module '{}': {err}", path),
+                                    Some(span),
+                                );
+                                return Err(err);
                             }
-                        };
+                        }
+                    };
 
                     let span = use_stmt.module_span;
                     let canonical = match resolved_path.canonicalize() {

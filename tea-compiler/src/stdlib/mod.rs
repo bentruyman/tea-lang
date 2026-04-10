@@ -13,6 +13,27 @@ use docs::function_doc;
 
 pub use builtins::BUILTINS;
 
+pub const SOURCE_STDLIB_MODULES: &[&str] = &[
+    "std.args",
+    "std.env",
+    "std.fs",
+    "std.path",
+    "std.process",
+    "std.regex",
+    "std.string",
+];
+
+pub const REFERENCE_STDLIB_MODULES: &[&str] = &[
+    "std.args",
+    "std.assert",
+    "std.env",
+    "std.fs",
+    "std.path",
+    "std.process",
+    "std.regex",
+    "std.string",
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StdFunctionKind {
     Print,
@@ -188,6 +209,10 @@ pub static MODULES: &[StdModule] = &[
 
 pub fn find_module(path: &str) -> Option<&'static StdModule> {
     MODULES.iter().find(|module| module.path == path)
+}
+
+pub fn is_source_stdlib_module(path: &str) -> bool {
+    SOURCE_STDLIB_MODULES.contains(&path)
 }
 
 pub fn module_for_function(name: &str) -> Option<&'static str> {

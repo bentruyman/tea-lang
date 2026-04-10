@@ -3825,6 +3825,39 @@ pub extern "C" fn tea_string_equal(left: *const TeaString, right: *const TeaStri
 }
 
 #[no_mangle]
+pub extern "C" fn tea_string_replace(
+    text: *const TeaString,
+    search: *const TeaString,
+    replacement: *const TeaString,
+) -> *mut TeaString {
+    let text = expect_string(text, "string_replace expects the text to be a String");
+    let search = expect_string(search, "string_replace expects the pattern to be a String");
+    let replacement = expect_string(
+        replacement,
+        "string_replace expects the replacement to be a String",
+    );
+    let replaced = tea_intrinsics::string::replace(&text, &search, &replacement);
+    let bytes = replaced.as_bytes();
+    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_to_lower(text: *const TeaString) -> *mut TeaString {
+    let text = expect_string(text, "string_to_lower expects the text to be a String");
+    let lowered = tea_intrinsics::string::to_lower(&text);
+    let bytes = lowered.as_bytes();
+    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_to_upper(text: *const TeaString) -> *mut TeaString {
+    let text = expect_string(text, "string_to_upper expects the text to be a String");
+    let upper = tea_intrinsics::string::to_upper(&text);
+    let bytes = upper.as_bytes();
+    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+}
+
+#[no_mangle]
 pub extern "C" fn tea_list_equal(left: *const TeaList, right: *const TeaList) -> c_int {
     if left == right {
         1

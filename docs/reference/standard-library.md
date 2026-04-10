@@ -1,6 +1,6 @@
 # Standard Library
 
-Tea's standard library provides modules for common tasks: filesystem operations, environment variables, path manipulation, string utilities, JSON handling, and testing assertions.
+Tea's standard library provides modules for common tasks: filesystem operations, environment variables, path manipulation, string utilities, process execution, regex handling, and testing assertions.
 
 ## Importing Modules
 
@@ -16,14 +16,16 @@ The syntax is: `use alias = "module.path"`
 
 ## Quick Reference
 
-| Module       | Purpose                                            |
-| ------------ | -------------------------------------------------- |
-| `std.assert` | Test assertions and runtime checks                 |
-| `std.env`    | Environment variables and working directory        |
-| `std.fs`     | Filesystem operations (read, write, list)          |
-| `std.json`   | JSON encoding and decoding                         |
-| `std.path`   | Path manipulation utilities                        |
-| `std.string` | String operations (trim, replace, case conversion) |
+| Module        | Purpose                                            |
+| ------------- | -------------------------------------------------- |
+| `std.assert`  | Test assertions and runtime checks                 |
+| `std.args`    | Command-line argument helpers                      |
+| `std.env`     | Environment variables and working directory        |
+| `std.fs`      | Filesystem operations (read, write, list)          |
+| `std.path`    | Path manipulation utilities                        |
+| `std.process` | Run and manage subprocesses                        |
+| `std.regex`   | Regular-expression matching and replacement        |
+| `std.string`  | String operations (trim, replace, case conversion) |
 
 ---
 
@@ -226,15 +228,6 @@ fs.remove("temp.txt")
 fs.remove("old_folder")  # Removes directory and all contents
 ```
 
-### `rename(source: String, target: String) -> Void`
-
-Rename or move a file or directory.
-
-```tea
-fs.rename("old.txt", "new.txt")
-fs.rename("file.txt", "backup/file.txt")
-```
-
 **Example: Process Text Files:**
 
 ```tea
@@ -252,55 +245,6 @@ for file in files
   end
 end
 ```
-
----
-
-## std.json
-
-JSON encoding and decoding utilities.
-
-```tea
-use json = "std.json"
-```
-
-### `encode(value: Dict) -> String`
-
-Encode a value to a JSON string.
-
-```tea
-var data = { "name": "tea", "version": "1.0", "stable": "true" }
-var json_str = json.encode(data)
-@println(json_str)  # {"name":"tea","version":"1.0","stable":"true"}
-```
-
-### `decode(json_str: String) -> Dict`
-
-Decode a JSON string to a value.
-
-```tea
-var json_str = "{\"name\":\"tea\",\"version\":\"1.0\"}"
-var data = json.decode(json_str)
-@println(data.name)  # tea
-```
-
-**Example: Config File:**
-
-```tea
-use fs = "std.fs"
-use json = "std.json"
-
-# Read config
-var config_json = fs.read_file("config.json")
-var config = json.decode(config_json)
-
-@println(`Server: ${config.host}:${config.port}`)
-
-# Write config
-var new_config = { "host": "localhost", "port": "8080" }
-fs.write_file("config.json", json.encode(new_config))
-```
-
----
 
 ## std.path
 
@@ -485,36 +429,6 @@ end
 ---
 
 ## Practical Examples
-
-### Configuration Manager
-
-```tea
-use fs = "std.fs"
-use json = "std.json"
-use path = "std.path"
-use env = "std.env"
-
-def load_config() -> Dict
-  var config_path = path.join([env.cwd(), "config.json"])
-
-  if !fs.exists(config_path)
-    # Create default config
-    var default_config = {
-      "host": "localhost",
-      "port": "8080",
-      "debug": "false"
-    }
-    fs.write_file(config_path, json.encode(default_config))
-    return default_config
-  end
-
-  var config_json = fs.read_file(config_path)
-  json.decode(config_json)
-end
-
-var config = load_config()
-@println(`Server: ${config.host}:${config.port}`)
-```
 
 ### File Processor
 

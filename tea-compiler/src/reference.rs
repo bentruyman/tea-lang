@@ -83,36 +83,14 @@ fn build_builtins_entry() -> ReferenceEntry {
 }
 
 fn build_stdlib_entries(repo_root: &Path) -> Result<Vec<ReferenceEntry>> {
-    let stdlib_root = repo_root.join("stdlib");
-    let mut slugs = Vec::new();
-
-    for entry in fs::read_dir(&stdlib_root).with_context(|| {
-        format!(
-            "failed to read stdlib directory at {}",
-            stdlib_root.display()
-        )
-    })? {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-
-        let slug = entry.file_name().to_string_lossy().to_string();
-        if slug == "intrinsics" {
-            continue;
-        }
-
-        let source_path = entry.path().join("mod.tea");
-        if source_path.is_file() {
-            slugs.push(slug);
-        }
-    }
-
-    slugs.sort();
-
-    slugs
+    stdlib::REFERENCE_STDLIB_MODULES
         .into_iter()
-        .map(|slug| build_tea_module_entry(repo_root, &slug))
+        .map(|module_path| {
+            let slug = module_path
+                .strip_prefix("std.")
+                .expect("stdlib module paths should use std. prefix");
+            build_tea_module_entry(repo_root, slug)
+        })
         .collect()
 }
 
@@ -432,8 +410,10 @@ end
             .entries
             .iter()
             .any(|entry| entry.slug == "builtins"));
+        assert!(manifest.entries.iter().any(|entry| entry.slug == "args"));
+        assert!(manifest.entries.iter().any(|entry| entry.slug == "assert"));
         assert!(manifest.entries.iter().any(|entry| entry.slug == "string"));
-        assert!(manifest.entries.iter().any(|entry| entry.slug == "json"));
+        assert!(manifest.entries.iter().all(|entry| entry.slug != "json"));
 
         Ok(())
     }

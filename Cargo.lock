@@ -1286,6 +1286,7 @@ dependencies = [
  "anyhow",
  "serde_json",
  "tea-compiler",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tower-lsp",

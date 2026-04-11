@@ -16,7 +16,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse,
+    CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse, Documentation,
     Diagnostic as LspDiagnostic, DiagnosticRelatedInformation, DiagnosticSeverity,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
@@ -109,13 +109,289 @@ struct FieldInfo {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use tea_compiler::{Compilation, CompileOptions, Compiler, SourceFile, SourceId};
+    use tempfile::tempdir;
 
     fn compile_source(contents: &str) -> Compilation {
         let mut compiler = Compiler::new(CompileOptions::default());
         let source = SourceFile::new(SourceId(0), "test.tea".into(), contents.to_string());
         compiler.compile(&source).expect("compilation to succeed")
+    }
+
+    fn compile_source_at_path(path: PathBuf, contents: &str) -> Compilation {
+        let mut compiler = Compiler::new(CompileOptions::default());
+        let source = SourceFile::new(SourceId(0), path, contents.to_string());
+        compiler.compile(&source).expect("compilation to succeed")
+    }
+
+    fn completion_labels(items: &[CompletionItem]) -> Vec<&str> {
+        items.iter().map(|item| item.label.as_str()).collect()
+    }
+
+    #[test]
+    fn std_module_alias_completion_returns_exports() {
+        let compilation = compile_source(
+            r#"
+use fs = "std.fs"
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let binding = analysis
+            .module_aliases
+            .get("fs")
+            .expect("fs alias to be present");
+
+        let items = module_alias_completion_items(binding, "fs", "", None);
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"read_file"));
+        assert!(labels.contains(&"read_dir"));
+        assert!(labels.contains(&"remove"));
+        assert!(labels.contains(&"rename"));
+    }
+
+    #[test]
+    fn std_module_alias_completion_filters_by_prefix() {
+        let compilation = compile_source(
+            r#"
+use fs = "std.fs"
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let binding = analysis
+            .module_aliases
+            .get("fs")
+            .expect("fs alias to be present");
+
+        let items = module_alias_completion_items(binding, "fs", "re", None);
+        let labels = completion_labels(&items);
+
+        assert_eq!(labels.len(), 5);
+        assert!(labels.contains(&"read_file"));
+        assert!(labels.contains(&"read_dir"));
+        assert!(labels.contains(&"read_lines"));
+        assert!(labels.contains(&"remove"));
+        assert!(labels.contains(&"rename"));
+    }
+
+    #[test]
+    fn source_module_alias_completion_returns_public_exports() {
+        let dir = tempdir().expect("temp dir to be created");
+        let helper_path = dir.path().join("helper.tea");
+        fs::write(
+            &helper_path,
+            r#"
+pub def greet() -> String
+  "hi"
+end
+
+def secret() -> String
+  "psst"
+end
+
+const VERSION: Int = 1
+"#,
+        )
+        .expect("helper module to be written");
+
+        let main_source = r#"
+use helper = "./helper"
+"#;
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, main_source).expect("main module to be written");
+
+        let compilation = compile_source_at_path(main_path, main_source);
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let binding = analysis
+            .module_aliases
+            .get("helper")
+            .expect("helper alias to be present");
+
+        let items = module_alias_completion_items(binding, "helper", "", None);
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"greet"));
+        assert!(labels.contains(&"VERSION"));
+        assert!(!labels.contains(&"secret"));
+    }
+
+    #[test]
+    fn module_alias_completion_items_include_kind_type_and_docs() {
+        let compilation = compile_source(
+            r#"
+use fs = "std.fs"
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let binding = analysis
+            .module_aliases
+            .get("fs")
+            .expect("fs alias to be present");
+
+        let item = module_alias_completion_items(binding, "fs", "read_file", None)
+            .into_iter()
+            .next()
+            .expect("read_file completion to be present");
+
+        assert_eq!(item.label, "read_file");
+        assert_eq!(item.kind, Some(CompletionItemKind::FUNCTION));
+        assert_eq!(item.detail.as_deref(), Some("Func(String) -> String"));
+        assert!(matches!(
+            item.documentation,
+            Some(Documentation::String(ref doc)) if doc.starts_with("Read a text file.")
+        ));
+    }
+
+    #[test]
+    fn visible_completion_symbols_exclude_internal_module_names() {
+        let visible = SymbolInfo {
+            name: "fs".to_string(),
+            range: Range::default(),
+            kind: SymbolKind::ModuleAlias,
+            type_desc: None,
+            docstring: None,
+        };
+        let internal = SymbolInfo {
+            name: "__module_fs_read_file".to_string(),
+            range: Range::default(),
+            kind: SymbolKind::Function,
+            type_desc: Some("Func(String) -> String".to_string()),
+            docstring: None,
+        };
+
+        assert!(is_visible_completion_symbol(&visible));
+        assert!(!is_visible_completion_symbol(&internal));
+    }
+
+    #[test]
+    fn member_completion_context_handles_virtual_dot_trigger() {
+        let text = "fs";
+        let position = Position {
+            line: 0,
+            character: 2,
+        };
+
+        assert_eq!(
+            member_completion_context(text, &position, Some(".")),
+            Some(("fs".to_string(), String::new()))
+        );
+    }
+
+    #[test]
+    fn member_at_position_finds_module_member_identifier() {
+        let text = "fs.read_file(\"demo.txt\")";
+        let position = Position {
+            line: 0,
+            character: 7,
+        };
+
+        assert_eq!(
+            member_at_position(text, &position).map(|reference| (reference.alias, reference.member)),
+            Some(("fs".to_string(), "read_file".to_string()))
+        );
+    }
+
+    #[test]
+    fn member_at_position_returns_member_range() {
+        let text = "fs.read_file(\"demo.txt\")";
+        let position = Position {
+            line: 0,
+            character: 7,
+        };
+
+        let reference = member_at_position(text, &position).expect("member reference to exist");
+        assert_eq!(reference.range.start.line, 0);
+        assert_eq!(reference.range.start.character, 3);
+        assert_eq!(reference.range.end.line, 0);
+        assert_eq!(reference.range.end.character, 12);
+    }
+
+    #[test]
+    fn member_at_position_handles_multiline_member_access() {
+        let text = "use fs = \"std.fs\"\n\nfs.read_file(\"demo.txt\")\n";
+        let position = Position {
+            line: 2,
+            character: 5,
+        };
+
+        assert_eq!(
+            member_at_position(text, &position).map(|reference| (reference.alias, reference.member)),
+            Some(("fs".to_string(), "read_file".to_string()))
+        );
+    }
+
+    #[test]
+    fn merge_document_analysis_keeps_last_good_result_on_failure() {
+        let existing = Some(DocumentAnalysis {
+            symbols: vec![SymbolInfo {
+                name: "fs".to_string(),
+                range: Range::default(),
+                kind: SymbolKind::ModuleAlias,
+                type_desc: None,
+                docstring: None,
+            }],
+            ..DocumentAnalysis::default()
+        });
+
+        let merged = merge_document_analysis(existing.clone(), None);
+        assert_eq!(merged.as_ref().map(|analysis| analysis.symbols.len()), Some(1));
+
+        let replacement = Some(DocumentAnalysis {
+            symbols: vec![SymbolInfo {
+                name: "env".to_string(),
+                range: Range::default(),
+                kind: SymbolKind::ModuleAlias,
+                type_desc: None,
+                docstring: None,
+            }],
+            ..DocumentAnalysis::default()
+        });
+        let merged = merge_document_analysis(existing, replacement);
+        assert_eq!(
+            merged
+                .as_ref()
+                .and_then(|analysis| analysis.symbols.first())
+                .map(|symbol| symbol.name.as_str()),
+            Some("env")
+        );
+    }
+
+    #[test]
+    fn module_member_hover_returns_export_docs_and_range() {
+        let compilation = compile_source(
+            r#"
+use fs = "std.fs"
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let range = Range {
+            start: Position {
+                line: 0,
+                character: 3,
+            },
+            end: Position {
+                line: 0,
+                character: 12,
+            },
+        };
+
+        let hover = module_member_hover(&analysis, "fs", "read_file", range.clone())
+            .expect("module member hover to exist");
+
+        assert_eq!(hover.range, Some(range));
+        let HoverContents::Markup(markup) = hover.contents else {
+            panic!("expected markup hover contents");
+        };
+        assert_eq!(markup.kind, MarkupKind::PlainText);
+        assert!(markup.value.contains("function `fs.read_file`"));
+        assert!(markup.value.contains("Read a text file."));
     }
 
     #[test]
@@ -146,15 +422,6 @@ end
             "assert.ok should have docstring"
         );
 
-        let symbol_doc = analysis
-            .symbols
-            .iter()
-            .find(|symbol| symbol.name == "ok")
-            .and_then(|symbol| symbol.docstring.clone());
-        assert!(
-            symbol_doc.is_some(),
-            "ok function should have docstring in symbols"
-        );
     }
 
     #[test]
@@ -431,6 +698,136 @@ impl SymbolKind {
     }
 }
 
+fn module_alias_completion_kind(type_detail: Option<&str>) -> CompletionItemKind {
+    match type_detail {
+        Some(ty) if ty.starts_with("Func") => CompletionItemKind::FUNCTION,
+        Some("Struct") => CompletionItemKind::STRUCT,
+        Some("Enum") => CompletionItemKind::ENUM,
+        _ => CompletionItemKind::VARIABLE,
+    }
+}
+
+fn is_visible_completion_symbol(symbol: &SymbolInfo) -> bool {
+    !symbol.name.starts_with("__module_")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MemberReference {
+    alias: String,
+    member: String,
+    range: Range,
+}
+
+fn merge_document_analysis(
+    existing: Option<DocumentAnalysis>,
+    updated: Option<DocumentAnalysis>,
+) -> Option<DocumentAnalysis> {
+    updated.or(existing)
+}
+
+fn module_member_hover(
+    analysis: &DocumentAnalysis,
+    alias: &str,
+    member: &str,
+    range: Range,
+) -> Option<Hover> {
+    let binding = analysis.module_aliases.get(alias)?;
+
+    let mut label = "symbol";
+    if let Some(ty) = binding.export_types.get(member) {
+        if ty.starts_with("Func") {
+            label = "function";
+        } else if ty == "Struct" {
+            label = "struct";
+        }
+    }
+
+    let mut value = format!("{} `{}.{}`", label, alias, member);
+    if let Some(ty) = binding.export_types.get(member) {
+        value.push_str(&format!(" : {}", ty));
+    }
+    let mut doc = binding.export_docs.get(member).cloned();
+    if doc.is_none() && binding.module_path.starts_with("std.") {
+        if let Some(module) = tea_compiler::stdlib_find_module(&binding.module_path) {
+            doc = module
+                .functions
+                .iter()
+                .find(|function| function.name == member)
+                .map(|function| function.docstring.to_string());
+        }
+    }
+    if let Some(doc) = doc {
+        if !doc.is_empty() {
+            value.push_str("\n\n");
+            value.push_str(&doc);
+        }
+    }
+
+    Some(Hover {
+        contents: HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::PlainText,
+            value,
+        }),
+        range: Some(range),
+    })
+}
+
+fn module_alias_completion_item(
+    binding: &ModuleAliasBinding,
+    alias: &str,
+    export: &str,
+) -> CompletionItem {
+    let type_detail = binding.export_types.get(export);
+    let mut item = CompletionItem::new_simple(export.to_string(), format!("module {alias}"));
+    item.kind = Some(module_alias_completion_kind(type_detail.map(String::as_str)));
+    if let Some(ty) = type_detail {
+        item.detail = Some(ty.clone());
+    }
+    if let Some(doc) = binding.export_docs.get(export).filter(|doc| !doc.is_empty()) {
+        item.documentation = Some(Documentation::String(doc.clone()));
+    }
+    item
+}
+
+fn module_alias_completion_items(
+    binding: &ModuleAliasBinding,
+    alias: &str,
+    partial: &str,
+    expected_type: Option<&str>,
+) -> Vec<CompletionItem> {
+    if binding.exports.is_empty() {
+        return Vec::new();
+    }
+
+    let matches_partial =
+        |export: &String| partial.is_empty() || export.starts_with(partial);
+    let matches_expected_type = |export: &String| match expected_type {
+        Some(expected) => binding
+            .export_types
+            .get(export)
+            .is_some_and(|ty| ty == expected),
+        None => true,
+    };
+
+    let mut items = binding
+        .exports
+        .iter()
+        .filter(|export| matches_partial(export) && matches_expected_type(export))
+        .map(|export| module_alias_completion_item(binding, alias, export))
+        .collect::<Vec<_>>();
+
+    if items.is_empty() && expected_type.is_some() {
+        items = binding
+            .exports
+            .iter()
+            .filter(|export| matches_partial(export))
+            .map(|export| module_alias_completion_item(binding, alias, export))
+            .collect();
+    }
+
+    items
+}
+
 impl ServerState {
     fn allocate_source_id(&mut self) -> SourceId {
         let id = self.next_source_id;
@@ -640,7 +1037,7 @@ impl TeaLanguageServer {
         {
             let mut state = self.state.lock().await;
             let doc_state = if let Some(doc) = state.documents.get_mut(uri) {
-                doc.analysis = analysis;
+                doc.analysis = merge_document_analysis(doc.analysis.clone(), analysis.clone());
                 let doc_path = doc.path.clone();
                 let old_deps = std::mem::take(&mut doc.dependencies);
                 let new_deps = dependencies.clone();
@@ -1082,23 +1479,6 @@ fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -
                     }
                 }
                 ExpressionKind::Member(expr) => {
-                    if let ExpressionKind::Identifier(identifier) = &expr.object.kind {
-                        if let Some(binding) = self.module_aliases.get(&identifier.name) {
-                            let range = range_from_span!(&expr.property_span);
-                            let type_desc = binding.export_types.get(&expr.property).cloned();
-                            let mut docstring = binding.export_docs.get(&expr.property).cloned();
-                            if docstring.as_deref().map(str::is_empty).unwrap_or(false) {
-                                docstring = None;
-                            }
-                            self.symbols.push(SymbolInfo {
-                                name: expr.property.clone(),
-                                range,
-                                kind: SymbolKind::Function,
-                                type_desc,
-                                docstring,
-                            });
-                        }
-                    }
                     self.visit_expression(&expr.object);
                 }
                 ExpressionKind::Index(expr) => {
@@ -1504,7 +1884,6 @@ impl LanguageServer for TeaLanguageServer {
 
                 if error_message.is_none() {
                     doc.version = version;
-                    doc.analysis = None;
                 }
             } else {
                 error_message = Some(format!("received change for unknown document {}", uri));
@@ -1546,6 +1925,52 @@ impl LanguageServer for TeaLanguageServer {
             return Ok(None);
         };
 
+        if let Some(reference) = member_at_position(&doc.text, &position) {
+            if let Some(hover) = module_member_hover(
+                analysis,
+                &reference.alias,
+                &reference.member,
+                reference.range.clone(),
+            ) {
+                return Ok(Some(hover));
+            } else if let Some(symbol) = symbol_by_name(analysis, &reference.alias) {
+                if let Some(struct_name) = symbol
+                    .type_desc
+                    .as_ref()
+                    .and_then(|ty| extract_struct_name(ty))
+                {
+                    if let Some(struct_info) = analysis.structs.get(&struct_name) {
+                        if let Some(field_info) = struct_info.fields.get(&reference.member) {
+                            let mut value =
+                                format!("field `{}.{}`", struct_name, reference.member);
+                            if let Some(ref ty) = field_info.type_desc {
+                                value.push_str(&format!(" : {}", ty));
+                            }
+                            let mut doc =
+                                field_info.docstring.clone().filter(|doc| !doc.is_empty());
+                            if doc.is_none() {
+                                doc = struct_info.docstring.clone().filter(|doc| !doc.is_empty());
+                            }
+                            if let Some(doc) = doc {
+                                value.push_str("\n\n");
+                                value.push_str(&doc);
+                            }
+
+                            let contents = HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::PlainText,
+                                value,
+                            });
+
+                            return Ok(Some(Hover {
+                                contents,
+                                range: Some(reference.range),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(symbol) = symbol_at_position(analysis, &position).or_else(|| {
             identifier_at_position(&doc.text, &position)
                 .and_then(|name| symbol_by_name(analysis, &name))
@@ -1567,84 +1992,6 @@ impl LanguageServer for TeaLanguageServer {
                 contents,
                 range: Some(symbol.range.clone()),
             }));
-        }
-
-        if let Some((alias, member)) = member_at_position(&doc.text, &position) {
-            if let Some(binding) = analysis.module_aliases.get(&alias) {
-                let mut label = "symbol";
-                if let Some(ty) = binding.export_types.get(&member) {
-                    if ty.starts_with("Func") {
-                        label = "function";
-                    } else if ty == "Struct" {
-                        label = "struct";
-                    }
-                }
-
-                let mut value = format!("{} `{}.{}`", label, alias, member);
-                if let Some(ty) = binding.export_types.get(&member) {
-                    value.push_str(&format!(" : {}", ty));
-                }
-                let mut doc = binding.export_docs.get(&member).cloned();
-                if doc.is_none() && binding.module_path.starts_with("std.") {
-                    if let Some(module) = tea_compiler::stdlib_find_module(&binding.module_path) {
-                        doc = module
-                            .functions
-                            .iter()
-                            .find(|function| function.name == member)
-                            .map(|function| function.docstring.to_string());
-                    }
-                }
-                if let Some(doc) = doc {
-                    if !doc.is_empty() {
-                        value.push_str("\n\n");
-                        value.push_str(&doc);
-                    }
-                }
-
-                let contents = HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::PlainText,
-                    value,
-                });
-
-                return Ok(Some(Hover {
-                    contents,
-                    range: None,
-                }));
-            } else if let Some(symbol) = symbol_by_name(analysis, &alias) {
-                if let Some(struct_name) = symbol
-                    .type_desc
-                    .as_ref()
-                    .and_then(|ty| extract_struct_name(ty))
-                {
-                    if let Some(struct_info) = analysis.structs.get(&struct_name) {
-                        if let Some(field_info) = struct_info.fields.get(&member) {
-                            let mut value = format!("field `{}.{}`", struct_name, member);
-                            if let Some(ref ty) = field_info.type_desc {
-                                value.push_str(&format!(" : {}", ty));
-                            }
-                            let mut doc =
-                                field_info.docstring.clone().filter(|doc| !doc.is_empty());
-                            if doc.is_none() {
-                                doc = struct_info.docstring.clone().filter(|doc| !doc.is_empty());
-                            }
-                            if let Some(doc) = doc {
-                                value.push_str("\n\n");
-                                value.push_str(&doc);
-                            }
-
-                            let contents = HoverContents::Markup(MarkupContent {
-                                kind: MarkupKind::PlainText,
-                                value,
-                            });
-
-                            return Ok(Some(Hover {
-                                contents,
-                                range: None,
-                            }));
-                        }
-                    }
-                }
-            }
         }
 
         // Check if hovering over a builtin function
@@ -1718,52 +2065,18 @@ impl LanguageServer for TeaLanguageServer {
         let expected_type = analysis
             .expected_type_at(&position)
             .filter(|ty| *ty != "Unknown");
+        let trigger_character = params
+            .context
+            .as_ref()
+            .and_then(|context| context.trigger_character.as_deref());
 
-        if let Some((alias, partial)) = member_completion_context(&doc.text, &position) {
+        if let Some((alias, partial)) =
+            member_completion_context(&doc.text, &position, trigger_character)
+        {
             if let Some(binding) = analysis.module_aliases.get(&alias) {
-                if !binding.exports.is_empty() {
-                    let mut items = Vec::new();
-                    let push_item = |export: &String, items: &mut Vec<CompletionItem>| {
-                        let type_detail = binding.export_types.get(export);
-                        let mut item =
-                            CompletionItem::new_simple(export.clone(), format!("module {alias}"));
-                        item.kind = Some(match type_detail {
-                            Some(ty) if ty.starts_with("Func") => CompletionItemKind::FUNCTION,
-                            Some(ty) if ty == "Struct" => CompletionItemKind::STRUCT,
-                            Some(ty) if ty == "Enum" => CompletionItemKind::ENUM,
-                            _ => CompletionItemKind::VARIABLE,
-                        });
-                        if let Some(ty) = type_detail {
-                            item.detail = Some(ty.clone());
-                        }
-                        items.push(item);
-                    };
-
-                    for export in &binding.exports {
-                        if !(partial.is_empty() || export.starts_with(&partial)) {
-                            continue;
-                        }
-                        if let Some(expected) = expected_type {
-                            if let Some(ty) = binding.export_types.get(export) {
-                                if ty != expected {
-                                    continue;
-                                }
-                            }
-                        }
-                        push_item(export, &mut items);
-                    }
-
-                    if items.is_empty() && expected_type.is_some() {
-                        for export in &binding.exports {
-                            if partial.is_empty() || export.starts_with(&partial) {
-                                push_item(export, &mut items);
-                            }
-                        }
-                    }
-
-                    if !items.is_empty() {
-                        return Ok(Some(CompletionResponse::Array(items)));
-                    }
+                let items = module_alias_completion_items(binding, &alias, &partial, expected_type);
+                if !items.is_empty() {
+                    return Ok(Some(CompletionResponse::Array(items)));
                 }
             }
         }
@@ -1774,6 +2087,9 @@ impl LanguageServer for TeaLanguageServer {
         if let Some(expected) = expected_type {
             for symbol in &analysis.symbols {
                 if symbol.type_desc.as_deref() != Some(expected) {
+                    continue;
+                }
+                if !is_visible_completion_symbol(symbol) {
                     continue;
                 }
                 if seen.insert(symbol.name.clone()) {
@@ -1791,6 +2107,9 @@ impl LanguageServer for TeaLanguageServer {
             if items.is_empty() {
                 seen.clear();
                 for symbol in &analysis.symbols {
+                    if !is_visible_completion_symbol(symbol) {
+                        continue;
+                    }
                     if seen.insert(symbol.name.clone()) {
                         let mut item = CompletionItem::new_simple(
                             symbol.name.clone(),
@@ -1806,6 +2125,9 @@ impl LanguageServer for TeaLanguageServer {
             }
         } else {
             for symbol in &analysis.symbols {
+                if !is_visible_completion_symbol(symbol) {
+                    continue;
+                }
                 if seen.insert(symbol.name.clone()) {
                     let mut item = CompletionItem::new_simple(
                         symbol.name.clone(),
@@ -2271,6 +2593,36 @@ fn position_to_offset(text: &str, position: &Position) -> Option<usize> {
     None
 }
 
+fn offset_to_position(text: &str, offset: usize) -> Option<Position> {
+    if offset > text.len() {
+        return None;
+    }
+
+    let mut line = 0u32;
+    let mut character = 0u32;
+    let mut idx = 0usize;
+
+    for ch in text.chars() {
+        if idx == offset {
+            return Some(Position { line, character });
+        }
+
+        idx += ch.len_utf8();
+        if ch == '\n' {
+            line = line.saturating_add(1);
+            character = 0;
+        } else {
+            character = character.saturating_add(1);
+        }
+    }
+
+    if idx == offset {
+        Some(Position { line, character })
+    } else {
+        None
+    }
+}
+
 fn format_std_type(ty: &tea_compiler::StdType) -> &'static str {
     use tea_compiler::StdType;
     match ty {
@@ -2431,7 +2783,42 @@ fn previous_char(text: &str, idx: usize) -> Option<(usize, char)> {
     text[..idx].char_indices().next_back()
 }
 
-fn member_completion_context(text: &str, position: &Position) -> Option<(String, String)> {
+fn virtual_member_completion_context(
+    text: &str,
+    position: &Position,
+    trigger_character: Option<&str>,
+) -> Option<(String, String)> {
+    if trigger_character != Some(".") {
+        return None;
+    }
+
+    let offset = position_to_offset(text, position)?;
+    let mut alias_start = offset;
+    while let Some((idx, ch)) = previous_char(text, alias_start) {
+        if is_identifier_char(ch) {
+            alias_start = idx;
+        } else {
+            return None;
+        }
+    }
+
+    if alias_start == offset {
+        return None;
+    }
+
+    let alias = text[alias_start..offset].trim();
+    if alias.is_empty() {
+        return None;
+    }
+
+    Some((alias.to_string(), String::new()))
+}
+
+fn member_completion_context(
+    text: &str,
+    position: &Position,
+    trigger_character: Option<&str>,
+) -> Option<(String, String)> {
     let offset = position_to_offset(text, position)?;
 
     let mut partial_start = offset;
@@ -2447,9 +2834,11 @@ fn member_completion_context(text: &str, position: &Position) -> Option<(String,
 
     let dot_index = match previous_char(text, partial_start) {
         Some((idx, '.')) => idx,
-        Some((_, ch)) if ch.is_whitespace() => return None,
-        Some(_) => return None,
-        None => return None,
+        Some((_, ch)) if ch.is_whitespace() => {
+            return virtual_member_completion_context(text, position, trigger_character);
+        }
+        Some(_) => return virtual_member_completion_context(text, position, trigger_character),
+        None => return virtual_member_completion_context(text, position, trigger_character),
     };
 
     let mut alias_start = dot_index;
@@ -2463,13 +2852,13 @@ fn member_completion_context(text: &str, position: &Position) -> Option<(String,
 
     let alias = text[alias_start..dot_index].trim();
     if alias.is_empty() {
-        return None;
+        return virtual_member_completion_context(text, position, trigger_character);
     }
 
     Some((alias.to_string(), partial))
 }
 
-fn member_at_position(text: &str, position: &Position) -> Option<(String, String)> {
+fn member_at_position(text: &str, position: &Position) -> Option<MemberReference> {
     let mut offset = position_to_offset(text, position)?;
     if text.is_empty() {
         return None;
@@ -2535,7 +2924,7 @@ fn member_at_position(text: &str, position: &Position) -> Option<(String, String
                 continue;
             }
             if ch.is_whitespace() {
-                return None;
+                break;
             }
             break;
         } else {
@@ -2554,7 +2943,14 @@ fn member_at_position(text: &str, position: &Position) -> Option<(String, String
         return None;
     }
 
-    Some((alias.to_string(), member))
+    Some(MemberReference {
+        alias: alias.to_string(),
+        member,
+        range: Range {
+            start: offset_to_position(text, member_start)?,
+            end: offset_to_position(text, member_end)?,
+        },
+    })
 }
 
 fn extract_range_from_message(message: &str) -> Option<Range> {

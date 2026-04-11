@@ -13,3 +13,6 @@ tea-compiler = { path = "../tea-compiler" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "time"] }
 tower-lsp = { version = "0.20", features = ["tokio"] }
 tokio-util = "0.7"
+
+[dev-dependencies]
+tempfile = "3"

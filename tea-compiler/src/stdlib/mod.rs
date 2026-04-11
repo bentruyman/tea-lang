@@ -5,6 +5,7 @@ mod docs;
 mod env;
 mod fs;
 mod intrinsics;
+mod json;
 mod path;
 mod process;
 mod regex;
@@ -17,7 +18,6 @@ pub const SOURCE_STDLIB_MODULES: &[&str] = &[
     "std.args",
     "std.env",
     "std.fs",
-    "std.json",
     "std.path",
     "std.process",
     "std.regex",
@@ -203,6 +203,7 @@ pub static MODULES: &[StdModule] = &[
     assert::MODULE,
     env::MODULE,
     fs::MODULE,
+    json::MODULE,
     path::MODULE,
     intrinsics::MODULE,
     process::MODULE,
@@ -215,6 +216,60 @@ pub fn find_module(path: &str) -> Option<&'static StdModule> {
 
 pub fn is_source_stdlib_module(path: &str) -> bool {
     SOURCE_STDLIB_MODULES.contains(&path)
+}
+
+pub fn builtin_kind(name: &str) -> Option<StdFunctionKind> {
+    BUILTINS
+        .iter()
+        .find(|function| function.name == name)
+        .map(|function| function.kind)
+}
+
+pub fn module_function_kind(module_path: &str, name: &str) -> Option<StdFunctionKind> {
+    find_module(module_path)?
+        .functions
+        .iter()
+        .find(|function| function.name == name)
+        .map(|function| function.kind)
+}
+
+pub fn is_browser_safe_stdlib_module(path: &str) -> bool {
+    matches!(
+        path,
+        "std.assert" | "std.intrinsics" | "std.json" | "std.string"
+    )
+}
+
+pub fn is_browser_safe_function(kind: StdFunctionKind) -> bool {
+    matches!(
+        kind,
+        StdFunctionKind::Print
+            | StdFunctionKind::Println
+            | StdFunctionKind::Append
+            | StdFunctionKind::UtilToString
+            | StdFunctionKind::ToString
+            | StdFunctionKind::TypeOf
+            | StdFunctionKind::Panic
+            | StdFunctionKind::Length
+            | StdFunctionKind::StringIndexOf
+            | StdFunctionKind::StringSplit
+            | StdFunctionKind::StringContains
+            | StdFunctionKind::StringReplace
+            | StdFunctionKind::StringToLower
+            | StdFunctionKind::StringToUpper
+            | StdFunctionKind::MathFloor
+            | StdFunctionKind::MathCeil
+            | StdFunctionKind::MathRound
+            | StdFunctionKind::MathAbs
+            | StdFunctionKind::MathSqrt
+            | StdFunctionKind::MathMin
+            | StdFunctionKind::MathMax
+            | StdFunctionKind::Assert
+            | StdFunctionKind::AssertEq
+            | StdFunctionKind::AssertNe
+            | StdFunctionKind::JsonEncode
+            | StdFunctionKind::JsonDecode
+    )
 }
 
 pub fn module_for_function(name: &str) -> Option<&'static str> {

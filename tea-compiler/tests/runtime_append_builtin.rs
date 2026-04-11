@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -16,9 +17,10 @@ fn build_and_run(source: &str, file_name: &str) -> anyhow::Result<String> {
     let tmp = tempdir()?;
     let script_path = tmp.path().join(file_name);
     let binary_path = tmp.path().join(file_name.trim_end_matches(".tea"));
+    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     fs::write(&script_path, source)?;
 
-    let build_output = Command::new("cargo")
+    let build_output = Command::new(cargo)
         .current_dir(workspace_root())
         .args(["run", "-p", "tea-cli", "--", "build"])
         .arg(&script_path)

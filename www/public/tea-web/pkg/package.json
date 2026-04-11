@@ -1,0 +1,23 @@
+{
+  "name": "tea-web",
+  "type": "module",
+  "collaborators": [
+    "tea-lang contributors"
+  ],
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bentruyman/tea-lang"
+  },
+  "files": [
+    "tea_web_bg.wasm",
+    "tea_web.js",
+    "tea_web.d.ts"
+  ],
+  "main": "tea_web.js",
+  "types": "tea_web.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

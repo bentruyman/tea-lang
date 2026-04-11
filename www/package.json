@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node ./scripts/verify-tea-wasm.mjs --optional",
+    "prebuild": "bun run verify:tea-wasm",
     "generate:reference": "node ./scripts/generate-reference-manifest.mjs",
+    "build:tea-wasm": "node ./scripts/build-tea-wasm.mjs",
+    "verify:tea-wasm": "node ./scripts/verify-tea-wasm.mjs",
     "audit": "node ./scripts/audit-site.mjs",
     "build": "next build",
     "check": "node ./scripts/audit-site.mjs && next build",

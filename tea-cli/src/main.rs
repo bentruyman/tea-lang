@@ -1116,7 +1116,8 @@ fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>
 }
 
 fn build_runtime_archive(target_dir: &Path) -> Result<()> {
-    let mut cmd = Command::new("cargo");
+    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let mut cmd = Command::new(cargo);
     cmd.current_dir(workspace_root());
     cmd.arg("build").arg("-p").arg("tea-runtime");
     if std::env::var("TEA_TARGET_DIR").is_ok() {

@@ -314,14 +314,12 @@ function prepareRelease(version, dryRun) {
   const tagName = tagNameFor(version);
   console.log("");
   console.log("Next steps:");
-  console.log("- Commit the release prep changes.");
-  console.log(`- Create the release tag with: make release-tag ${version}`);
+  console.log("- Commit the release prep changes if you are using the local/manual flow.");
   console.log(
-    `- Publish the tag to ${REMOTE} with: make release-push-tag ${version}`,
+    `- Preferred: run the GitHub Release workflow with version ${tagName} to commit, tag, build, and publish remotely.`,
   );
-  console.log(
-    `- Once ${tagName} exists on GitHub, smoke-test the installer with: TEA_REF=${tagName} ./scripts/install.sh`,
-  );
+  console.log(`- Manual fallback: make release-tag ${version}`);
+  console.log(`- Manual fallback: make release-push-tag ${version}`);
 }
 
 function git(args, options = {}) {

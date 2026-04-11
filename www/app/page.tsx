@@ -2,7 +2,7 @@ import Link from "next/link"
 
 import { ArrowRight, BookOpenText, Boxes, Sparkles, Terminal } from "lucide-react"
 
-import { CodeCard } from "@/components/mdx/code-card"
+import { CodeHighlighter } from "@/components/mdx/code-highlighter"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { referenceItems } from "@/lib/reference"
@@ -93,7 +93,7 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-3">
-              <CodeCard language="tea">{homeSample}</CodeCard>
+              <CodeHighlighter code={homeSample} language="tea" />
               <div className="font-mono text-sm">
                 <span className="text-muted-foreground">Run it in </span>
                 <Link href="/playground" className="text-foreground underline decoration-primary/40 underline-offset-4">

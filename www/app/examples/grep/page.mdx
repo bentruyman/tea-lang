@@ -10,12 +10,15 @@
         <li>Demonstrates stateful scanning and explicit exit codes.</li>
       </ul>
     </KeyConceptCard>
-    <CodeCard title="Run it" language="bash">
-      {`tea examples/grep/main.tea
-tea build examples/grep/main.tea
-./bin/main`}
-    </CodeCard>
   </div>
+
+  **Run it**
+
+  ```bash
+  tea examples/grep/main.tea
+  tea build examples/grep/main.tea
+  ./bin/main
+  ```
 
   ## README summary
 
@@ -23,79 +26,81 @@ tea build examples/grep/main.tea
 
   <div className="divider-section" />
 
-  <CodeCard title="grep/main.tea" language="tea">
-    {`use args = "std.args"
-use fs = "std.fs"
-use regex = "std.regex"
+  **`grep/main.tea`**
 
-def print_usage() -> Void
-  @println("Usage: grep [OPTIONS] PATTERN FILE...")
-  @println("")
-  @println("Search for PATTERN in each FILE.")
-  @println("")
-  @println("Options:")
-  @println("  -n, --line-number    Print line numbers")
-  @println("  -i, --ignore-case    Case-insensitive matching")
-  @println("  -H, --with-filename  Print filename with matches")
-  @println("  -h, --help           Show this help message")
-end
+  ```tea
+  use args = "std.args"
+  use fs = "std.fs"
+  use regex = "std.regex"
 
-def print_match(file: String, line_num: Int, line: String, show_lines: Bool, show_file: Bool) -> Void
-  var output = ""
-
-  if show_file
-    output = output + file + ":"
+  def print_usage() -> Void
+    @println("Usage: grep [OPTIONS] PATTERN FILE...")
+    @println("")
+    @println("Search for PATTERN in each FILE.")
+    @println("")
+    @println("Options:")
+    @println("  -n, --line-number    Print line numbers")
+    @println("  -i, --ignore-case    Case-insensitive matching")
+    @println("  -H, --with-filename  Print filename with matches")
+    @println("  -h, --help           Show this help message")
   end
 
-  if show_lines
-    output = \`\${output}\${@to_string(line_num)}:\`
+  def print_match(file: String, line_num: Int, line: String, show_lines: Bool, show_file: Bool) -> Void
+    var output = ""
+
+    if show_file
+      output = output + file + ":"
+    end
+
+    if show_lines
+      output = `${output}${@to_string(line_num)}:`
+    end
+
+    output = output + line
+    @println(output)
   end
 
-  output = output + line
-  @println(output)
-end
+  def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) -> Bool
+    const content = fs.read_file(filepath)
 
-def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) -> Bool
-  const content = fs.read_file(filepath)
+    var found = false
+    var current_line = ""
+    var line_num = 1
+    var i = 0
 
-  var found = false
-  var current_line = ""
-  var line_num = 1
-  var i = 0
+    while i < @len(content)
+      const char = content[i]
 
-  while i < @len(content)
-    const char = content[i]
+      if char == "\n"
+        if regex.is_match(re, current_line)
+          found = true
+          print_match(filepath, line_num, current_line, show_lines, show_file)
+        end
 
-    if char == "\n"
+        current_line = ""
+        line_num = line_num + 1
+      else if char != "\r"
+        current_line = current_line + char
+      end
+
+      i = i + 1
+    end
+
+    if @len(current_line) > 0
       if regex.is_match(re, current_line)
         found = true
         print_match(filepath, line_num, current_line, show_lines, show_file)
       end
-
-      current_line = ""
-      line_num = line_num + 1
-    else if char != "\r"
-      current_line = current_line + char
     end
 
-    i = i + 1
+    return found
   end
 
-  if @len(current_line) > 0
-    if regex.is_match(re, current_line)
-      found = true
-      print_match(filepath, line_num, current_line, show_lines, show_file)
-    end
-  end
-
-  return found
-end
-
-const show_line_numbers = args.has("-n") || args.has("--line-number")
-const case_insensitive = args.has("-i") || args.has("--ignore-case")
-const show_filename = args.has("-H") || args.has("--with-filename")
-const show_help = args.has("-h") || args.has("--help")`}
-  </CodeCard>
+  const show_line_numbers = args.has("-n") || args.has("--line-number")
+  const case_insensitive = args.has("-i") || args.has("--ignore-case")
+  const show_filename = args.has("-H") || args.has("--with-filename")
+  const show_help = args.has("-h") || args.has("--help")
+  ```
 
   <div className="divider-section" />
 

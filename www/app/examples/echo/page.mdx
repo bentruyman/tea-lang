@@ -10,12 +10,15 @@
         <li>Shows how far you can get without importing any modules.</li>
       </ul>
     </KeyConceptCard>
-    <CodeCard title="Run it" language="bash">
-      {`tea examples/echo/main.tea
-tea build examples/echo/main.tea
-./bin/main`}
-    </CodeCard>
   </div>
+
+  **Run it**
+
+  ```bash
+  tea examples/echo/main.tea
+  tea build examples/echo/main.tea
+  ./bin/main
+  ```
 
   ## README summary
 
@@ -23,73 +26,75 @@ tea build examples/echo/main.tea
 
   <div className="divider-section" />
 
-  <CodeCard title="echo/main.tea" language="tea">
-    {`## echo - Print arguments to standard output
-##
-## A simple implementation of the Unix echo command in Tea.
-## Demonstrates basic CLI argument handling and string operations.
+  **`echo/main.tea`**
 
-## Join a list of strings with a separator
-def join_strings(strings: List[String], sep: String) -> String
-  if @len(strings) == 0
-    return ""
+  ```tea
+  ## echo - Print arguments to standard output
+  ##
+  ## A simple implementation of the Unix echo command in Tea.
+  ## Demonstrates basic CLI argument handling and string operations.
+
+  ## Join a list of strings with a separator
+  def join_strings(strings: List[String], sep: String) -> String
+    if @len(strings) == 0
+      return ""
+    end
+
+    var result = strings[0]
+    var i = 1
+
+    while i < @len(strings)
+      result = result + sep + strings[i]
+      i = i + 1
+    end
+
+    return result
   end
 
-  var result = strings[0]
-  var i = 1
+  ## Build output string from args, starting at given index
+  def build_output(args: List[String], start_index: Int) -> String
+    if start_index >= @len(args)
+      return ""
+    end
 
-  while i < @len(strings)
-    result = result + sep + strings[i]
-    i = i + 1
+    var result = args[start_index]
+    var i = start_index + 1
+
+    while i < @len(args)
+      result = result + " " + args[i]
+      i = i + 1
+    end
+
+    return result
   end
 
-  return result
-end
+  # Main program
+  const all_args = @args()
 
-## Build output string from args, starting at given index
-def build_output(args: List[String], start_index: Int) -> String
-  if start_index >= @len(args)
-    return ""
+  # If no arguments, just print a newline
+  if @len(all_args) == 0
+    @println("")
+    @exit(0)
   end
 
-  var result = args[start_index]
-  var i = start_index + 1
+  # Check for -n flag (no trailing newline)
+  var no_newline = false
+  var start_index = 0
 
-  while i < @len(args)
-    result = result + " " + args[i]
-    i = i + 1
+  if all_args[0] == "-n"
+    no_newline = true
+    start_index = 1
   end
 
-  return result
-end
+  # Build and output the result
+  const output = build_output(all_args, start_index)
 
-# Main program
-const all_args = @args()
-
-# If no arguments, just print a newline
-if @len(all_args) == 0
-  @println("")
-  @exit(0)
-end
-
-# Check for -n flag (no trailing newline)
-var no_newline = false
-var start_index = 0
-
-if all_args[0] == "-n"
-  no_newline = true
-  start_index = 1
-end
-
-# Build and output the result
-const output = build_output(all_args, start_index)
-
-if no_newline
-  @print(output)
-else
-  @println(output)
-end`}
-  </CodeCard>
+  if no_newline
+    @print(output)
+  else
+    @println(output)
+  end
+  ```
 
   <div className="divider-section" />
 

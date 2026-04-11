@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-tea",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Tree-sitter grammar for the Tea programming language.",
   "repository": {
     "type": "git",

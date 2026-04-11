@@ -14,7 +14,7 @@
     },
     "tree-sitter-tea": {
       "name": "tree-sitter-tea",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "node-gyp-build": "^4.8.0",
       },

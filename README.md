@@ -105,7 +105,7 @@ cargo build --release        # Build the compiler
 make install                 # Install to ~/.local/bin
 ```
 
-Source builds need the Rust toolchain, Bun, Make, and LLVM 17 available locally.
+Source builds need the Rust toolchain, Bun, Make, and LLVM 17 available locally. `make install` now builds a bundled `tea` binary, while a raw `cargo build --release -p tea-cli` keeps the developer-oriented runtime path that still expects `cargo` to be available when compiling Tea programs.
 
 Ensure `~/.local/bin` is in your PATH:
 

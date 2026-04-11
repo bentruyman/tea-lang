@@ -1,5 +1,5 @@
-import { PageIntro, GroupedSectionCardGrid } from "@/components/site-shell"
-import { referenceSections } from "@/lib/reference"
+import { PageIntro, GroupedSectionCardGrid } from "@/components/site-shell";
+import { referenceSections } from "@/lib/reference";
 
 export default function ReferencePage() {
   return (
@@ -11,5 +11,5 @@ export default function ReferencePage() {
       />
       <GroupedSectionCardGrid sections={referenceSections} />
     </div>
-  )
+  );
 }

@@ -1,10 +1,10 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
 interface StepProps {
-  number: number
-  title: string
-  children: ReactNode
+  number: number;
+  title: string;
+  children: ReactNode;
 }
 
 export function Step({ number, title, children }: StepProps) {
@@ -16,9 +16,7 @@ export function Step({ number, title, children }: StepProps) {
         </div>
         <h3 className="text-xl font-semibold">{title}</h3>
       </div>
-      <div className="space-y-4">
-        {children}
-      </div>
+      <div className="space-y-4">{children}</div>
     </Card>
-  )
+  );
 }

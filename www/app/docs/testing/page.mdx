@@ -5,57 +5,60 @@
 >
   Tea tests live in ordinary Tea files. Define `test` blocks, import assertion helpers from `std.assert`, and run everything through `tea test`.
 
-  ## Write a test block
+## Write a test block
 
-  A test block gives a named test case a small body of executable Tea code. Inside it, use assertion helpers to check expectations and fail fast when behavior changes.
+A test block gives a named test case a small body of executable Tea code. Inside it, use assertion helpers to check expectations and fail fast when behavior changes.
 
-  ```tea
-  use assert = "std.assert"
+```tea
+use assert = "std.assert"
 
-  test "list length stays stable"
-    var words = ["tea", "lang"]
+test "list length stays stable"
+  var words = ["tea", "lang"]
 
-    assert.ok(@len(words) == 2)
-    assert.eq(words[0], "tea")
-    assert.ne(words[1], "chai")
-  end
-  ```
+  assert.ok(@len(words) == 2)
+  assert.eq(words[0], "tea")
+  assert.ne(words[1], "chai")
+end
+```
 
-  ## Assertion helpers
+## Assertion helpers
 
-  The standard assertion module covers the common cases: truthy checks, equality checks, inequality checks, and snapshot helpers when you want to compare output against stored expectations.
+The standard assertion module covers the common cases: truthy checks, equality checks, inequality checks, and snapshot helpers when you want to compare output against stored expectations.
 
-  ```tea
-  use assert = "std.assert"
+```tea
+use assert = "std.assert"
 
-  test "basic assertions"
-    assert.ok(1 + 1 == 2)
-    assert.eq("tea", "tea")
-    assert.ne("tea", "chai")
-  end
-  ```
+test "basic assertions"
+  assert.ok(1 + 1 == 2)
+  assert.eq("tea", "tea")
+  assert.ne("tea", "chai")
+end
+```
 
-  ## Run tests
+## Run tests
 
-  Run the whole test suite or target a narrower path. The CLI can also list discovered tests or filter down to a subset when you only want to rerun one area.
+Run the whole test suite or target a narrower path. The CLI can also list discovered tests or filter down to a subset when you only want to rerun one area.
 
-  ```bash
-  tea test
-  tea test tests/
-  tea test --list
-  tea test --filter strings
-  tea test --update-snapshots
-  ```
+```bash
+tea test
+tea test tests/
+tea test --list
+tea test --filter strings
+tea test --update-snapshots
+```
 
-  <KeyConceptCard title="Current test surface">
-    <ul className="space-y-2">
-      <li>`std.assert` exports `ok`, `eq`, `ne`, and `snapshot`.</li>
-      <li>The CLI discovers Tea `test` blocks from paths you pass in.</li>
-      <li>Snapshot support exists in the stdlib and CLI surface, but backend support is still uneven.</li>
-    </ul>
-  </KeyConceptCard>
+<KeyConceptCard title="Current test surface">
+  <ul className="space-y-2">
+    <li>`std.assert` exports `ok`, `eq`, `ne`, and `snapshot`.</li>
+    <li>The CLI discovers Tea `test` blocks from paths you pass in.</li>
+    <li>
+      Snapshot support exists in the stdlib and CLI surface, but backend support
+      is still uneven.
+    </li>
+  </ul>
+</KeyConceptCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/reference/assert" title="std.assert" description="See the exact assertion helpers exported today." />

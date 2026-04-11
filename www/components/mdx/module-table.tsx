@@ -1,9 +1,9 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
 interface ModuleRowProps {
-  module: string
-  description: string
+  module: string;
+  description: string;
 }
 
 export function ModuleRow({ module, description }: ModuleRowProps) {
@@ -12,11 +12,11 @@ export function ModuleRow({ module, description }: ModuleRowProps) {
       <td className="py-2 pr-4 font-mono">{module}</td>
       <td className="py-2 text-muted-foreground">{description}</td>
     </tr>
-  )
+  );
 }
 
 interface ModuleTableProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function ModuleTable({ children }: ModuleTableProps) {
@@ -30,11 +30,9 @@ export function ModuleTable({ children }: ModuleTableProps) {
               <th className="text-left py-2">Description</th>
             </tr>
           </thead>
-          <tbody>
-            {children}
-          </tbody>
+          <tbody>{children}</tbody>
         </table>
       </div>
     </Card>
-  )
+  );
 }

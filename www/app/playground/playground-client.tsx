@@ -1,40 +1,47 @@
-"use client"
+"use client";
 
-import { startTransition, useEffect, useRef, useState } from "react"
-import { AlertTriangle, LoaderCircle, Play, RotateCcw, Sparkles } from "lucide-react"
+import { startTransition, useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  LoaderCircle,
+  Play,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 
-import { TeaEditor } from "@/components/playground/tea-editor"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { TeaEditor } from "@/components/playground/tea-editor";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 type PlaygroundDiagnostic = {
-  message: string
-  level: string
+  message: string;
+  level: string;
   span?: {
-    line: number
-    column: number
-    endLine: number
-    endColumn: number
-  } | null
-}
+    line: number;
+    column: number;
+    endLine: number;
+    endColumn: number;
+  } | null;
+};
 
 type RunnerPayload = {
-  diagnostics: PlaygroundDiagnostic[]
-  stdout: string[]
-  result?: string | null
-  runtimeError?: string | null
-  exitCode?: number | null
-}
+  diagnostics: PlaygroundDiagnostic[];
+  stdout: string[];
+  result?: string | null;
+  runtimeError?: string | null;
+  exitCode?: number | null;
+};
 
 type WorkerResponse =
   | { type: "result"; id: number; payload: RunnerPayload }
-  | { type: "error"; id: number; error: string }
+  | { type: "error"; id: number; error: string };
 
 const presets = [
   {
     id: "structs",
     title: "Structs + Loops",
-    summary: "A small browser-safe program with a struct constructor and list iteration.",
+    summary:
+      "A small browser-safe program with a struct constructor and list iteration.",
     source: `struct User {
   name: String
   age: Int
@@ -53,7 +60,8 @@ end
   {
     id: "strings",
     title: "String Tools",
-    summary: "Pure Tea stdlib code expanded in-browser from the checked-in stdlib source.",
+    summary:
+      "Pure Tea stdlib code expanded in-browser from the checked-in stdlib source.",
     source: `use string = "std.string"
 
 var headline = "tea in the browser"
@@ -64,7 +72,8 @@ var headline = "tea in the browser"
   {
     id: "json",
     title: "JSON Decode",
-    summary: "Runs the browser-safe JSON intrinsic path without touching the filesystem.",
+    summary:
+      "Runs the browser-safe JSON intrinsic path without touching the filesystem.",
     source: `use json = "std.json"
 
 var payload = json.decode("{\\"name\\":\\"Tea\\",\\"scores\\":[1,2,3]}")
@@ -72,103 +81,108 @@ var payload = json.decode("{\\"name\\":\\"Tea\\",\\"scores\\":[1,2,3]}")
 @println(payload["name"])
 @println(@len(payload["scores"]))`,
   },
-]
+];
 
 export function PlaygroundClient() {
-  const initialPreset = presets[0]
-  const workerRef = useRef<Worker | null>(null)
-  const requestIdRef = useRef(0)
-  const activeRequestRef = useRef(0)
+  const initialPreset = presets[0];
+  const workerRef = useRef<Worker | null>(null);
+  const requestIdRef = useRef(0);
+  const activeRequestRef = useRef(0);
 
-  const [selectedPreset, setSelectedPreset] = useState(initialPreset.id)
-  const [source, setSource] = useState(initialPreset.source)
-  const [stdout, setStdout] = useState<string[]>([])
-  const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([])
-  const [runtimeError, setRuntimeError] = useState<string | null>(null)
-  const [result, setResult] = useState<string | null>(null)
-  const [status, setStatus] = useState<"loading" | "ready" | "running" | "error">("loading")
-  const [workerError, setWorkerError] = useState<string | null>(null)
+  const [selectedPreset, setSelectedPreset] = useState(initialPreset.id);
+  const [source, setSource] = useState(initialPreset.source);
+  const [stdout, setStdout] = useState<string[]>([]);
+  const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [status, setStatus] = useState<
+    "loading" | "ready" | "running" | "error"
+  >("loading");
+  const [workerError, setWorkerError] = useState<string | null>(null);
 
   useEffect(() => {
-    const worker = new Worker(new URL("./tea-runner.worker.ts", import.meta.url), {
-      type: "module",
-    })
-    workerRef.current = worker
+    const worker = new Worker(
+      new URL("./tea-runner.worker.ts", import.meta.url),
+      {
+        type: "module",
+      },
+    );
+    workerRef.current = worker;
     worker.postMessage({
       type: "configure",
       assetBaseUrl: window.location.origin,
-    })
-    setStatus("ready")
+    });
+    setStatus("ready");
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const message = event.data
+      const message = event.data;
       if (message.id !== activeRequestRef.current) {
-        return
+        return;
       }
 
       if (message.type === "error") {
         startTransition(() => {
-          setStatus("error")
-          setWorkerError(message.error)
-        })
-        return
+          setStatus("error");
+          setWorkerError(message.error);
+        });
+        return;
       }
 
       startTransition(() => {
-        setDiagnostics(message.payload.diagnostics)
-        setStdout(message.payload.stdout)
-        setRuntimeError(message.payload.runtimeError ?? null)
-        setResult(message.payload.result ?? null)
-        setWorkerError(null)
-        setStatus("ready")
-      })
-    }
+        setDiagnostics(message.payload.diagnostics);
+        setStdout(message.payload.stdout);
+        setRuntimeError(message.payload.runtimeError ?? null);
+        setResult(message.payload.result ?? null);
+        setWorkerError(null);
+        setStatus("ready");
+      });
+    };
 
     worker.onerror = (event) => {
-      setStatus("error")
-      setWorkerError(event.message || "The Tea worker crashed.")
-    }
+      setStatus("error");
+      setWorkerError(event.message || "The Tea worker crashed.");
+    };
 
     return () => {
-      worker.terminate()
-      workerRef.current = null
-    }
-  }, [])
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
   function resetOutput() {
-    setStdout([])
-    setDiagnostics([])
-    setRuntimeError(null)
-    setResult(null)
-    setWorkerError(null)
+    setStdout([]);
+    setDiagnostics([]);
+    setRuntimeError(null);
+    setResult(null);
+    setWorkerError(null);
   }
 
   function selectPreset(presetId: string) {
-    const preset = presets.find((item) => item.id === presetId)
+    const preset = presets.find((item) => item.id === presetId);
     if (!preset) {
-      return
+      return;
     }
 
     startTransition(() => {
-      setSelectedPreset(preset.id)
-      setSource(preset.source)
-      resetOutput()
-    })
+      setSelectedPreset(preset.id);
+      setSource(preset.source);
+      resetOutput();
+    });
   }
 
   function runSource() {
     if (!workerRef.current) {
-      setStatus("error")
-      setWorkerError("The Tea worker is not available.")
-      return
+      setStatus("error");
+      setWorkerError("The Tea worker is not available.");
+      return;
     }
 
-    const id = requestIdRef.current + 1
-    requestIdRef.current = id
-    activeRequestRef.current = id
-    setStatus("running")
-    setWorkerError(null)
-    setRuntimeError(null)
+    const id = requestIdRef.current + 1;
+    requestIdRef.current = id;
+    activeRequestRef.current = id;
+    setStatus("running");
+    setWorkerError(null);
+    setRuntimeError(null);
 
     workerRef.current.postMessage({
       type: "run",
@@ -180,7 +194,7 @@ export function PlaygroundClient() {
         },
         fuel: 25000,
       },
-    })
+    });
   }
 
   return (
@@ -195,8 +209,9 @@ export function PlaygroundClient() {
               Run browser-safe Tea without leaving the docs site.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-              This runner compiles Tea&apos;s front-end to WebAssembly, evaluates the AST in a
-              browser-safe interpreter, and rejects native-only modules like <code>std.fs</code>,
+              This runner compiles Tea&apos;s front-end to WebAssembly,
+              evaluates the AST in a browser-safe interpreter, and rejects
+              native-only modules like <code>std.fs</code>,
               <code>std.process</code>, and <code>std.env</code>.
             </p>
           </div>
@@ -207,10 +222,22 @@ export function PlaygroundClient() {
               Browser target rules
             </div>
             <ul className="space-y-2 text-sm leading-6 text-muted-foreground">
-              <li>Supports Tea core syntax, loops, structs, lists, dicts, strings, and JSON.</li>
-              <li>Stdlib coverage is limited to browser-safe paths used by this runner.</li>
-              <li>Execution is capped with an interpreter fuel limit to stop runaway loops.</li>
-              <li>Build the wasm assets with <code>bun run build:tea-wasm</code> inside <code>www/</code>.</li>
+              <li>
+                Supports Tea core syntax, loops, structs, lists, dicts, strings,
+                and JSON.
+              </li>
+              <li>
+                Stdlib coverage is limited to browser-safe paths used by this
+                runner.
+              </li>
+              <li>
+                Execution is capped with an interpreter fuel limit to stop
+                runaway loops.
+              </li>
+              <li>
+                Build the wasm assets with <code>bun run build:tea-wasm</code>{" "}
+                inside <code>www/</code>.
+              </li>
             </ul>
           </div>
         </div>
@@ -228,7 +255,11 @@ export function PlaygroundClient() {
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="lg" className="rounded-full px-6 font-semibold" onClick={runSource}>
+              <Button
+                size="lg"
+                className="rounded-full px-6 font-semibold"
+                onClick={runSource}
+              >
                 {status === "running" ? (
                   <>
                     <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -265,8 +296,12 @@ export function PlaygroundClient() {
                     : "border-border/70 bg-background/60 hover:border-primary/20"
                 }`}
               >
-                <p className="text-sm font-semibold text-foreground">{preset.title}</p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{preset.summary}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {preset.title}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {preset.summary}
+                </p>
               </button>
             ))}
           </div>
@@ -294,9 +329,13 @@ export function PlaygroundClient() {
               {stdout.length > 0 ? (
                 <pre className="whitespace-pre-wrap">{stdout.join("")}</pre>
               ) : (
-                <p className="text-muted-foreground">Run a preset or edit the source to see stdout here.</p>
+                <p className="text-muted-foreground">
+                  Run a preset or edit the source to see stdout here.
+                </p>
               )}
-              {result ? <p className="mt-4 text-primary">Result: {result}</p> : null}
+              {result ? (
+                <p className="mt-4 text-primary">Result: {result}</p>
+              ) : null}
             </div>
 
             {runtimeError ? (
@@ -344,19 +383,21 @@ export function PlaygroundClient() {
                         </p>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-foreground">{diagnostic.message}</p>
+                    <p className="mt-2 text-sm leading-6 text-foreground">
+                      {diagnostic.message}
+                    </p>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="rounded-[1.25rem] border border-dashed border-border/80 p-4 text-sm leading-6 text-muted-foreground">
-                Browser-target diagnostics appear here. Native-only modules and unsupported control
-                flow are rejected before execution.
+                Browser-target diagnostics appear here. Native-only modules and
+                unsupported control flow are rejected before execution.
               </div>
             )}
           </Card>
         </div>
       </section>
     </div>
-  )
+  );
 }

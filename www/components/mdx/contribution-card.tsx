@@ -1,8 +1,24 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
-import { Bug, Lightbulb, Code2, GitBranch, Folder, FileCode, TestTube, type LucideIcon } from 'lucide-react'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
+import {
+  Bug,
+  Lightbulb,
+  Code2,
+  GitBranch,
+  Folder,
+  FileCode,
+  TestTube,
+  type LucideIcon,
+} from "lucide-react";
 
-type IconName = 'bug' | 'lightbulb' | 'code' | 'git' | 'folder' | 'file' | 'test'
+type IconName =
+  | "bug"
+  | "lightbulb"
+  | "code"
+  | "git"
+  | "folder"
+  | "file"
+  | "test";
 
 const iconMap: Record<IconName, LucideIcon> = {
   bug: Bug,
@@ -12,16 +28,20 @@ const iconMap: Record<IconName, LucideIcon> = {
   folder: Folder,
   file: FileCode,
   test: TestTube,
-}
+};
 
 interface ContributionCardProps {
-  icon: IconName
-  title: string
-  children: ReactNode
+  icon: IconName;
+  title: string;
+  children: ReactNode;
 }
 
-export function ContributionCard({ icon, title, children }: ContributionCardProps) {
-  const Icon = iconMap[icon]
+export function ContributionCard({
+  icon,
+  title,
+  children,
+}: ContributionCardProps) {
+  const Icon = iconMap[icon];
 
   return (
     <Card className="p-6 bg-card border-border">
@@ -35,30 +55,31 @@ export function ContributionCard({ icon, title, children }: ContributionCardProp
         </div>
       </div>
     </Card>
-  )
+  );
 }
 
 interface ContributionGridProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function ContributionGrid({ children }: ContributionGridProps) {
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      {children}
-    </div>
-  )
+  return <div className="grid md:grid-cols-2 gap-4">{children}</div>;
 }
 
 interface DirectoryCardProps {
-  icon: IconName
-  title: string
-  description: string
-  children: ReactNode
+  icon: IconName;
+  title: string;
+  description: string;
+  children: ReactNode;
 }
 
-export function DirectoryCard({ icon, title, description, children }: DirectoryCardProps) {
-  const Icon = iconMap[icon]
+export function DirectoryCard({
+  icon,
+  title,
+  description,
+  children,
+}: DirectoryCardProps) {
+  const Icon = iconMap[icon];
 
   return (
     <Card className="p-6 bg-card border-border">
@@ -73,5 +94,5 @@ export function DirectoryCard({ icon, title, description, children }: DirectoryC
         </div>
       </div>
     </Card>
-  )
+  );
 }

@@ -1,22 +1,22 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 type SectionItem = {
-  title: string
-  href: string
-}
+  title: string;
+  href: string;
+};
 
 type SectionGroup = {
-  title: string
-  items: SectionItem[]
-}
+  title: string;
+  items: SectionItem[];
+};
 
 export function SectionNav({ sections }: { sections: SectionGroup[] }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <nav className="surface-quiet texture-grid-fine rounded-[1.5rem] border border-border/70 p-4">
@@ -29,7 +29,7 @@ export function SectionNav({ sections }: { sections: SectionGroup[] }) {
             </p>
             <div className="space-y-1">
               {section.items.map((item) => {
-                const isActive = pathname === item.href
+                const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
@@ -44,12 +44,12 @@ export function SectionNav({ sections }: { sections: SectionGroup[] }) {
                   >
                     {item.title}
                   </Link>
-                )
+                );
               })}
             </div>
           </div>
         ))}
       </div>
     </nav>
-  )
+  );
 }

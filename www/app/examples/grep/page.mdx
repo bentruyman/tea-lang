@@ -12,97 +12,97 @@
     </KeyConceptCard>
   </div>
 
-  **Run it**
+**Run it**
 
-  ```bash
-  tea examples/grep/main.tea
-  tea build examples/grep/main.tea
-  ./bin/main
-  ```
+```bash
+tea examples/grep/main.tea
+tea build examples/grep/main.tea
+./bin/main
+```
 
-  ## README summary
+## README summary
 
-  A simplified implementation of Unix `grep` in Tea. It searches for a regular expression pattern in one or more files and prints matching lines, with support for line numbers, case-insensitive matching, and filename prefixes.
+A simplified implementation of Unix `grep` in Tea. It searches for a regular expression pattern in one or more files and prints matching lines, with support for line numbers, case-insensitive matching, and filename prefixes.
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
-  **`grep/main.tea`**
+**`grep/main.tea`**
 
-  ```tea
-  use args = "std.args"
-  use fs = "std.fs"
-  use regex = "std.regex"
+```tea
+use args = "std.args"
+use fs = "std.fs"
+use regex = "std.regex"
 
-  def print_usage() -> Void
-    @println("Usage: grep [OPTIONS] PATTERN FILE...")
-    @println("")
-    @println("Search for PATTERN in each FILE.")
-    @println("")
-    @println("Options:")
-    @println("  -n, --line-number    Print line numbers")
-    @println("  -i, --ignore-case    Case-insensitive matching")
-    @println("  -H, --with-filename  Print filename with matches")
-    @println("  -h, --help           Show this help message")
+def print_usage() -> Void
+  @println("Usage: grep [OPTIONS] PATTERN FILE...")
+  @println("")
+  @println("Search for PATTERN in each FILE.")
+  @println("")
+  @println("Options:")
+  @println("  -n, --line-number    Print line numbers")
+  @println("  -i, --ignore-case    Case-insensitive matching")
+  @println("  -H, --with-filename  Print filename with matches")
+  @println("  -h, --help           Show this help message")
+end
+
+def print_match(file: String, line_num: Int, line: String, show_lines: Bool, show_file: Bool) -> Void
+  var output = ""
+
+  if show_file
+    output = output + file + ":"
   end
 
-  def print_match(file: String, line_num: Int, line: String, show_lines: Bool, show_file: Bool) -> Void
-    var output = ""
-
-    if show_file
-      output = output + file + ":"
-    end
-
-    if show_lines
-      output = `${output}${@to_string(line_num)}:`
-    end
-
-    output = output + line
-    @println(output)
+  if show_lines
+    output = `${output}${@to_string(line_num)}:`
   end
 
-  def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) -> Bool
-    const content = fs.read_file(filepath)
+  output = output + line
+  @println(output)
+end
 
-    var found = false
-    var current_line = ""
-    var line_num = 1
-    var i = 0
+def search_file(re: Int, filepath: String, show_lines: Bool, show_file: Bool) -> Bool
+  const content = fs.read_file(filepath)
 
-    while i < @len(content)
-      const char = content[i]
+  var found = false
+  var current_line = ""
+  var line_num = 1
+  var i = 0
 
-      if char == "\n"
-        if regex.is_match(re, current_line)
-          found = true
-          print_match(filepath, line_num, current_line, show_lines, show_file)
-        end
+  while i < @len(content)
+    const char = content[i]
 
-        current_line = ""
-        line_num = line_num + 1
-      else if char != "\r"
-        current_line = current_line + char
-      end
-
-      i = i + 1
-    end
-
-    if @len(current_line) > 0
+    if char == "\n"
       if regex.is_match(re, current_line)
         found = true
         print_match(filepath, line_num, current_line, show_lines, show_file)
       end
+
+      current_line = ""
+      line_num = line_num + 1
+    else if char != "\r"
+      current_line = current_line + char
     end
 
-    return found
+    i = i + 1
   end
 
-  const show_line_numbers = args.has("-n") || args.has("--line-number")
-  const case_insensitive = args.has("-i") || args.has("--ignore-case")
-  const show_filename = args.has("-H") || args.has("--with-filename")
-  const show_help = args.has("-h") || args.has("--help")
-  ```
+  if @len(current_line) > 0
+    if regex.is_match(re, current_line)
+      found = true
+      print_match(filepath, line_num, current_line, show_lines, show_file)
+    end
+  end
 
-  <div className="divider-section" />
+  return found
+end
+
+const show_line_numbers = args.has("-n") || args.has("--line-number")
+const case_insensitive = args.has("-i") || args.has("--ignore-case")
+const show_filename = args.has("-H") || args.has("--with-filename")
+const show_help = args.has("-h") || args.has("--help")
+```
+
+<div className="divider-section" />
 
   <NextSteps title="Related pages">
     <NextLink href="/reference/regex" title="std.regex" description="See the regex API used by this example." />

@@ -5,43 +5,43 @@
 >
   Tea is built from source with the standard Rust toolchain. You’ll also need **Bun** for codegen, **Make** for repo workflows, and optionally **LLVM** for AOT compilation.
 
-  ```bash
-  git clone https://github.com/bentruyman/tea-lang.git
-  cd tea-lang
-  make setup
-  cargo build --release
-  make install
-  tea --version
-  ```
+```bash
+git clone https://github.com/bentruyman/tea-lang.git
+cd tea-lang
+make setup
+cargo build --release
+make install
+tea --version
+```
 
-  If you’d rather skip the install step, you can run Tea directly from the repo during development:
+If you’d rather skip the install step, you can run Tea directly from the repo during development:
 
-  ```bash
-  cargo run -p tea-cli -- examples/echo/main.tea hello tea
-  ```
+```bash
+cargo run -p tea-cli -- examples/echo/main.tea hello tea
+```
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
-  <div className="flex flex-wrap gap-3 text-sm">
-    <a
-      href="https://github.com/bentruyman/tea-lang"
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
-    >
-      Repository
-    </a>
-    <a
-      href="https://github.com/bentruyman/tea-lang/issues"
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
-    >
-      Report an issue
-    </a>
-  </div>
+<div className="flex flex-wrap gap-3 text-sm">
+  <a
+    href="https://github.com/bentruyman/tea-lang"
+    target="_blank"
+    rel="noreferrer"
+    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
+  >
+    Repository
+  </a>
+  <a
+    href="https://github.com/bentruyman/tea-lang/issues"
+    target="_blank"
+    rel="noreferrer"
+    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
+  >
+    Report an issue
+  </a>
+</div>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/getting-started" title="Getting Started" description="Run a first script and compile it." />

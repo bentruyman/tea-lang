@@ -5,41 +5,45 @@
 >
   Start with one file and one visible result. Save this as `hello.tea` so you can run it directly and then compile the exact same source into a native binary.
 
-  ```tea
-  const message = "Hello from Tea"
+```tea
+const message = "Hello from Tea"
 
-  @println(message)
-  ```
+@println(message)
+```
 
-  Once the file exists, run it in script mode first. That gives you the shortest feedback loop while you are still changing the source.
+Once the file exists, run it in script mode first. That gives you the shortest feedback loop while you are still changing the source.
 
-  ```bash
-  tea hello.tea
-  ```
+```bash
+tea hello.tea
+```
 
-  When the script behaves the way you want, build it. Tea uses the same entrypoint to produce a standalone executable under `bin/`.
+When the script behaves the way you want, build it. Tea uses the same entrypoint to produce a standalone executable under `bin/`.
 
-  ```bash
-  tea build hello.tea
-  ./bin/hello
-  ```
+```bash
+tea build hello.tea
+./bin/hello
+```
 
-  <ContentSection>
-    <div className="grid gap-4 md:grid-cols-2">
-      <KeyConceptCard title="What to notice">
-        <ul className="space-y-2">
-          <li>`const` creates an immutable binding.</li>
-          <li>`@println(...)` writes output directly from a Tea script.</li>
-          <li>Programs can be interpreted or compiled from the same entrypoint.</li>
-        </ul>
-      </KeyConceptCard>
-      <NoteCard title="Next repo-backed examples">
-        After this first run, move to the checked-in examples under <code>examples/</code>. They are the most reliable way to learn what the compiler and CLI support today.
-      </NoteCard>
-    </div>
-  </ContentSection>
+<ContentSection>
+  <div className="grid gap-4 md:grid-cols-2">
+    <KeyConceptCard title="What to notice">
+      <ul className="space-y-2">
+        <li>`const` creates an immutable binding.</li>
+        <li>`@println(...)` writes output directly from a Tea script.</li>
+        <li>
+          Programs can be interpreted or compiled from the same entrypoint.
+        </li>
+      </ul>
+    </KeyConceptCard>
+    <NoteCard title="Next repo-backed examples">
+      After this first run, move to the checked-in examples under{" "}
+      <code>examples/</code>. They are the most reliable way to learn what the
+      compiler and CLI support today.
+    </NoteCard>
+  </div>
+</ContentSection>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/examples/echo" title="echo example" description="See a complete CLI in a small file." />

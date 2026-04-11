@@ -1,14 +1,19 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
 interface FeatureCardProps {
-  title: string
-  description: string
-  children?: ReactNode
-  className?: string
+  title: string;
+  description: string;
+  children?: ReactNode;
+  className?: string;
 }
 
-export function FeatureCard({ title, description, children, className = '' }: FeatureCardProps) {
+export function FeatureCard({
+  title,
+  description,
+  children,
+  className = "",
+}: FeatureCardProps) {
   return (
     <Card className={`p-6 bg-card border-border panel-inset ${className}`}>
       <h3 className="font-semibold text-lg mb-3 text-primary">{title}</h3>
@@ -21,5 +26,5 @@ export function FeatureCard({ title, description, children, className = '' }: Fe
         </pre>
       )}
     </Card>
-  )
+  );
 }

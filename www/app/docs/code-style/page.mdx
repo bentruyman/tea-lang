@@ -5,32 +5,35 @@
 >
   The most important style rules are the Tea ones. If you are writing Tea code, keep it simple, consistent, and easy to scan before worrying about contributor-specific Rust conventions in the repository.
 
-  ## Tea style
+## Tea style
 
-  Tea source favors a compact, readable style: short blocks, consistent naming, and formatting that stays close to what the language examples already use.
+Tea source favors a compact, readable style: short blocks, consistent naming, and formatting that stays close to what the language examples already use.
 
-  <ContentSection>
-    <FeaturePill kicker="Tea" title="Recommended conventions">
-      <ul className="space-y-2">
-        <li>Use 2-space indentation.</li>
-        <li>Prefer `snake_case` names.</li>
-        <li>End block forms with `end`.</li>
-        <li>Use backticks for interpolation.</li>
-      </ul>
-    </FeaturePill>
-  </ContentSection>
+<ContentSection>
+  <FeaturePill kicker="Tea" title="Recommended conventions">
+    <ul className="space-y-2">
+      <li>Use 2-space indentation.</li>
+      <li>Prefer `snake_case` names.</li>
+      <li>End block forms with `end`.</li>
+      <li>Use backticks for interpolation.</li>
+    </ul>
+  </FeaturePill>
+</ContentSection>
 
-  When in doubt, format Tea files with the CLI rather than hand-tuning whitespace.
+When in doubt, format Tea files with the CLI rather than hand-tuning whitespace.
 
-  ```bash
-  tea fmt .
-  tea fmt src/main.tea
-  tea fmt . --check
-  ```
+```bash
+tea fmt .
+tea fmt src/main.tea
+tea fmt . --check
+```
 
-  <NoteCard title="Contributor note">
-    If you are working on the compiler or docs repository itself, follow the checked-in Rust conventions too: run <code>cargo fmt --all</code>, prefer <code>anyhow::Result</code> and <code>thiserror</code> patterns, and avoid <code>.unwrap()</code> outside tests.
-  </NoteCard>
+<NoteCard title="Contributor note">
+  If you are working on the compiler or docs repository itself, follow the
+  checked-in Rust conventions too: run <code>cargo fmt --all</code>, prefer{" "}
+  <code>anyhow::Result</code> and <code>thiserror</code> patterns, and avoid{" "}
+  <code>.unwrap()</code> outside tests.
+</NoteCard>
 
   <NextSteps>
     <NextLink href="/docs/contributing" title="Contributing" description="See the full dev workflow." />

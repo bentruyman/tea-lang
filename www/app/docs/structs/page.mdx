@@ -5,55 +5,57 @@
 >
   Structs let you group related fields into one named type. They are the main way to model records and domain-specific data in Tea.
 
-  ## A simple struct
+## A simple struct
 
-  Define a struct by naming the type and listing its fields. Each field carries an explicit type, which makes stored data predictable and easy to inspect at call sites.
+Define a struct by naming the type and listing its fields. Each field carries an explicit type, which makes stored data predictable and easy to inspect at call sites.
 
-  ```tea
-  struct User {
-    name: String
-    age: Int
-  }
-  ```
+```tea
+struct User {
+  name: String
+  age: Int
+}
+```
 
-  Once the type exists, construct values with named fields and access those fields with dot syntax.
+Once the type exists, construct values with named fields and access those fields with dot syntax.
 
-  ```tea
-  const user = User(name: "Ada", age: 36)
+```tea
+const user = User(name: "Ada", age: 36)
 
-  @println(user.name)
-  @println(user.age)
-  ```
+@println(user.name)
+@println(user.age)
+```
 
-  ## Structs in a larger example
+## Structs in a larger example
 
-  Structs become more useful as programs grow. This example shows them alongside typed errors and formatted output in a longer file.
+Structs become more useful as programs grow. This example shows them alongside typed errors and formatted output in a longer file.
 
-  ```tea
-  struct Team {
-    name: String
-    wins: Int
-    losses: Int
-  }
+```tea
+struct Team {
+  name: String
+  wins: Int
+  losses: Int
+}
 
-  error TeamError {
-    NotFound(name: String)
-  }
+error TeamError {
+  NotFound(name: String)
+}
 
-  const format_team = |team: Team| => `${team.name}: ${team.wins} wins / ${team.losses} losses`
+const format_team = |team: Team| => `${team.name}: ${team.wins} wins / ${team.losses} losses`
 
-  const teams = [
-    Team(name: "Ada", wins: 7, losses: 3),
-    Team(name: "Grace", wins: 9, losses: 1),
-    Team(name: "Linus", wins: 5, losses: 5)
-  ]
-  ```
+const teams = [
+  Team(name: "Ada", wins: 7, losses: 3),
+  Team(name: "Grace", wins: 9, losses: 1),
+  Team(name: "Linus", wins: 5, losses: 5)
+]
+```
 
-  <NoteCard title="Current model">
-    The checked-in sources use <code>struct</code>, not classes. Construction is explicit, fields are named, and generic structs use square-bracket type parameters such as <code>Box[T]</code>.
-  </NoteCard>
+<NoteCard title="Current model">
+  The checked-in sources use <code>struct</code>, not classes. Construction is
+  explicit, fields are named, and generic structs use square-bracket type
+  parameters such as <code>Box[T]</code>.
+</NoteCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/generics" title="Generics" description="Apply type parameters to structs and functions." />

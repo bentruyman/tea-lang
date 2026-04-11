@@ -5,52 +5,60 @@
 >
   Tea treats recoverable failures as typed values. You declare error variants up front, `throw` them from functions that advertise failure, and recover with `catch` plus `case` arms.
 
-  ## Typed errors and throws
+## Typed errors and throws
 
-  Start by naming the failure cases a function can produce. That keeps the error surface explicit and makes it clear to callers what can go wrong.
+Start by naming the failure cases a function can produce. That keeps the error surface explicit and makes it clear to callers what can go wrong.
 
-  ```tea
-  error ConfigError {
-    Missing(key: String)
-  }
+```tea
+error ConfigError {
+  Missing(key: String)
+}
 
-  def require_env(key: String) -> String ! ConfigError.Missing
-    const value = @env(key)
+def require_env(key: String) -> String ! ConfigError.Missing
+  const value = @env(key)
 
-    if value == nil
-      throw ConfigError.Missing(key)
-    end
-
-    value!
+  if value == nil
+    throw ConfigError.Missing(key)
   end
-  ```
 
-  ## Recover errors as values
+  value!
+end
+```
 
-  When you want to turn an error into a regular value, catch it and match the specific variants you care about. Any unmatched path can fall through to a final wildcard arm.
+## Recover errors as values
 
-  ```tea
-  def describe(path: String) -> String
-    try read(path) catch err
-      case is DataError.Missing
-        `missing:${err.path}`
-      case is DataError.Permission
-        "denied"
-      case _
-        "unexpected"
-    end
+When you want to turn an error into a regular value, catch it and match the specific variants you care about. Any unmatched path can fall through to a final wildcard arm.
+
+```tea
+def describe(path: String) -> String
+  try read(path) catch err
+    case is DataError.Missing
+      `missing:${err.path}`
+    case is DataError.Permission
+      "denied"
+    case _
+      "unexpected"
   end
-  ```
+end
+```
 
-  <KeyConceptCard title="Practical guidance">
-    <ul className="space-y-2">
-      <li>Declare error variants up front with <code>error Name {"{"} ... {"}"}</code>.</li>
-      <li>Use `throw` from functions that advertise failure in their signature.</li>
-      <li>Recover with `catch err` and explicit `case` arms.</li>
-    </ul>
-  </KeyConceptCard>
+<KeyConceptCard title="Practical guidance">
+  <ul className="space-y-2">
+    <li>
+      Declare error variants up front with{" "}
+      <code>
+        error Name {"{"} ... {"}"}
+      </code>
+      .
+    </li>
+    <li>
+      Use `throw` from functions that advertise failure in their signature.
+    </li>
+    <li>Recover with `catch err` and explicit `case` arms.</li>
+  </ul>
+</KeyConceptCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/pattern-matching" title="Pattern Matching" description="See the `case` syntax directly." />

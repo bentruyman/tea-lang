@@ -1,10 +1,10 @@
-import { ReactNode } from 'react'
-import { CheckCircle2 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { CheckCircle2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 interface KeyConceptProps {
-  title: string
-  children: ReactNode
+  title: string;
+  children: ReactNode;
 }
 
 export function KeyConcept({ title, children }: KeyConceptProps) {
@@ -16,21 +16,22 @@ export function KeyConcept({ title, children }: KeyConceptProps) {
         <span className="text-muted-foreground"> {children}</span>
       </div>
     </li>
-  )
+  );
 }
 
 interface KeyConceptsCardProps {
-  title?: string
-  children: ReactNode
+  title?: string;
+  children: ReactNode;
 }
 
-export function KeyConceptsCard({ title = "Key Concepts Demonstrated", children }: KeyConceptsCardProps) {
+export function KeyConceptsCard({
+  title = "Key Concepts Demonstrated",
+  children,
+}: KeyConceptsCardProps) {
   return (
     <Card className="p-6 bg-card border-border">
       <h3 className="text-lg font-semibold mb-3">{title}</h3>
-      <ul className="space-y-3">
-        {children}
-      </ul>
+      <ul className="space-y-3">{children}</ul>
     </Card>
-  )
+  );
 }

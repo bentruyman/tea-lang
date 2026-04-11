@@ -1,27 +1,31 @@
-"use client"
+"use client";
 
-import { usePathname } from "next/navigation"
-import Link from "next/link"
-import { cn } from "@/lib/utils"
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface NavItem {
-  title: string
-  href: string
+  title: string;
+  href: string;
 }
 
 interface DocsNavigationProps {
-  items: NavItem[]
-  title?: string
+  items: NavItem[];
+  title?: string;
 }
 
 export function DocsNavigation({ items, title }: DocsNavigationProps) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <nav className="space-y-1">
-      {title && <h4 className="font-semibold text-sm text-muted-foreground mb-2 px-2">{title}</h4>}
+      {title && (
+        <h4 className="font-semibold text-sm text-muted-foreground mb-2 px-2">
+          {title}
+        </h4>
+      )}
       {items.map((item) => {
-        const isActive = pathname === item.href
+        const isActive = pathname === item.href;
         return (
           <Link
             key={item.href}
@@ -35,8 +39,8 @@ export function DocsNavigation({ items, title }: DocsNavigationProps) {
           >
             {item.title}
           </Link>
-        )
+        );
       })}
     </nav>
-  )
+  );
 }

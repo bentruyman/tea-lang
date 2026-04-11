@@ -1,11 +1,11 @@
-import { ReactNode } from "react"
+import { ReactNode } from "react";
 
-import { Card } from "@/components/ui/card"
-import { SectionNav } from "@/components/section-nav"
-import Link from "next/link"
+import { Card } from "@/components/ui/card";
+import { SectionNav } from "@/components/section-nav";
+import Link from "next/link";
 
-import { repo } from "@/lib/site"
-import { cn } from "@/lib/utils"
+import { repo } from "@/lib/site";
+import { cn } from "@/lib/utils";
 
 export function SiteFooter() {
   return (
@@ -13,7 +13,9 @@ export function SiteFooter() {
       <div className="container mx-auto px-4 py-10">
         <div className="surface-quiet texture-grid-fine flex flex-col gap-5 rounded-[1.75rem] border border-border/70 px-6 py-6 text-sm text-muted-foreground md:flex-row md:items-end md:justify-between">
           <div className="max-w-xl space-y-2">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-primary">Tea Language</p>
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-primary">
+              Tea Language
+            </p>
             <p className="font-display text-2xl leading-none text-foreground">
               A strongly typed scripting language for native tools.
             </p>
@@ -26,22 +28,27 @@ export function SiteFooter() {
             <Link href="/community" className="hover:text-foreground">
               Community
             </Link>
-            <Link href={repo.url} target="_blank" rel="noreferrer" className="hover:text-foreground">
+            <Link
+              href={repo.url}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground"
+            >
               Repository
             </Link>
           </div>
         </div>
       </div>
     </footer>
-  )
+  );
 }
 
 export function SectionLayout({
   sections,
   children,
 }: {
-  sections: { title: string; items: { title: string; href: string }[] }[]
-  children: ReactNode
+  sections: { title: string; items: { title: string; href: string }[] }[];
+  children: ReactNode;
 }) {
   return (
     <div className="container mx-auto grid gap-10 px-4 py-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:py-14">
@@ -52,7 +59,7 @@ export function SectionLayout({
       </aside>
       <div className="min-w-0">{children}</div>
     </div>
-  )
+  );
 }
 
 export function PageIntro({
@@ -60,25 +67,29 @@ export function PageIntro({
   title,
   description,
 }: {
-  eyebrow?: string
-  title: string
-  description: string
+  eyebrow?: string;
+  title: string;
+  description: string;
 }) {
   return (
     <div className="space-y-3">
       {eyebrow ? (
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{eyebrow}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+          {eyebrow}
+        </p>
       ) : null}
       <h1 className="max-w-4xl font-display text-4xl font-semibold tracking-tight text-balance md:text-[3.6rem]">
         {title}
       </h1>
-      <p className="max-w-3xl text-base leading-8 text-muted-foreground md:text-lg">{description}</p>
+      <p className="max-w-3xl text-base leading-8 text-muted-foreground md:text-lg">
+        {description}
+      </p>
     </div>
-  )
+  );
 }
 
 export function ContentSection({ children }: { children: ReactNode }) {
-  return <div className="content-section space-y-5">{children}</div>
+  return <div className="content-section space-y-5">{children}</div>;
 }
 
 export function ContentPage({
@@ -88,11 +99,11 @@ export function ContentPage({
   sourcePaths: _sourcePaths,
   children,
 }: {
-  eyebrow?: string
-  title: string
-  description: string
-  sourcePaths?: string[]
-  children: ReactNode
+  eyebrow?: string;
+  title: string;
+  description: string;
+  sourcePaths?: string[];
+  children: ReactNode;
 }) {
   return (
     <article className="max-w-4xl space-y-10">
@@ -102,7 +113,7 @@ export function ContentPage({
       </div>
       <div className="prose-shell">{children}</div>
     </article>
-  )
+  );
 }
 
 export function SectionCardGrid({
@@ -110,9 +121,9 @@ export function SectionCardGrid({
   className,
   cardClassName,
 }: {
-  items: { href: string; title: string; summary: string }[]
-  className?: string
-  cardClassName?: string
+  items: { href: string; title: string; summary: string }[];
+  className?: string;
+  cardClassName?: string;
 }) {
   return (
     <div className={cn("grid gap-4 md:grid-cols-2", className)}>
@@ -125,23 +136,28 @@ export function SectionCardGrid({
             )}
           >
             <h2 className="text-lg font-semibold">{item.title}</h2>
-            <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {item.summary}
+            </p>
           </Card>
         </Link>
       ))}
     </div>
-  )
+  );
 }
 
 export function GroupedSectionCardGrid({
   sections,
 }: {
-  sections: { title: string; items: { href: string; title: string; summary: string }[] }[]
+  sections: {
+    title: string;
+    items: { href: string; title: string; summary: string }[];
+  }[];
 }) {
   return (
     <div className="space-y-8">
       {sections.map((section, sectionIdx) => {
-        const isFeatured = sectionIdx === 0
+        const isFeatured = sectionIdx === 0;
         return (
           <div key={section.title}>
             {sectionIdx > 0 && <div className="divider-section" />}
@@ -168,8 +184,12 @@ export function GroupedSectionCardGrid({
                             : "hover:bg-background/78",
                         )}
                       >
-                        <h3 className="font-display text-xl font-semibold tracking-tight">{item.title}</h3>
-                        <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>
+                        <h3 className="font-display text-xl font-semibold tracking-tight">
+                          {item.title}
+                        </h3>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          {item.summary}
+                        </p>
                       </Card>
                     </Link>
                   ))}
@@ -177,8 +197,8 @@ export function GroupedSectionCardGrid({
               </div>
             </div>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

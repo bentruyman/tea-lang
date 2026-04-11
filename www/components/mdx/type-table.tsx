@@ -1,10 +1,10 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
 interface TypeRowProps {
-  type: string
-  description: string
-  example: string
+  type: string;
+  description: string;
+  example: string;
 }
 
 export function TypeRow({ type, description, example }: TypeRowProps) {
@@ -12,13 +12,15 @@ export function TypeRow({ type, description, example }: TypeRowProps) {
     <tr className="border-b border-border/50 last:border-0">
       <td className="py-2 pr-4 text-primary font-mono">{type}</td>
       <td className="py-2 pr-4 text-muted-foreground">{description}</td>
-      <td className="py-2 font-mono"><code>{example}</code></td>
+      <td className="py-2 font-mono">
+        <code>{example}</code>
+      </td>
     </tr>
-  )
+  );
 }
 
 interface TypeTableProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function TypeTable({ children }: TypeTableProps) {
@@ -33,11 +35,9 @@ export function TypeTable({ children }: TypeTableProps) {
               <th className="text-left py-2">Example</th>
             </tr>
           </thead>
-          <tbody>
-            {children}
-          </tbody>
+          <tbody>{children}</tbody>
         </table>
       </div>
     </Card>
-  )
+  );
 }

@@ -1,5 +1,14 @@
-import Link from 'next/link'
-import { ArrowRight, FileCode, Zap, Terminal, BookOpen, Code2, Rocket, LucideIcon } from 'lucide-react'
+import Link from "next/link";
+import {
+  ArrowRight,
+  FileCode,
+  Zap,
+  Terminal,
+  BookOpen,
+  Code2,
+  Rocket,
+  LucideIcon,
+} from "lucide-react";
 
 const iconMap: Record<string, LucideIcon> = {
   file: FileCode,
@@ -8,17 +17,22 @@ const iconMap: Record<string, LucideIcon> = {
   book: BookOpen,
   code: Code2,
   rocket: Rocket,
-}
+};
 
 interface GridLinkProps {
-  title: string
-  description: string
-  href: string
-  icon?: string
+  title: string;
+  description: string;
+  href: string;
+  icon?: string;
 }
 
-export function GridLink({ title, description, href, icon = 'file' }: GridLinkProps) {
-  const IconComponent = iconMap[icon] || FileCode
+export function GridLink({
+  title,
+  description,
+  href,
+  icon = "file",
+}: GridLinkProps) {
+  const IconComponent = iconMap[icon] || FileCode;
 
   return (
     <Link
@@ -29,10 +43,12 @@ export function GridLink({ title, description, href, icon = 'file' }: GridLinkPr
         <IconComponent className="h-5 w-5 text-primary" />
       </div>
       <div className="flex-1">
-        <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors">{title}</h3>
+        <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors">
+          {title}
+        </h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0 mt-2" />
     </Link>
-  )
+  );
 }

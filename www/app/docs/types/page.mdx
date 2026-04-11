@@ -5,51 +5,54 @@
 >
   Tea is statically typed, but you do not have to annotate everything by hand. Local bindings are often inferred, while function signatures and other public boundaries stay explicit.
 
-  In practice, most programs start with a small set of everyday types: primitives like `Int` and `String`, collections such as lists and dictionaries, and optionals for values that may be missing.
+In practice, most programs start with a small set of everyday types: primitives like `Int` and `String`, collections such as lists and dictionaries, and optionals for values that may be missing.
 
-  ## Lists and indexing
+## Lists and indexing
 
-  Lists are written with square brackets and can hold values of a single element type. Index into them with bracket syntax, including nested lists when needed.
+Lists are written with square brackets and can hold values of a single element type. Index into them with bracket syntax, including nested lists when needed.
 
-  ```tea
-  const names = ["tea", "chai", "oolong"]
-  const first = names[0]
+```tea
+const names = ["tea", "chai", "oolong"]
+const first = names[0]
 
-  const matrix = [[1, 2], [3, 4]]
-  const bottom_right = matrix[1][1]
+const matrix = [[1, 2], [3, 4]]
+const bottom_right = matrix[1][1]
 
-  @println(first)
-  @println(bottom_right)
-  ```
+@println(first)
+@println(bottom_right)
+```
 
-  ## Optionals
+## Optionals
 
-  Optional types use `?`. Reach for them when a value may be absent, then use `??` to provide a fallback or `!` only when you know a value is present.
+Optional types use `?`. Reach for them when a value may be absent, then use `??` to provide a fallback or `!` only when you know a value is present.
 
-  ```tea
-  const nickname: String? = nil
-  const display_name = nickname ?? "tea"
+```tea
+const nickname: String? = nil
+const display_name = nickname ?? "tea"
 
-  const loaded: String? = "ready"
+const loaded: String? = "ready"
 
-  if loaded != nil
-    @println(loaded!)
-  end
+if loaded != nil
+  @println(loaded!)
+end
 
-  @println(display_name)
-  ```
+@println(display_name)
+```
 
-  <KeyConceptCard title="Current type surface">
-    <ul className="space-y-2">
-      <li>Primitives: `Int`, `Float`, `Bool`, `String`.</li>
-      <li>Collections: `List[T]`, `Dict[K, V]`.</li>
-      <li>Optionals: `T?`, with `??` and `!`.</li>
-      <li>Functions: `Func(...) -&gt; ...` for higher-order cases.</li>
-      <li>Struct and error types are declared in Tea source, not in a separate schema language.</li>
-    </ul>
-  </KeyConceptCard>
+<KeyConceptCard title="Current type surface">
+  <ul className="space-y-2">
+    <li>Primitives: `Int`, `Float`, `Bool`, `String`.</li>
+    <li>Collections: `List[T]`, `Dict[K, V]`.</li>
+    <li>Optionals: `T?`, with `??` and `!`.</li>
+    <li>Functions: `Func(...) -&gt; ...` for higher-order cases.</li>
+    <li>
+      Struct and error types are declared in Tea source, not in a separate
+      schema language.
+    </li>
+  </ul>
+</KeyConceptCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/structs" title="Structs" description="Define your own typed records." />

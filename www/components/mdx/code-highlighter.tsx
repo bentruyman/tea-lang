@@ -1,72 +1,74 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 import {
   DOCS_HIGHLIGHT_THEME,
   getDocsHighlighter,
   normalizeHighlightedLanguage,
-} from '@/lib/docs-highlighter'
+} from "@/lib/docs-highlighter";
 
 interface CodeHighlighterProps {
-  code: string
-  language: string
+  code: string;
+  language: string;
 }
 
 // Cache for highlighted code
-const cache = new Map<string, string>()
+const cache = new Map<string, string>();
 
 export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
-  const [html, setHtml] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const trimmedCode = code.trim()
-  const cacheKey = `${DOCS_HIGHLIGHT_THEME}:${language}:${trimmedCode}`
+  const [html, setHtml] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const trimmedCode = code.trim();
+  const cacheKey = `${DOCS_HIGHLIGHT_THEME}:${language}:${trimmedCode}`;
 
   useEffect(() => {
     // Check cache first
-    const cached = cache.get(cacheKey)
+    const cached = cache.get(cacheKey);
     if (cached) {
-      setHtml(cached)
-      return
+      setHtml(cached);
+      return;
     }
 
-    const effectiveLang = normalizeHighlightedLanguage(language)
+    const effectiveLang = normalizeHighlightedLanguage(language);
 
     const highlight = async () => {
       try {
-        const highlighter = await getDocsHighlighter()
-        const loadedLangs = highlighter.getLoadedLanguages()
-        const langToUse = loadedLangs.includes(effectiveLang) ? effectiveLang : 'text'
+        const highlighter = await getDocsHighlighter();
+        const loadedLangs = highlighter.getLoadedLanguages();
+        const langToUse = loadedLangs.includes(effectiveLang)
+          ? effectiveLang
+          : "text";
 
         const result = highlighter.codeToHtml(trimmedCode, {
           lang: langToUse,
           theme: DOCS_HIGHLIGHT_THEME,
-        })
-        cache.set(cacheKey, result)
-        setHtml(result)
+        });
+        cache.set(cacheKey, result);
+        setHtml(result);
       } catch (e) {
-        console.error('Syntax highlighting failed:', e)
-        setHtml(null)
+        console.error("Syntax highlighting failed:", e);
+        setHtml(null);
       }
-    }
+    };
 
-    highlight()
-  }, [trimmedCode, language, cacheKey])
+    highlight();
+  }, [trimmedCode, language, cacheKey]);
 
   useEffect(() => {
-    if (!copied) return
+    if (!copied) return;
 
-    const timeoutId = window.setTimeout(() => setCopied(false), 1800)
-    return () => window.clearTimeout(timeoutId)
-  }, [copied])
+    const timeoutId = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, [copied]);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(trimmedCode)
-      setCopied(true)
+      await navigator.clipboard.writeText(trimmedCode);
+      setCopied(true);
     } catch (error) {
-      console.error('Clipboard copy failed:', error)
+      console.error("Clipboard copy failed:", error);
     }
   }
 
@@ -75,12 +77,12 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
       type="button"
       onClick={handleCopy}
       className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/92 px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur transition hover:border-primary/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      aria-label={copied ? 'Code copied' : 'Copy code to clipboard'}
+      aria-label={copied ? "Code copied" : "Copy code to clipboard"}
     >
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      <span>{copied ? 'Copied' : 'Copy'}</span>
+      <span>{copied ? "Copied" : "Copy"}</span>
     </button>
-  )
+  );
 
   if (!html) {
     // Show unstyled code while loading or on error
@@ -88,10 +90,12 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
       <div className="relative">
         {copyButton}
         <pre className="overflow-x-auto rounded-[1.4rem] bg-[var(--code-background)] p-4 pr-20 font-mono shadow-[inset_0_0_0_1px_var(--code-border),inset_0_1px_0_rgb(255_255_255_/_0.55),0_1px_2px_rgb(30_41_59_/_0.04)] md:p-5 md:pr-24">
-          <code className="font-mono text-sm text-foreground">{trimmedCode}</code>
+          <code className="font-mono text-sm text-foreground">
+            {trimmedCode}
+          </code>
         </pre>
       </div>
-    )
+    );
   }
 
   return (
@@ -102,5 +106,5 @@ export function CodeHighlighter({ code, language }: CodeHighlighterProps) {
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
-  )
+  );
 }

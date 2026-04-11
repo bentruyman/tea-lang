@@ -1,11 +1,11 @@
-import { ReactNode } from 'react'
-import Link from 'next/link'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { ReactNode } from "react";
+import Link from "next/link";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 interface InstallStepProps {
-  title: string
-  children: ReactNode
+  title: string;
+  children: ReactNode;
 }
 
 export function InstallStep({ title, children }: InstallStepProps) {
@@ -16,28 +16,33 @@ export function InstallStep({ title, children }: InstallStepProps) {
         <code className="font-mono text-sm text-foreground">{children}</code>
       </pre>
     </div>
-  )
+  );
 }
 
 interface InstallCardProps {
-  children: ReactNode
-  linkHref?: string
-  linkText?: string
+  children: ReactNode;
+  linkHref?: string;
+  linkText?: string;
 }
 
-export function InstallCard({ children, linkHref, linkText }: InstallCardProps) {
+export function InstallCard({
+  children,
+  linkHref,
+  linkText,
+}: InstallCardProps) {
   return (
     <Card className="p-6 bg-card border-border corner-brackets panel-inset">
-      <div className="space-y-4">
-        {children}
-      </div>
+      <div className="space-y-4">{children}</div>
       {linkHref && linkText && (
         <div className="mt-6">
-          <Button className="bg-accent text-accent-foreground hover:bg-accent/90 glow-accent" asChild>
+          <Button
+            className="bg-accent text-accent-foreground hover:bg-accent/90 glow-accent"
+            asChild
+          >
             <Link href={linkHref}>{linkText}</Link>
           </Button>
         </div>
       )}
     </Card>
-  )
+  );
 }

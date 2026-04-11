@@ -5,54 +5,58 @@
 >
   Functions in Tea are declared with `def`. Parameters and return types are explicit, which keeps call sites easy to read and makes public APIs predictable.
 
-  ## Named functions
+## Named functions
 
-  A named function declares its parameters up front, returns a value with `return`, and closes with `end`. This is the form you will use for most reusable program logic.
+A named function declares its parameters up front, returns a value with `return`, and closes with `end`. This is the form you will use for most reusable program logic.
 
-  ```tea
-  def add(a: Int, b: Int) -> Int
-    return a + b
+```tea
+def add(a: Int, b: Int) -> Int
+  return a + b
+end
+
+const total = add(1, 2)
+@println(total)
+```
+
+Functions can also return early when a branch should stop execution immediately.
+
+```tea
+def describe(score: Int) -> String
+  if score >= 90
+    return "excellent"
   end
 
-  const total = add(1, 2)
-  @println(total)
-  ```
+  return "keep going"
+end
+```
 
-  Functions can also return early when a branch should stop execution immediately.
+## Lambdas and closures
 
-  ```tea
-  def describe(score: Int) -> String
-    if score >= 90
-      return "excellent"
-    end
+Use lambdas for short pieces of behavior you want to pass around or return from another function. They use the `|args| => expr` form and can capture values from the surrounding scope.
 
-    return "keep going"
-  end
-  ```
+```tea
+def make_adder(base: Int) -> Func(Int) -> Int
+  return |value: Int| => base + value
+end
 
-  ## Lambdas and closures
+const add_two = make_adder(2)
+@println(add_two(5))
+```
 
-  Use lambdas for short pieces of behavior you want to pass around or return from another function. They use the `|args| => expr` form and can capture values from the surrounding scope.
+<KeyConceptCard title="What is stable today">
+  <ul className="space-y-2">
+    <li>Named `def` declarations with typed parameters and returns.</li>
+    <li>`return` inside functions when you want early exits.</li>
+    <li>
+      Lambdas with <code>|args| =&gt; expr</code> syntax.
+    </li>
+    <li>
+      Higher-order code via <code>Func(...) -&gt; ...</code> signatures.
+    </li>
+  </ul>
+</KeyConceptCard>
 
-  ```tea
-  def make_adder(base: Int) -> Func(Int) -> Int
-    return |value: Int| => base + value
-  end
-
-  const add_two = make_adder(2)
-  @println(add_two(5))
-  ```
-
-  <KeyConceptCard title="What is stable today">
-    <ul className="space-y-2">
-      <li>Named `def` declarations with typed parameters and returns.</li>
-      <li>`return` inside functions when you want early exits.</li>
-      <li>Lambdas with <code>|args| =&gt; expr</code> syntax.</li>
-      <li>Higher-order code via <code>Func(...) -&gt; ...</code> signatures.</li>
-    </ul>
-  </KeyConceptCard>
-
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/error-handling" title="Error Handling" description="See how functions declare thrown errors." />

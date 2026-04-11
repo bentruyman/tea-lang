@@ -5,53 +5,53 @@
 >
   Pattern matching lets you branch on values and variants with a sequence of `case` arms. It is useful both in ordinary control flow and in error recovery.
 
-  ## Match a value directly
+## Match a value directly
 
-  Use `match` when you want to inspect one value and choose a result from several cases. Literal patterns match exact values, and `_` acts as the fallback arm.
+Use `match` when you want to inspect one value and choose a result from several cases. Literal patterns match exact values, and `_` acts as the fallback arm.
 
-  ```tea
-  const status = 200
+```tea
+const status = 200
 
-  const label = match status
-    case 200 => "ok"
-    case 404 => "not found"
-    case _ => "unexpected"
+const label = match status
+  case 200 => "ok"
+  case 404 => "not found"
+  case _ => "unexpected"
+end
+
+@println(label)
+```
+
+## Pattern matching in error recovery
+
+Pattern matching is especially useful in `catch` blocks, where `case is ...` lets you branch on specific error variants and recover with different values.
+
+```tea
+error DataError {
+  Missing(path: String)
+  Permission
+}
+
+def describe(path: String) -> String
+  try read(path) catch err
+    case is DataError.Missing
+      `missing:${err.path}`
+    case is DataError.Permission
+      "denied"
+    case _
+      "unexpected"
   end
+end
+```
 
-  @println(label)
-  ```
+<KeyConceptCard title="Pattern forms">
+  <ul className="space-y-2">
+    <li>Use literal patterns such as `case 200` for exact values.</li>
+    <li>Use `case is Type.Variant` to match specific typed variants.</li>
+    <li>Use `_` as the final fallback when no earlier pattern matches.</li>
+  </ul>
+</KeyConceptCard>
 
-  ## Pattern matching in error recovery
-
-  Pattern matching is especially useful in `catch` blocks, where `case is ...` lets you branch on specific error variants and recover with different values.
-
-  ```tea
-  error DataError {
-    Missing(path: String)
-    Permission
-  }
-
-  def describe(path: String) -> String
-    try read(path) catch err
-      case is DataError.Missing
-        `missing:${err.path}`
-      case is DataError.Permission
-        "denied"
-      case _
-        "unexpected"
-    end
-  end
-  ```
-
-  <KeyConceptCard title="Pattern forms">
-    <ul className="space-y-2">
-      <li>Use literal patterns such as `case 200` for exact values.</li>
-      <li>Use `case is Type.Variant` to match specific typed variants.</li>
-      <li>Use `_` as the final fallback when no earlier pattern matches.</li>
-    </ul>
-  </KeyConceptCard>
-
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/error-handling" title="Error Handling" description="Pattern matching is most visible in error recovery." />

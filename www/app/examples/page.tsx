@@ -1,5 +1,5 @@
-import { PageIntro, GroupedSectionCardGrid } from "@/components/site-shell"
-import { exampleSections } from "@/lib/site"
+import { PageIntro, GroupedSectionCardGrid } from "@/components/site-shell";
+import { exampleSections } from "@/lib/site";
 
 export default function ExamplesPage() {
   return (
@@ -11,5 +11,5 @@ export default function ExamplesPage() {
       />
       <GroupedSectionCardGrid sections={exampleSections} />
     </div>
-  )
+  );
 }

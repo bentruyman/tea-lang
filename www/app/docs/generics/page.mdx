@@ -5,40 +5,43 @@
 >
   Generics let you write one function or struct that works across multiple concrete types. Instead of copying the same shape for `Int`, `String`, and other values, you parameterize the definition once and reuse it.
 
-  ## Generic structs and functions
+## Generic structs and functions
 
-  Tea uses square brackets for type parameters. You will see them on both struct definitions such as `Box[T]` and function definitions such as `def identity[T](...)`.
+Tea uses square brackets for type parameters. You will see them on both struct definitions such as `Box[T]` and function definitions such as `def identity[T](...)`.
 
-  ```tea
-  struct Box[T] {
-    value: T
-  }
+```tea
+struct Box[T] {
+  value: T
+}
 
-  def identity[T](value: T) -> T
-    return value
-  end
+def identity[T](value: T) -> T
+  return value
+end
 
-  const a = identity[Int](42)
-  const b = identity[String]("tea")
-  const boxed = Box[String](value: "leaf")
+const a = identity[Int](42)
+const b = identity[String]("tea")
+const boxed = Box[String](value: "leaf")
 
-  @println(a)
-  @println(b)
-  @println(boxed.value)
-  ```
+@println(a)
+@println(b)
+@println(boxed.value)
+```
 
-  In day-to-day code, generics are most useful when the logic stays the same but the concrete type changes. That applies to wrappers, containers, and small reusable helpers.
+In day-to-day code, generics are most useful when the logic stays the same but the concrete type changes. That applies to wrappers, containers, and small reusable helpers.
 
-  <KeyConceptCard title="What to notice">
-    <ul className="space-y-2">
-      <li>Generic parameters use `Box[T]` and `def identity[T](...)` syntax.</li>
-      <li>Explicit instantiation like `identity[Int](42)` is supported in current examples.</li>
-      <li>The same definition can be reused across multiple concrete types.</li>
-      <li>The compiler monomorphizes concrete uses for code generation.</li>
-    </ul>
-  </KeyConceptCard>
+<KeyConceptCard title="What to notice">
+  <ul className="space-y-2">
+    <li>Generic parameters use `Box[T]` and `def identity[T](...)` syntax.</li>
+    <li>
+      Explicit instantiation like `identity[Int](42)` is supported in current
+      examples.
+    </li>
+    <li>The same definition can be reused across multiple concrete types.</li>
+    <li>The compiler monomorphizes concrete uses for code generation.</li>
+  </ul>
+</KeyConceptCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/structs" title="Structs" description="See generic structs in context." />

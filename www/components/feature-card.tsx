@@ -1,11 +1,11 @@
-import Link from "next/link"
-import { ArrowRight } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 interface FeatureCardProps {
-  title: string
-  description: string
-  href: string
+  title: string;
+  description: string;
+  href: string;
 }
 
 export function FeatureCard({ title, description, href }: FeatureCardProps) {
@@ -15,12 +15,14 @@ export function FeatureCard({ title, description, href }: FeatureCardProps) {
         <h3 className="font-semibold text-base mb-3 text-foreground group-hover:text-primary transition-colors">
           {title}
         </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-4">{description}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+          {description}
+        </p>
         <div className="flex items-center gap-1 text-sm font-medium text-primary group-hover:gap-2 transition-all">
           Learn more
           <ArrowRight className="h-3.5 w-3.5" />
         </div>
       </Card>
     </Link>
-  )
+  );
 }

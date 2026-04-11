@@ -1,9 +1,9 @@
-import { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
+import { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
 interface IntrinsicRowProps {
-  intrinsic: string
-  description: string
+  intrinsic: string;
+  description: string;
 }
 
 export function IntrinsicRow({ intrinsic, description }: IntrinsicRowProps) {
@@ -12,17 +12,19 @@ export function IntrinsicRow({ intrinsic, description }: IntrinsicRowProps) {
       <td className="py-2 pr-4 text-primary font-mono">{intrinsic}</td>
       <td className="py-2 text-muted-foreground">{description}</td>
     </tr>
-  )
+  );
 }
 
 interface IntrinsicTableProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function IntrinsicTable({ children }: IntrinsicTableProps) {
   return (
     <Card className="p-6 bg-card border-border">
-      <h3 className="font-semibold text-lg mb-3 text-primary">Common Intrinsics</h3>
+      <h3 className="font-semibold text-lg mb-3 text-primary">
+        Common Intrinsics
+      </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -31,11 +33,9 @@ export function IntrinsicTable({ children }: IntrinsicTableProps) {
               <th className="text-left py-2">Description</th>
             </tr>
           </thead>
-          <tbody>
-            {children}
-          </tbody>
+          <tbody>{children}</tbody>
         </table>
       </div>
     </Card>
-  )
+  );
 }

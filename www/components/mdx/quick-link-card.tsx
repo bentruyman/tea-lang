@@ -1,8 +1,19 @@
-import { ReactNode } from 'react'
-import Link from 'next/link'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { ArrowRight, Rocket, BookOpen, Code2, Download, Zap, FileText, Users, Cog, LucideIcon } from 'lucide-react'
+import { ReactNode } from "react";
+import Link from "next/link";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  ArrowRight,
+  Rocket,
+  BookOpen,
+  Code2,
+  Download,
+  Zap,
+  FileText,
+  Users,
+  Cog,
+  LucideIcon,
+} from "lucide-react";
 
 const iconMap: Record<string, LucideIcon> = {
   rocket: Rocket,
@@ -13,24 +24,24 @@ const iconMap: Record<string, LucideIcon> = {
   file: FileText,
   users: Users,
   cog: Cog,
-}
+};
 
 interface QuickLinkCardProps {
-  title: string
-  description: string
-  href: string
-  icon?: string
-  buttonText?: string
+  title: string;
+  description: string;
+  href: string;
+  icon?: string;
+  buttonText?: string;
 }
 
 export function QuickLinkCard({
   title,
   description,
   href,
-  icon = 'rocket',
-  buttonText = 'Learn More'
+  icon = "rocket",
+  buttonText = "Learn More",
 }: QuickLinkCardProps) {
-  const IconComponent = iconMap[icon] || Rocket
+  const IconComponent = iconMap[icon] || Rocket;
 
   return (
     <Card className="p-6 bg-card border-border hover:bg-muted/50 transition-colors panel-inset hover:glow-accent">
@@ -43,12 +54,17 @@ export function QuickLinkCard({
       <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
         {description}
       </p>
-      <Button variant="ghost" size="sm" className="gap-2 text-primary hover:text-primary" asChild>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-2 text-primary hover:text-primary"
+        asChild
+      >
         <Link href={href}>
           {buttonText}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </Button>
     </Card>
-  )
+  );
 }

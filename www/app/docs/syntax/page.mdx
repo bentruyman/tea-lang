@@ -5,78 +5,81 @@
 >
   Tea keeps the surface syntax small. Most files are built from a few recurring pieces: bindings, blocks that end with `end`, control flow, and strings with backtick interpolation.
 
-  This page focuses on how code is written, not on the full type system. If you are learning the language, these are the forms you will see first in everyday Tea programs.
+This page focuses on how code is written, not on the full type system. If you are learning the language, these are the forms you will see first in everyday Tea programs.
 
-  ## Bindings, blocks, and `if`
+## Bindings, blocks, and `if`
 
-  Local values use `const` and `var`. Control-flow blocks start with a keyword such as `if` and always close with `end`.
+Local values use `const` and `var`. Control-flow blocks start with a keyword such as `if` and always close with `end`.
 
-  ```tea
-  const is_debug = true
-  var label = "tea"
+```tea
+const is_debug = true
+var label = "tea"
 
-  if is_debug
-    label = "tea (debug)"
-  else
-    label = "tea"
-  end
+if is_debug
+  label = "tea (debug)"
+else
+  label = "tea"
+end
 
-  const mode = if(is_debug) "verbose" else "normal"
+const mode = if(is_debug) "verbose" else "normal"
 
-  @println(label)
-  @println(mode)
-  ```
+@println(label)
+@println(mode)
+```
 
-  ## Loops
+## Loops
 
-  Tea supports both `while` loops for condition-driven repetition and `for ... in ...` loops for iterating collections.
+Tea supports both `while` loops for condition-driven repetition and `for ... in ...` loops for iterating collections.
 
-  ```tea
-  var count = 0
+```tea
+var count = 0
 
-  while count < 3
-    @println(count)
-    count = count + 1
-  end
+while count < 3
+  @println(count)
+  count = count + 1
+end
 
-  const names = ["tea", "chai"]
+const names = ["tea", "chai"]
 
-  for name in names
-    @println(name)
-  end
-  ```
+for name in names
+  @println(name)
+end
+```
 
-  When iterating dictionaries, you can bind both the key and value directly in the loop header.
+When iterating dictionaries, you can bind both the key and value directly in the loop header.
 
-  ```tea
-  const scores = {"tea": 10, "chai": 8}
+```tea
+const scores = {"tea": 10, "chai": 8}
 
-  for name, score in scores
-    @println(`${name}: ${score}`)
-  end
-  ```
+for name, score in scores
+  @println(`${name}: ${score}`)
+end
+```
 
-  ## Strings and interpolation
+## Strings and interpolation
 
-  Use double quotes for ordinary strings and backticks when you want interpolation. Expressions inside a backtick string use <code>{"${...}"}</code> placeholders.
+Use double quotes for ordinary strings and backticks when you want interpolation. Expressions inside a backtick string use <code>{"${...}"}</code> placeholders.
 
-  ```tea
-  var name = "Tea"
-  var version = 1
-  @println(`${name} v${version}`)
-  ```
+```tea
+var name = "Tea"
+var version = 1
+@println(`${name} v${version}`)
+```
 
-  <KeyConceptCard title="Core syntax rules">
-    <ul className="space-y-2">
-      <li>Blocks end with `end`.</li>
-      <li>Use `const` for stable bindings and `var` for values you reassign.</li>
-      <li>`if(expr) a else b` is supported as an expression.</li>
-      <li>`while` and `for ... in ...` cover the core looping syntax.</li>
-      <li>Backticks enable string interpolation with <code>{"${...}"}</code> placeholders.</li>
-    </ul>
-  </KeyConceptCard>
+<KeyConceptCard title="Core syntax rules">
+  <ul className="space-y-2">
+    <li>Blocks end with `end`.</li>
+    <li>Use `const` for stable bindings and `var` for values you reassign.</li>
+    <li>`if(expr) a else b` is supported as an expression.</li>
+    <li>`while` and `for ... in ...` cover the core looping syntax.</li>
+    <li>
+      Backticks enable string interpolation with <code>{"${...}"}</code>{" "}
+      placeholders.
+    </li>
+  </ul>
+</KeyConceptCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/types" title="Types" description="See list, dict, optional, and function types." />

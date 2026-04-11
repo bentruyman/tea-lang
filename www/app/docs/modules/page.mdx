@@ -5,35 +5,37 @@
 >
   Modules let you split code across files and control which functions are part of the public API. In Tea, you import modules with `use alias = "path"` and call exported members through that alias.
 
-  ## Export from a local file
+## Export from a local file
 
-  Mark exported definitions with `pub`. Anything without `pub` stays private to that module, which keeps internal helpers out of the external surface.
+Mark exported definitions with `pub`. Anything without `pub` stays private to that module, which keeps internal helpers out of the external surface.
 
-  ```tea
-  pub def triple(value: Int) -> Int
-    return value * 3
-  end
+```tea
+pub def triple(value: Int) -> Int
+  return value * 3
+end
 
-  def internal_label() -> String
-    return "helpers"
-  end
-  ```
+def internal_label() -> String
+  return "helpers"
+end
+```
 
-  ## Import it from another file
+## Import it from another file
 
-  Relative imports point to nearby Tea files. Bind the import to an alias, then access exported members through that name.
+Relative imports point to nearby Tea files. Bind the import to an alias, then access exported members through that name.
 
-  ```tea
-  use helpers = "./helpers"
+```tea
+use helpers = "./helpers"
 
-  @println(helpers.triple(5))
-  ```
+@println(helpers.triple(5))
+```
 
-  <NoteCard title="Stdlib imports">
-    Checked-in examples use imports like <code>use args = "std.args"</code>, <code>use fs = "std.fs"</code>, and <code>use regex = "std.regex"</code>. Each stdlib module exposes its public API from a <code>mod.tea</code> entrypoint.
-  </NoteCard>
+<NoteCard title="Stdlib imports">
+  Checked-in examples use imports like <code>use args = "std.args"</code>,{" "}
+  <code>use fs = "std.fs"</code>, and <code>use regex = "std.regex"</code>. Each
+  stdlib module exposes its public API from a <code>mod.tea</code> entrypoint.
+</NoteCard>
 
-  <div className="divider-section" />
+<div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/reference/args" title="std.args" description="See a real stdlib module reference page." />

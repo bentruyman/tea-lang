@@ -5,47 +5,55 @@
 >
   The contribution loop is straightforward: set up the repository, make a focused change, run the relevant checks, and then send the work back through the repo’s normal issue or PR flow.
 
-  ## Setup and verification
+## Setup and verification
 
-  Start by installing the repo dependencies and verifying that the workspace builds, formats, and tests correctly on your machine.
+Start by installing the repo dependencies and verifying that the workspace builds, formats, and tests correctly on your machine.
 
-  ```bash
-  make setup
-  make test
-  make fmt
-  ```
+```bash
+make setup
+make test
+make fmt
+```
 
-  <ContentSection>
-    <div className="grid gap-4 md:grid-cols-2">
-      <FeaturePill kicker="Build" title="Current repo workflows">
-        <ul className="space-y-2">
-          <li>`make setup` installs Bun dependencies and runs code generation.</li>
-          <li>`make test` runs workspace Rust tests and `scripts/e2e.sh`.</li>
-          <li>`cargo run -p tea-cli -- ...` is the fastest way to test CLI behavior during development.</li>
-        </ul>
-      </FeaturePill>
-      <FeaturePill kicker="Navigate" title="Where to change things">
-        <ul className="space-y-2">
-          <li>Language behavior: `tea-compiler/`</li>
-          <li>CLI surface: `tea-cli/`</li>
-          <li>Stdlib APIs: `stdlib/` plus intrinsics/runtime when needed</li>
-          <li>Docs site: `www/`</li>
-        </ul>
-      </FeaturePill>
-    </div>
-  </ContentSection>
+<ContentSection>
+  <div className="grid gap-4 md:grid-cols-2">
+    <FeaturePill kicker="Build" title="Current repo workflows">
+      <ul className="space-y-2">
+        <li>
+          `make setup` installs Bun dependencies and runs code generation.
+        </li>
+        <li>`make test` runs workspace Rust tests and `scripts/e2e.sh`.</li>
+        <li>
+          `cargo run -p tea-cli -- ...` is the fastest way to test CLI behavior
+          during development.
+        </li>
+      </ul>
+    </FeaturePill>
+    <FeaturePill kicker="Navigate" title="Where to change things">
+      <ul className="space-y-2">
+        <li>Language behavior: `tea-compiler/`</li>
+        <li>CLI surface: `tea-cli/`</li>
+        <li>Stdlib APIs: `stdlib/` plus intrinsics/runtime when needed</li>
+        <li>Docs site: `www/`</li>
+      </ul>
+    </FeaturePill>
+  </div>
+</ContentSection>
 
-  <HelpCard title="Community channels" description="Use the repo as the primary place for issues, PRs, and discussions.">
-    <HelpLink href="https://github.com/bentruyman/tea-lang/issues" external>
-      Issues
-    </HelpLink>
-    <HelpLink href="https://github.com/bentruyman/tea-lang/discussions" external>
-      Discussions
-    </HelpLink>
-    <HelpLink href="https://github.com/bentruyman/tea-lang" external>
-      Repository
-    </HelpLink>
-  </HelpCard>
+<HelpCard
+  title="Community channels"
+  description="Use the repo as the primary place for issues, PRs, and discussions."
+>
+  <HelpLink href="https://github.com/bentruyman/tea-lang/issues" external>
+    Issues
+  </HelpLink>
+  <HelpLink href="https://github.com/bentruyman/tea-lang/discussions" external>
+    Discussions
+  </HelpLink>
+  <HelpLink href="https://github.com/bentruyman/tea-lang" external>
+    Repository
+  </HelpLink>
+</HelpCard>
 
   <NextSteps>
     <NextLink href="/docs/code-style" title="Code Style" description="Format Tea and Rust code consistently." />

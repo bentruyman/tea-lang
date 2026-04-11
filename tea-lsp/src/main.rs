@@ -110,8 +110,12 @@ mod tests {
     use std::fs;
 
     use super::*;
+    use serde_json::json;
     use tea_compiler::{Compilation, CompileOptions, Compiler, SourceFile, SourceId};
     use tempfile::tempdir;
+    use tokio::{task::LocalSet, time::Duration};
+    use tower::{Service, ServiceExt};
+    use tower_lsp::jsonrpc::{Request, Response};
 
     fn compile_source(contents: &str) -> Compilation {
         let mut compiler = Compiler::new(CompileOptions::default());
@@ -127,6 +131,255 @@ mod tests {
 
     fn completion_labels(items: &[CompletionItem]) -> Vec<&str> {
         items.iter().map(|item| item.label.as_str()).collect()
+    }
+
+    fn completion_response_labels(response: &CompletionResponse) -> Vec<&str> {
+        match response {
+            CompletionResponse::Array(items) => completion_labels(items),
+            CompletionResponse::List(list) => completion_labels(&list.items),
+        }
+    }
+
+    fn completion_response_items(response: &CompletionResponse) -> Vec<CompletionItem> {
+        match response {
+            CompletionResponse::Array(items) => items.clone(),
+            CompletionResponse::List(list) => list.items.clone(),
+        }
+    }
+
+    fn initialize_request(id: i64) -> Request {
+        Request::build("initialize")
+            .params(json!({ "capabilities": {} }))
+            .id(id)
+            .finish()
+    }
+
+    async fn call_request(
+        service: &mut LspService<TeaLanguageServer>,
+        request: Request,
+    ) -> Option<Response> {
+        service
+            .ready()
+            .await
+            .expect("service to be ready")
+            .call(request)
+            .await
+            .expect("request to succeed")
+    }
+
+    async fn initialize_service(service: &mut LspService<TeaLanguageServer>) -> InitializeResult {
+        let response = call_request(service, initialize_request(1))
+            .await
+            .expect("initialize response to exist");
+        serde_json::from_value(
+            response
+                .result()
+                .cloned()
+                .expect("initialize result to exist"),
+        )
+        .expect("initialize result to deserialize")
+    }
+
+    async fn open_document(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        version: i32,
+        text: &str,
+    ) {
+        let response = call_request(
+            service,
+            Request::build("textDocument/didOpen")
+                .params(json!({
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "tea",
+                        "version": version,
+                        "text": text,
+                    }
+                }))
+                .finish(),
+        )
+        .await;
+        assert!(response.is_none(), "didOpen should be a notification");
+    }
+
+    async fn change_document(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        version: i32,
+        text: &str,
+    ) {
+        let response = call_request(
+            service,
+            Request::build("textDocument/didChange")
+                .params(json!({
+                    "textDocument": {
+                        "uri": uri,
+                        "version": version,
+                    },
+                    "contentChanges": [
+                        {
+                            "text": text,
+                        }
+                    ]
+                }))
+                .finish(),
+        )
+        .await;
+        assert!(response.is_none(), "didChange should be a notification");
+    }
+
+    async fn change_document_range(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        version: i32,
+        range: Range,
+        text: &str,
+    ) {
+        let response = call_request(
+            service,
+            Request::build("textDocument/didChange")
+                .params(json!({
+                    "textDocument": {
+                        "uri": uri,
+                        "version": version,
+                    },
+                    "contentChanges": [
+                        {
+                            "range": range,
+                            "text": text,
+                        }
+                    ]
+                }))
+                .finish(),
+        )
+        .await;
+        assert!(response.is_none(), "didChange should be a notification");
+    }
+
+    async fn completion_request(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        position: Position,
+        trigger_character: Option<&str>,
+    ) -> Option<CompletionResponse> {
+        let trigger_kind = if trigger_character.is_some() { 2 } else { 1 };
+        let mut request = Request::build("textDocument/completion").id(2);
+        let params = json!({
+            "textDocument": { "uri": uri },
+            "position": position,
+            "context": {
+                "triggerKind": trigger_kind,
+                "triggerCharacter": trigger_character,
+            }
+        });
+        request = request.params(params);
+        let response = call_request(service, request.finish())
+            .await
+            .expect("completion response to exist");
+        serde_json::from_value(
+            response
+                .result()
+                .cloned()
+                .expect("completion result to exist"),
+        )
+        .expect("completion result to deserialize")
+    }
+
+    async fn hover_request(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        position: Position,
+    ) -> Option<Hover> {
+        let response = call_request(
+            service,
+            Request::build("textDocument/hover")
+                .params(json!({
+                    "textDocument": { "uri": uri },
+                    "position": position,
+                }))
+                .id(3)
+                .finish(),
+        )
+        .await
+        .expect("hover response to exist");
+        serde_json::from_value(response.result().cloned().expect("hover result to exist"))
+            .expect("hover result to deserialize")
+    }
+
+    async fn definition_request(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        position: Position,
+    ) -> Option<GotoDefinitionResponse> {
+        let response = call_request(
+            service,
+            Request::build("textDocument/definition")
+                .params(json!({
+                    "textDocument": { "uri": uri },
+                    "position": position,
+                }))
+                .id(4)
+                .finish(),
+        )
+        .await
+        .expect("definition response to exist");
+        serde_json::from_value(
+            response
+                .result()
+                .cloned()
+                .expect("definition result to exist"),
+        )
+        .expect("definition result to deserialize")
+    }
+
+    async fn prepare_rename_request(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        position: Position,
+    ) -> Option<PrepareRenameResponse> {
+        let response = call_request(
+            service,
+            Request::build("textDocument/prepareRename")
+                .params(json!({
+                    "textDocument": { "uri": uri },
+                    "position": position,
+                }))
+                .id(5)
+                .finish(),
+        )
+        .await
+        .expect("prepareRename response to exist");
+        serde_json::from_value(
+            response
+                .result()
+                .cloned()
+                .expect("prepareRename result to exist"),
+        )
+        .expect("prepareRename result to deserialize")
+    }
+
+    async fn rename_request(
+        service: &mut LspService<TeaLanguageServer>,
+        uri: &Url,
+        position: Position,
+        new_name: &str,
+    ) -> Option<WorkspaceEdit> {
+        let response = call_request(
+            service,
+            Request::build("textDocument/rename")
+                .params(json!({
+                    "textDocument": { "uri": uri },
+                    "position": position,
+                    "newName": new_name,
+                }))
+                .id(6)
+                .finish(),
+        )
+        .await
+        .expect("rename response to exist");
+        serde_json::from_value(response.result().cloned().expect("rename result to exist"))
+            .expect("rename result to deserialize")
     }
 
     #[test]
@@ -876,6 +1129,598 @@ end
         assert!(target.occurrences.iter().all(|range| range.start.line < 4));
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn initialize_reports_supported_lsp_features() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                let result = initialize_service(&mut service).await;
+                let completion = result
+                    .capabilities
+                    .completion_provider
+                    .expect("completion provider to be present");
+                let triggers = completion
+                    .trigger_characters
+                    .expect("completion triggers to be present");
+
+                assert!(triggers.contains(&".".to_string()));
+                assert!(triggers.contains(&"\"".to_string()));
+                assert!(triggers.contains(&"/".to_string()));
+                assert!(result.capabilities.hover_provider.is_some());
+                assert!(result.capabilities.definition_provider.is_some());
+                assert!(result.capabilities.rename_provider.is_some());
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_completion_returns_module_members_after_incomplete_change() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let initial = "use fs = \"std.fs\"\n\nfs.read_file(\"demo.txt\")\n";
+                fs::write(&path, initial).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, initial).await;
+
+                let updated = "use fs = \"std.fs\"\n\nfs.\n";
+                change_document(&mut service, &uri, 2, updated).await;
+                tokio::time::sleep(Duration::from_millis(250)).await;
+
+                let completion = completion_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 2,
+                        character: 3,
+                    },
+                    Some("."),
+                )
+                .await
+                .expect("completion to exist");
+                let labels = completion_response_labels(&completion);
+
+                assert!(labels.contains(&"read_file"));
+                assert!(labels.contains(&"read_dir"));
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_completion_returns_import_paths_inside_use_strings() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let helper_path = dir.path().join("helper.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                fs::write(&path, "use fs = \"").expect("main module to be written");
+                fs::write(&helper_path, "").expect("helper module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, "use fs = \"").await;
+
+                let completion = completion_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 10,
+                    },
+                    Some("\""),
+                )
+                .await
+                .expect("completion to exist");
+                let labels = completion_response_labels(&completion);
+
+                assert!(labels.contains(&"std.fs"));
+                assert!(labels.contains(&"./helper"));
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_hover_returns_module_member_docs() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "use fs = \"std.fs\"\n\nfs.read_file(\"demo.txt\")\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let hover = hover_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 2,
+                        character: 5,
+                    },
+                )
+                .await
+                .expect("hover to exist");
+
+                let HoverContents::Markup(markup) = hover.contents else {
+                    panic!("expected markup hover");
+                };
+                assert!(markup.value.contains("function `fs.read_file`"));
+                assert!(markup.value.contains("Read a text file."));
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_definition_and_prepare_rename_resolve_use_site_binding() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "def foo(a: Int) -> Int\n  return a + 5\nend\n\ndef bar(a: Int) -> Int\n  return a * 5\nend\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let definition = definition_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 1,
+                        character: 9,
+                    },
+                )
+                .await
+                .expect("definition to exist");
+
+                let GotoDefinitionResponse::Scalar(location) = definition else {
+                    panic!("expected scalar definition response");
+                };
+                assert_eq!(location.range.start.line, 0);
+                assert_eq!(location.range.start.character, 8);
+
+                let rename_range = prepare_rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 1,
+                        character: 9,
+                    },
+                )
+                .await
+                .expect("prepare rename to exist");
+
+                let PrepareRenameResponse::Range(range) = rename_range else {
+                    panic!("expected range prepare rename response");
+                };
+                assert_eq!(range.start.line, 1);
+                assert_eq!(range.start.character, 9);
+                assert_eq!(range.end.character, 10);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_rename_scopes_parameter_edits_to_its_function() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "def foo(a: Int) -> Int\n  return a + 5\nend\n\ndef bar(a: Int) -> Int\n  return a * 5\nend\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let edit = rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 8,
+                    },
+                    "value",
+                )
+                .await
+                .expect("rename edit to exist");
+
+                let edits = edit
+                    .changes
+                    .expect("workspace changes to be present")
+                    .remove(&uri)
+                    .expect("file edits to be present");
+
+                assert_eq!(edits.len(), 2);
+                assert!(edits.iter().all(|edit| edit.new_text == "value"));
+                assert_eq!(edits[0].range.start.line, 0);
+                assert_eq!(edits[0].range.start.character, 8);
+                assert_eq!(edits[1].range.start.line, 1);
+                assert_eq!(edits[1].range.start.character, 9);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_rename_replaces_entire_multi_character_identifier() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "def foo(value: Int) -> Int\n  return value + 5\nend\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let edit = rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 4,
+                    },
+                    "bar",
+                )
+                .await
+                .expect("rename edit to exist");
+
+                let edits = edit
+                    .changes
+                    .expect("workspace changes to be present")
+                    .remove(&uri)
+                    .expect("file edits to be present");
+
+                assert_eq!(edits.len(), 1);
+                assert_eq!(edits[0].range.start.character, 4);
+                assert_eq!(edits[0].range.end.character, 7);
+                assert_eq!(edits[0].new_text, "bar");
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_completion_returns_module_members_after_ranged_suffix_delete() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let initial = "use fs = \"std.fs\"\n\nfs.exists(\"x\")\n";
+                fs::write(&path, initial).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, initial).await;
+
+                change_document_range(
+                    &mut service,
+                    &uri,
+                    2,
+                    Range {
+                        start: Position {
+                            line: 2,
+                            character: 3,
+                        },
+                        end: Position {
+                            line: 2,
+                            character: 14,
+                        },
+                    },
+                    "",
+                )
+                .await;
+                tokio::time::sleep(Duration::from_millis(250)).await;
+
+                let completion = completion_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 2,
+                        character: 3,
+                    },
+                    Some("."),
+                )
+                .await
+                .expect("completion to exist");
+                let labels = completion_response_labels(&completion);
+
+                assert!(labels.contains(&"exists"));
+                assert!(labels.contains(&"read_file"));
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_import_completion_returns_precise_text_edit_range() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "use fs = \"st";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let completion = completion_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 12,
+                    },
+                    None,
+                )
+                .await
+                .expect("completion to exist");
+                let items = completion_response_items(&completion);
+                let item = items
+                    .into_iter()
+                    .find(|item| item.label == "std.fs")
+                    .expect("std.fs completion to be present");
+                let text_edit = item.text_edit.expect("text edit to be present");
+                let edit = match text_edit {
+                    tower_lsp::lsp_types::CompletionTextEdit::Edit(edit) => edit,
+                    tower_lsp::lsp_types::CompletionTextEdit::InsertAndReplace(edit) => TextEdit {
+                        range: edit.replace,
+                        new_text: edit.new_text,
+                    },
+                };
+
+                assert_eq!(edit.range.start.line, 0);
+                assert_eq!(edit.range.start.character, 10);
+                assert_eq!(edit.range.end.line, 0);
+                assert_eq!(edit.range.end.character, 12);
+                assert_eq!(edit.new_text, "std.fs");
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_hover_returns_precise_range_for_multi_character_module_member() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "use fs = \"std.fs\"\n\nfs.read_file(\"demo.txt\")\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let hover = hover_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 2,
+                        character: 5,
+                    },
+                )
+                .await
+                .expect("hover to exist");
+
+                let range = hover.range.expect("hover range to be present");
+                assert_eq!(range.start.line, 2);
+                assert_eq!(range.start.character, 3);
+                assert_eq!(range.end.line, 2);
+                assert_eq!(range.end.character, 12);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_definition_and_prepare_rename_use_full_multi_character_ranges() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text =
+                    "def greet_user(name: Int) -> Int\n  return name\nend\n\nvar result = greet_user(1)\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let definition = definition_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 4,
+                        character: 15,
+                    },
+                )
+                .await
+                .expect("definition to exist");
+
+                let GotoDefinitionResponse::Scalar(location) = definition else {
+                    panic!("expected scalar definition response");
+                };
+                assert_eq!(location.range.start.line, 0);
+                assert_eq!(location.range.start.character, 4);
+                assert_eq!(location.range.end.line, 0);
+                assert_eq!(location.range.end.character, 14);
+
+                let rename_range = prepare_rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 4,
+                        character: 15,
+                    },
+                )
+                .await
+                .expect("prepare rename to exist");
+
+                let PrepareRenameResponse::Range(range) = rename_range else {
+                    panic!("expected range prepare rename response");
+                };
+                assert_eq!(range.start.line, 4);
+                assert_eq!(range.start.character, 13);
+                assert_eq!(range.end.line, 4);
+                assert_eq!(range.end.character, 23);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_rename_scopes_module_alias_edits_to_alias_and_uses() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "use fs = \"std.fs\"\nuse env = \"std.env\"\n\nfs.exists(\"x\")\nenv.get(\"HOME\")\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let edit = rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 0,
+                        character: 4,
+                    },
+                    "files",
+                )
+                .await
+                .expect("rename edit to exist");
+
+                let edits = edit
+                    .changes
+                    .expect("workspace changes to be present")
+                    .remove(&uri)
+                    .expect("file edits to be present");
+
+                assert_eq!(edits.len(), 2);
+                assert!(edits.iter().all(|edit| edit.new_text == "files"));
+                assert_eq!(edits[0].range.start.line, 0);
+                assert_eq!(edits[0].range.start.character, 4);
+                assert_eq!(edits[1].range.start.line, 3);
+                assert_eq!(edits[1].range.start.character, 0);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_rename_scopes_lambda_parameter_edits_to_lambda_body() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "def run() -> Int\n  var add = |value: Int| => value + 1\n  return add(2)\nend\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let edit = rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 1,
+                        character: 14,
+                    },
+                    "amount",
+                )
+                .await
+                .expect("rename edit to exist");
+
+                let edits = edit
+                    .changes
+                    .expect("workspace changes to be present")
+                    .remove(&uri)
+                    .expect("file edits to be present");
+
+                assert_eq!(edits.len(), 2);
+                assert!(edits.iter().all(|edit| edit.new_text == "amount"));
+                assert_eq!(edits[0].range.start.line, 1);
+                assert_eq!(edits[0].range.start.character, 13);
+                assert_eq!(edits[1].range.start.line, 1);
+                assert_eq!(edits[1].range.start.character, 28);
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lsp_rename_scopes_loop_variable_edits_to_loop_body() {
+        let local = LocalSet::new();
+        local
+            .run_until(async {
+                let dir = tempdir().expect("temp dir to be created");
+                let path = dir.path().join("main.tea");
+                let uri = Url::from_file_path(&path).expect("file path to convert to URL");
+                let text = "def run() -> Int\n  var sum = 0\n  var numbers = [1, 2, 3]\n  for num in numbers\n    sum = sum + num\n  end\n  return sum\nend\n";
+                fs::write(&path, text).expect("main module to be written");
+
+                let (mut service, _) = LspService::new(|client| TeaLanguageServer::new(client));
+                initialize_service(&mut service).await;
+                open_document(&mut service, &uri, 1, text).await;
+
+                let edit = rename_request(
+                    &mut service,
+                    &uri,
+                    Position {
+                        line: 3,
+                        character: 6,
+                    },
+                    "item",
+                )
+                .await
+                .expect("rename edit to exist");
+
+                let edits = edit
+                    .changes
+                    .expect("workspace changes to be present")
+                    .remove(&uri)
+                    .expect("file edits to be present");
+
+                assert_eq!(edits.len(), 2);
+                assert!(edits.iter().all(|edit| edit.new_text == "item"));
+                assert_eq!(edits[0].range.start.line, 3);
+                assert_eq!(edits[0].range.start.character, 6);
+                assert_eq!(edits[1].range.start.line, 4);
+                assert_eq!(edits[1].range.start.character, 16);
+            })
+            .await;
+    }
 }
 
 #[derive(Debug, Clone)]

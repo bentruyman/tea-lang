@@ -4,7 +4,7 @@ use std::process::Command;
 use tempfile::tempdir;
 
 fn tea_cli_binary() -> &'static str {
-    env!("CARGO_BIN_EXE_tea-cli")
+    env!("CARGO_BIN_EXE_tea")
 }
 
 fn workspace_root() -> std::path::PathBuf {

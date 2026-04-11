@@ -1,47 +1,58 @@
 <ContentPage
   eyebrow="Get Started"
   title="Installation"
-  description="Build Tea from source, install the `tea` binary, and verify the CLI on your machine."
+  description="Install a prebuilt Tea release or build from source if you need the full development toolchain."
 >
-  Tea is built from source with the standard Rust toolchain. You’ll also need **Bun** for codegen, **Make** for repo workflows, and optionally **LLVM** for AOT compilation.
+  The recommended install path downloads a prebuilt `tea` release, verifies its checksum, and installs it to `~/.local/bin`.
 
-```bash
-git clone https://github.com/bentruyman/tea-lang.git
-cd tea-lang
-make setup
-cargo build --release
-make install
-tea --version
-```
+  ```bash
+  curl -fsSL https://tea-lang.dev/install | bash
+  tea --version
+  ```
 
-If you’d rather skip the install step, you can run Tea directly from the repo during development:
+  Tea still needs a host C toolchain to link executables while running scripts or `tea build`:
 
-```bash
-cargo run -p tea-cli -- examples/echo/main.tea hello tea
-```
+  - macOS: `xcode-select --install`
+  - Linux: install `cc` or `clang` with your package manager
 
-<div className="divider-section" />
+  If you need a source build for local development, use the Rust/Bun/LLVM workflow instead:
 
-<div className="flex flex-wrap gap-3 text-sm">
-  <a
-    href="https://github.com/bentruyman/tea-lang"
-    target="_blank"
-    rel="noreferrer"
-    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
-  >
-    Repository
-  </a>
-  <a
-    href="https://github.com/bentruyman/tea-lang/issues"
-    target="_blank"
-    rel="noreferrer"
-    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
-  >
-    Report an issue
-  </a>
-</div>
+  ```bash
+  git clone https://github.com/bentruyman/tea-lang.git
+  cd tea-lang
+  ./scripts/setup-worktree.sh
+  cargo build --release
+  make install
+  ```
 
-<div className="divider-section" />
+  If you’d rather skip the install step, you can run Tea directly from the repo during development:
+
+  ```bash
+  cargo run -p tea-cli -- examples/echo/main.tea hello tea
+  ```
+
+  <div className="divider-section" />
+
+  <div className="flex flex-wrap gap-3 text-sm">
+    <a
+      href="https://github.com/bentruyman/tea-lang"
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
+    >
+      Repository
+    </a>
+    <a
+      href="https://github.com/bentruyman/tea-lang/issues"
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-muted-foreground transition-colors hover:border-primary/20 hover:text-foreground"
+    >
+      Report an issue
+    </a>
+  </div>
+
+  <div className="divider-section" />
 
   <NextSteps>
     <NextLink href="/docs/getting-started" title="Getting Started" description="Run a first script and compile it." />

@@ -42,7 +42,7 @@ Tea is currently in active development. It's suitable for personal projects, aut
 The quickest way is using the install script:
 
 ```bash
-curl -fsSL https://tea-lang.dev/install.sh | bash
+curl -fsSL https://tea-lang.dev/install | bash
 ```
 
 Or manually:
@@ -57,24 +57,28 @@ See the [Getting Started Guide](getting-started.md#installation) for details.
 
 ### What are the system requirements?
 
-- **Rust** 1.70+ - For building the compiler
-- **Bun** - For code generation tooling
-- **Make** - Usually pre-installed on macOS/Linux
-- **LLVM** (optional but recommended) - For AOT compilation
+- **Prebuilt install** - a host C toolchain (`xcode-select --install` on macOS, `cc`/`clang` on Linux)
+- **Source build** - Rust 1.70+, Bun, Make, and LLVM 17
 
 ### I get `tea: command not found` after installing
 
-Ensure `~/.cargo/bin` is in your PATH:
+Ensure `~/.local/bin` is in your PATH:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent, then restart your shell or run `source ~/.bashrc`.
 
 ### How do I update Tea?
 
-Pull the latest changes and rebuild:
+Re-run the installer:
+
+```bash
+curl -fsSL https://tea-lang.dev/install | bash
+```
+
+If you built Tea from source, pull the latest changes and rebuild:
 
 ```bash
 cd tea-lang

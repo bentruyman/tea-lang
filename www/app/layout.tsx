@@ -21,9 +21,9 @@ const geistMono = Geist_Mono({
 const nunitoSans = Nunito_Sans({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tea Docs",
+  title: "Tea Language",
   description:
-    "Source-backed documentation for Tea: a strongly typed scripting language that compiles to native code.",
+    "Tea is a strongly typed scripting language that compiles to native code.",
 };
 
 export default function RootLayout({

@@ -86,9 +86,9 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-16 px-4 py-8 md:px-6 md:py-12">
       <section className="section-band texture-grid surface-feature overflow-hidden px-6 py-8 md:px-10 md:py-10 lg:px-14 lg:py-12">
-        <div className="relative z-10 space-y-8">
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end">
-            <div className="max-w-xl space-y-5">
+        <div className="relative z-10 space-y-6 lg:space-y-8">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(22rem,0.88fr)] lg:items-start">
+            <div className="max-w-xl space-y-5 lg:pt-2">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
                 Tea Documentation
               </p>
@@ -124,38 +124,9 @@ export default function HomePage() {
                   </Link>
                 </Button>
               </div>
-              <Card className="surface-quiet max-w-xl gap-4 rounded-[1.4rem] border-border/70 bg-background/70 p-5 shadow-none backdrop-blur-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-                      Quick install
-                    </p>
-                    <p className="text-sm leading-6 text-muted-foreground">
-                      Prebuilt release with checksum verification. Installs to{" "}
-                      <code>~/.local/bin</code> by default.
-                    </p>
-                  </div>
-                  <Link
-                    href="/docs/install"
-                    className="shrink-0 text-sm font-semibold text-foreground underline decoration-primary/40 underline-offset-4"
-                  >
-                    Full guide
-                  </Link>
-                </div>
-                <pre className="overflow-x-auto rounded-xl bg-foreground px-4 py-3">
-                  <code className="font-mono text-sm text-background">
-                    {installCommand}
-                  </code>
-                </pre>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Keep a host C toolchain available for linking:{" "}
-                  <code>xcode-select --install</code> on macOS, <code>cc</code>{" "}
-                  or <code>clang</code> on Linux.
-                </p>
-              </Card>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 lg:pt-1">
               <CodeHighlighter code={homeSample} language="tea" />
               <div className="font-mono text-sm">
                 <span className="text-muted-foreground">Run it in </span>
@@ -172,10 +143,49 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+
+          <Card className="surface-quiet grid gap-5 rounded-[1.5rem] border-border/70 bg-background/70 p-5 shadow-none backdrop-blur-sm md:p-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center">
+            <div className="space-y-4 lg:pr-8">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                    Quick install
+                  </p>
+                  <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+                    Install, then keep moving.
+                  </h2>
+                </div>
+                <Link
+                  href="/docs/install"
+                  className="shrink-0 pt-1 text-sm font-semibold text-foreground underline decoration-primary/40 underline-offset-4"
+                >
+                  Full guide
+                </Link>
+              </div>
+              <p className="max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
+                The recommended path downloads a prebuilt Tea release with
+                checksum verification and installs it to{" "}
+                <code>~/.local/bin</code> by default.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <pre className="overflow-x-auto rounded-[1.15rem] bg-foreground px-4 py-4 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.08),0_18px_35px_-28px_rgb(32_21_14_/_0.6)]">
+                <code className="font-mono text-sm text-background md:text-[0.95rem]">
+                  {installCommand}
+                </code>
+              </pre>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Tea uses a local C toolchain to build executables: run{" "}
+                <code>xcode-select --install</code> on macOS, or install{" "}
+                <code>clang</code> with your package manager on Linux.
+              </p>
+            </div>
+          </Card>
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {destinations.map((item) => {
           const Icon = item.icon;
           const cardClassName =

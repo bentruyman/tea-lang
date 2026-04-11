@@ -4,6 +4,7 @@
 # Supports encoding/decoding of nested objects, arrays, numbers, booleans, and strings.
 
 use intrinsics = "std.intrinsics"
+use fs = "std.fs"
 
 ## Encode any Tea value to a JSON string.
 ##
@@ -13,7 +14,7 @@ use intrinsics = "std.intrinsics"
 ##   json.encode({"name": "tea", "version": 1})  # => '{"name":"tea","version":1}'
 ##   json.encode([1, 2, 3])                       # => '[1,2,3]'
 ##   json.encode(true)                            # => 'true'
-pub def encode(value) -> String
+pub def encode[T](value: T) -> String
   return intrinsics.json_encode(value)
 end
 
@@ -31,6 +32,16 @@ end
 ##   json.decode('{"name":"tea"}')  # => {"name": "tea"}
 ##   json.decode('[1, 2, 3]')       # => [1, 2, 3]
 ##   json.decode('true')            # => true
-pub def decode(json_str: String)
+pub def decode[T](json_str: String) -> T
   return intrinsics.json_decode(json_str)
+end
+
+## Read a JSON file and decode it.
+pub def read_file[T](file_path: String) -> T
+  decode(fs.read_file(file_path))
+end
+
+## Encode a value as JSON and write it to a file.
+pub def write_file[T](file_path: String, value: T) -> Void
+  fs.write_file(file_path, encode(value))
 end

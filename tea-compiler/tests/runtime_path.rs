@@ -1,8 +1,6 @@
-use std::env;
 use std::path::{Path, PathBuf};
 
-use path_clean::PathClean;
-use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
+mod support;
 
 fn escape(input: &str) -> String {
     input.replace('\\', "\\\\").replace('"', "\\\"")
@@ -12,6 +10,13 @@ fn escape(input: &str) -> String {
 fn path_builtins_roundtrip_through_runtime() -> anyhow::Result<()> {
     let joined = PathBuf::from_iter(["foo", "bar", "baz"]);
     let joined_str = joined.to_string_lossy().to_string();
+    let absolute_base = PathBuf::from("/tmp/tea-path-base");
+    let absolute_expected = absolute_base.join("src");
+    let absolute_expected_str = absolute_expected.to_string_lossy().to_string();
+    let relative_target = absolute_base.join("src").join("main.tea");
+    let relative_expected = PathBuf::from_iter(["src", "main.tea"])
+        .to_string_lossy()
+        .to_string();
 
     let components: Vec<String> = joined
         .components()
@@ -50,44 +55,33 @@ assert.eq(joined, "{joined}")
 
 var parts = path.split(joined)
 assert.eq(@len(parts), {component_count})
-assert.eq(parts[0], "{part0}")
-assert.eq(parts[1], "{part1}")
-assert.eq(parts[2], "{part2}")
 
 assert.eq(path.dirname(joined), "{dirname}")
 assert.eq(path.basename(joined), "{basename}")
 
 assert.eq(path.extension("{with_ext}"), "{extension}")
+assert.eq(path.stem("{with_ext}"), "report")
+assert.eq(path.parent(joined), "{dirname}")
+assert.eq(path.absolute_from("src", "{absolute_base}"), "{absolute_expected}")
+assert.eq(path.relative("{relative_target}", "{absolute_base}"), "{relative_expected}")
+assert.ok(path.is_absolute(path.absolute("src")))
+assert.eq(path.normalize("foo/./bar/../baz"), "foo/baz")
+assert.ok(path.separator() != "")
+@println("ok")
 "#,
         joined = escape(&joined_str),
         component_count = components.len(),
-        part0 = escape(&components[0]),
-        part1 = escape(&components[1]),
-        part2 = escape(&components[2]),
         dirname = escape(&dirname),
         basename = escape(&basename),
         with_ext = escape(&with_ext.to_string_lossy()),
         extension = escape(&extension),
+        absolute_base = escape(&absolute_base.to_string_lossy()),
+        absolute_expected = escape(&absolute_expected_str),
+        relative_target = escape(&relative_target.to_string_lossy()),
+        relative_expected = escape(&relative_expected),
     );
 
-    let mut compiler = Compiler::new(CompileOptions::default());
-    let source_file = SourceFile::new(SourceId(0), PathBuf::from("path.tea"), source);
-    compiler.compile(&source_file)?;
-    assert!(
-        compiler.diagnostics().is_empty(),
-        "expected no diagnostics, found {:?}",
-        compiler.diagnostics()
-    );
-
-    // Full test execution support via AOT is planned for the future
-    assert!(
-        compiler.diagnostics().is_empty(),
-        "expected no diagnostics, found {:?}",
-        compiler.diagnostics()
-    );
-
-    // TODO: Add AOT test execution when implemented
-    // For now, we verify that the code compiles without errors
-
+    let stdout = support::run_script(&source, "path.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
     Ok(())
 }

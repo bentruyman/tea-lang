@@ -164,14 +164,14 @@ tea build script.tea
 
 ### How do I pass arguments to my script?
 
-Access command-line arguments via the environment:
+Access command-line arguments via `@args()` or `std.args`:
 
 ```tea
-use env = "std.env"
+use args = "std.args"
 
-var args = env.args()
-if @len(args) > 1
-  var first_arg = args[1]
+var argv = args.all()
+if @len(argv) > 0
+  var first_arg = argv[0]
   @println(first_arg)
 end
 ```

@@ -2633,7 +2633,7 @@ impl TypeChecker {
             StdFunctionKind::PathComponents => {
                 return_type = Type::List(Box::new(Type::String));
             }
-            StdFunctionKind::FsListDir => {
+            StdFunctionKind::FsListDir | StdFunctionKind::FsWalk | StdFunctionKind::FsGlob => {
                 return_type = Type::List(Box::new(Type::String));
             }
             StdFunctionKind::Args | StdFunctionKind::ArgsAll => {
@@ -2641,6 +2641,12 @@ impl TypeChecker {
             }
             StdFunctionKind::EnvVars => {
                 return_type = Type::Dict(Box::new(Type::String));
+            }
+            StdFunctionKind::CliParse => {
+                return_type = Type::Struct(StructType {
+                    name: "CliParseResult".to_string(),
+                    type_arguments: Vec::new(),
+                });
             }
             _ => {}
         }

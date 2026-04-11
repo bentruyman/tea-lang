@@ -402,6 +402,9 @@ struct LlvmCodeGenerator<'ctx> {
     path_separator_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
     args_program_fn: Option<FunctionValue<'ctx>>,
+    string_index_of_fn: Option<FunctionValue<'ctx>>,
+    string_split_fn: Option<FunctionValue<'ctx>>,
+    string_contains_fn: Option<FunctionValue<'ctx>>,
     string_replace_fn: Option<FunctionValue<'ctx>>,
     string_to_lower_fn: Option<FunctionValue<'ctx>>,
     string_to_upper_fn: Option<FunctionValue<'ctx>>,
@@ -460,6 +463,8 @@ struct LlvmCodeGenerator<'ctx> {
     fs_list_dir_fn: Option<FunctionValue<'ctx>>,
     fs_walk_fn: Option<FunctionValue<'ctx>>,
     fs_glob_fn: Option<FunctionValue<'ctx>>,
+    fs_copy_fn: Option<FunctionValue<'ctx>>,
+    fs_rename_fn: Option<FunctionValue<'ctx>>,
     fs_size_fn: Option<FunctionValue<'ctx>>,
     fs_modified_fn: Option<FunctionValue<'ctx>>,
     fs_permissions_fn: Option<FunctionValue<'ctx>>,
@@ -968,13 +973,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             false,
         );
 
-        // TeaValue = { tag: i32, _padding: i32, payload: i64 }
-        // Explicit padding to ensure consistent C ABI layout (16 bytes total)
+        // TeaValue = { tag: i32, payload: i64 }
+        // LLVM inserts the alignment padding required by the C ABI.
         let value_payload = context.i64_type();
         tea_value.set_body(
             &[
                 context.i32_type().into(), // tag
-                context.i32_type().into(), // explicit padding for alignment
                 value_payload.into(),      // payload (i64)
             ],
             false,
@@ -1112,6 +1116,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_separator_fn: None,
             cli_args_fn: None,
             args_program_fn: None,
+            string_index_of_fn: None,
+            string_split_fn: None,
+            string_contains_fn: None,
             string_replace_fn: None,
             string_to_lower_fn: None,
             string_to_upper_fn: None,
@@ -1170,6 +1177,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             fs_list_dir_fn: None,
             fs_walk_fn: None,
             fs_glob_fn: None,
+            fs_copy_fn: None,
+            fs_rename_fn: None,
             fs_size_fn: None,
             fs_modified_fn: None,
             fs_permissions_fn: None,
@@ -3379,7 +3388,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
                 .into_struct_value();
 
-                let value_expr = self.tea_value_to_expr(dict_value, value_type.clone())?;
+                let value_expr = if matches!(value_type, ValueType::Void | ValueType::Any) {
+                    ExprValue::Any { value: dict_value }
+                } else {
+                    self.tea_value_to_expr(dict_value, value_type.clone())?
+                };
                 let value_basic = value_expr
                     .into_basic_value()
                     .ok_or_else(|| anyhow!("dict value cannot be void"))?;
@@ -4179,13 +4192,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
             let value_expr = self.compile_expression(&entry.value, function, locals)?;
             let value_ty = value_expr.ty();
-            if let Some(existing) = &value_type {
-                if *existing != value_ty {
-                    bail!("dict literal values must share a type");
-                }
-            } else {
-                value_type = Some(value_ty.clone());
-            }
+            value_type = Some(match value_type.take() {
+                Some(existing) if existing == value_ty => existing,
+                Some(ValueType::Any) => ValueType::Any,
+                Some(_) => ValueType::Any,
+                None => value_ty.clone(),
+            });
 
             let tea_value = self.expr_to_tea_value(value_expr)?.into_struct_value();
 
@@ -4333,7 +4345,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         .left()
                         .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
                         .into_struct_value();
-                    self.tea_value_to_expr(tea_value, *value_type)
+                    if matches!(*value_type, ValueType::Void | ValueType::Any) {
+                        Ok(ExprValue::Any { value: tea_value })
+                    } else {
+                        self.tea_value_to_expr(tea_value, *value_type)
+                    }
                 }
                 ExprValue::String(string_ptr) => {
                     let index_value = key_expr.into_int()?;
@@ -4431,22 +4447,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     ))?
                 };
 
-                // Get pointer to payload field within TeaValue (field 2 is payload)
-                // TeaValue: { tag: i32 (field 0), padding: i32 (field 1), payload: i64 (field 2) }
-                let payload_ptr = map_builder_error(self.builder.build_struct_gep(
+                let tea_value = map_builder_error(self.builder.build_load(
                     tea_value_type,
                     field_ptr,
-                    2,
-                    "field_payload_ptr",
-                ))?;
-                let payload = map_builder_error(self.builder.build_load(
-                    self.context.i64_type(),
-                    payload_ptr,
-                    "field_payload",
+                    "field_value",
                 ))?
-                .into_int_value();
+                .into_struct_value();
 
-                self.payload_to_expr(payload, field_type)
+                self.tea_value_to_expr(tea_value, field_type)
             }
             ExprValue::Dict {
                 pointer,
@@ -4468,7 +4476,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     .left()
                     .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
                     .into_struct_value();
-                self.tea_value_to_expr(tea_value, *value_type)
+                if matches!(*value_type, ValueType::Void | ValueType::Any) {
+                    Ok(ExprValue::Any { value: tea_value })
+                } else {
+                    self.tea_value_to_expr(tea_value, *value_type)
+                }
             }
             ExprValue::Error {
                 pointer,
@@ -6060,11 +6072,33 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_math_max_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvGet => self.compile_env_get_call(&call.arguments, function, locals),
+            StdFunctionKind::EnvGetOr => {
+                self.compile_env_get_or_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::EnvHas => self.compile_env_has_call(&call.arguments, function, locals),
+            StdFunctionKind::EnvRequire => {
+                self.compile_env_require_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::EnvSet => self.compile_env_set_call(&call.arguments, function, locals),
+            StdFunctionKind::EnvUnset => {
+                self.compile_env_unset_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::EnvVars => {
                 self.compile_env_vars_call(&call.arguments, function, locals)
             }
             StdFunctionKind::EnvCwd => self.compile_env_cwd_call(&call.arguments, function, locals),
+            StdFunctionKind::EnvSetCwd => {
+                self.compile_env_set_cwd_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::EnvTempDir => {
+                self.compile_env_temp_dir_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::EnvHomeDir => {
+                self.compile_env_home_dir_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::EnvConfigDir => {
+                self.compile_env_config_dir_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::PathJoin => {
                 self.compile_path_join_call(&call.arguments, function, locals)
             }
@@ -6080,6 +6114,19 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::PathExtension => {
                 self.compile_path_extension_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::PathNormalize => {
+                self.compile_path_normalize_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::PathAbsolute => {
+                self.compile_path_absolute_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::PathRelative => {
+                self.compile_path_relative_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::PathIsAbsolute => {
+                self.compile_path_is_absolute_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::PathSeparator => self.compile_path_separator_call(&call.arguments),
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
             }
@@ -6089,12 +6136,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsEnsureDir => {
+                self.compile_fs_ensure_dir_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsRemove => {
                 self.compile_fs_remove_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsExists => {
+                self.compile_fs_exists_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsWalk => self.compile_fs_walk_call(&call.arguments, function, locals),
+            StdFunctionKind::FsGlob => self.compile_fs_glob_call(&call.arguments, function, locals),
+            StdFunctionKind::FsCopy => self.compile_fs_copy_call(&call.arguments, function, locals),
             StdFunctionKind::FsRename => {
                 self.compile_fs_rename_call(&call.arguments, function, locals)
             }
@@ -6124,9 +6180,15 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::ProcessCloseStdin => {
                 self.compile_process_close_stdin_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::ProcessClose => {
+                self.compile_process_close_call(&call.arguments, function, locals)
+            }
             // Args intrinsics
             StdFunctionKind::ArgsAll => self.compile_args_call(),
             StdFunctionKind::ArgsProgram => self.compile_args_program_call(),
+            StdFunctionKind::CliParse => {
+                self.compile_cli_parse_call(&call.arguments, function, locals)
+            }
             // Regex module
             StdFunctionKind::RegexCompile => {
                 self.compile_regex_compile_call(&call.arguments, function, locals)
@@ -6527,29 +6589,119 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn compile_string_index_of_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_index_of is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("string_index_of expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for string_index_of");
+            }
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "string_index_of expects the text to be a String")?;
+        let pattern_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let pattern_ptr = self.expect_string_pointer(
+            pattern_expr,
+            "string_index_of expects the pattern to be a String",
+        )?;
+        let func = self.ensure_string_index_of_fn();
+        let value = self
+            .call_function(
+                func,
+                &[text_ptr.into(), pattern_ptr.into()],
+                "tea_string_index_of",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_index_of returned no value"))?
+            .into_int_value();
+        Ok(ExprValue::Int(value))
     }
 
     fn compile_string_split_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_split is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("string_split expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for string_split");
+            }
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr =
+            self.expect_string_pointer(text_expr, "string_split expects the text to be a String")?;
+        let delimiter_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let delimiter_ptr = self.expect_string_pointer(
+            delimiter_expr,
+            "string_split expects the delimiter to be a String",
+        )?;
+        let func = self.ensure_string_split_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[text_ptr.into(), delimiter_ptr.into()],
+                "tea_string_split",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_split returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::String),
+        })
     }
 
     fn compile_string_contains_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("string_contains is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("string_contains expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for string_contains");
+            }
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self
+            .expect_string_pointer(text_expr, "string_contains expects the text to be a String")?;
+        let pattern_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let pattern_ptr = self.expect_string_pointer(
+            pattern_expr,
+            "string_contains expects the pattern to be a String",
+        )?;
+        let func = self.ensure_string_contains_fn();
+        let value = self
+            .call_function(
+                func,
+                &[text_ptr.into(), pattern_ptr.into()],
+                "tea_string_contains",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_contains returned no value"))?
+            .into_int_value();
+        let bool_value = map_builder_error(self.builder.build_int_compare(
+            inkwell::IntPredicate::NE,
+            value,
+            self.context.i32_type().const_zero(),
+            "string_contains_bool",
+        ))?;
+        Ok(ExprValue::Bool(bool_value))
     }
 
     fn compile_string_replace_call(
@@ -8354,20 +8506,73 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn compile_fs_rename_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("fs_rename is not supported by the LLVM backend yet")
+        if arguments.len() != 2 {
+            bail!("rename expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for rename");
+            }
+        }
+        let source_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let source_ptr = match source_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("rename expects the source argument to be a String"),
+        };
+        let target_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let target_ptr = match target_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("rename expects the target argument to be a String"),
+        };
+        let func = self.ensure_fs_rename_fn();
+        self.call_function(
+            func,
+            &[source_ptr.into(), target_ptr.into()],
+            "tea_fs_rename",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_fs_copy_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("copy expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for copy");
+            }
+        }
+        let source_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let source_ptr = match source_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("copy expects the source argument to be a String"),
+        };
+        let target_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let target_ptr = match target_expr {
+            ExprValue::String(ptr) => ptr,
+            _ => bail!("copy expects the target argument to be a String"),
+        };
+        let func = self.ensure_fs_copy_fn();
+        self.call_function(func, &[source_ptr.into(), target_ptr.into()], "tea_fs_copy")?;
+        Ok(ExprValue::Void)
     }
 
     fn compile_fs_stat_call(
         &mut self,
-        _arguments: &[crate::ast::CallArgument],
-        _function: FunctionValue<'ctx>,
-        _locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        bail!("fs_stat is not supported by the LLVM backend yet")
+        self.compile_fs_metadata_call(arguments, function, locals)
     }
 
     fn compile_fs_glob_call(
@@ -11387,8 +11592,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
     fn expr_to_tea_value(&mut self, value: ExprValue<'ctx>) -> Result<BasicValueEnum<'ctx>> {
         // Inline construction of TeaValue to avoid ABI issues with struct returns.
-        // TeaValue is { tag: i32, padding: i32, payload: i64 } - 16 bytes total
-        // Explicit padding ensures consistent layout with Rust #[repr(C)] struct
+        // TeaValue is { tag: i32, payload: i64 } - 16 bytes total with ABI padding.
         // Tags: Int=0, Float=1, Bool=2, String=3, List=4, Dict=5, Struct=6, Error=7, Closure=8, Nil=9
         let tea_value_type = self
             .module
@@ -11529,13 +11733,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 // Tag = 9 (Nil), payload = 0
                 // Use const_named_struct for compile-time constant (more efficient)
                 let tag = self.context.i32_type().const_int(9, false);
-                let padding = self.context.i32_type().const_zero();
                 let payload = self.context.i64_type().const_zero();
-                let struct_val = tea_value_type.const_named_struct(&[
-                    tag.into(),
-                    padding.into(),
-                    payload.into(),
-                ]);
+                let struct_val = tea_value_type.const_named_struct(&[tag.into(), payload.into()]);
                 Ok(struct_val.into())
             }
             ExprValue::Optional { value, .. } => Ok(value.into()),
@@ -11563,6 +11762,16 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         value: ExprValue<'ctx>,
         target: &ValueType,
     ) -> Result<ExprValue<'ctx>> {
+        let value = match value {
+            ExprValue::Any { value: tea_value } => {
+                if *target == ValueType::Any {
+                    return Ok(ExprValue::Any { value: tea_value });
+                }
+                return self.tea_value_to_expr(tea_value, target.clone());
+            }
+            other => other,
+        };
+
         match target {
             ValueType::List(target_inner) => match value {
                 ExprValue::List {
@@ -12164,10 +12373,13 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         if ty == ValueType::Void {
             return Ok(ExprValue::Void);
         }
+        if ty == ValueType::Any {
+            return Ok(ExprValue::Any { value });
+        }
 
-        // Extract payload directly using extractvalue instruction
-        // TeaValue is { tag: i32, padding: i32, payload: i64 } - payload is at index 2
-        let payload = map_builder_error(self.builder.build_extract_value(value, 2, "payload"))?
+        // Extract payload directly using extractvalue instruction.
+        // TeaValue is { tag: i32, payload: i64 } - payload is at index 1.
+        let payload = map_builder_error(self.builder.build_extract_value(value, 1, "payload"))?
             .into_int_value();
 
         self.payload_to_expr(payload, ty)
@@ -13240,6 +13452,32 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_fs_copy_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_copy_fn {
+            return func;
+        }
+        let param_types = [self.string_ptr_type().into(), self.string_ptr_type().into()];
+        let fn_type = self.context.void_type().fn_type(&param_types, false);
+        let func = self
+            .module
+            .add_function("tea_fs_copy", fn_type, Some(Linkage::External));
+        self.fs_copy_fn = Some(func);
+        func
+    }
+
+    fn ensure_fs_rename_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_rename_fn {
+            return func;
+        }
+        let param_types = [self.string_ptr_type().into(), self.string_ptr_type().into()];
+        let fn_type = self.context.void_type().fn_type(&param_types, false);
+        let func = self
+            .module
+            .add_function("tea_fs_rename", fn_type, Some(Linkage::External));
+        self.fs_rename_fn = Some(func);
+        func
+    }
+
     fn ensure_fs_open_read_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.fs_open_read_fn {
             return func;
@@ -13438,6 +13676,51 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_string_index", fn_type, Some(Linkage::External));
         self.string_index_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_index_of_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_index_of_fn {
+            return func;
+        }
+        let fn_type = self.int_type().fn_type(
+            &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_index_of", fn_type, Some(Linkage::External));
+        self.string_index_of_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_split_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_split_fn {
+            return func;
+        }
+        let fn_type = self.list_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_string_split", fn_type, Some(Linkage::External));
+        self.string_split_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_contains_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_contains_fn {
+            return func;
+        }
+        let fn_type = self.context.i32_type().fn_type(
+            &[self.string_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_contains", fn_type, Some(Linkage::External));
+        self.string_contains_fn = Some(func);
         func
     }
 

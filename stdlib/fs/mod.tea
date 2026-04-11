@@ -3,6 +3,19 @@
 # This module provides a Tea-native interface to filesystem operations,
 # delegating to low-level intrinsics and providing higher-level helpers.
 use intrinsics = "std.intrinsics"
+use string = "std.string"
+
+struct FileMetadata {
+  path: String
+  is_dir: Bool
+  is_file: Bool
+  is_symlink: Bool
+  readonly: Bool
+  size: Int
+  permissions: Int
+  modified: Int?
+  parent: String?
+}
 
 ## Read a text file.
 ##
@@ -28,6 +41,16 @@ pub def create_dir(dir_path: String) -> Void
   intrinsics.fs_create_dir(dir_path)
 end
 
+## Create a directory and any missing parent directories.
+pub def ensure_dir(dir_path: String) -> Void
+  intrinsics.fs_ensure_dir(dir_path)
+end
+
+## Alias for ensure_dir().
+pub def mkdir_p(dir_path: String) -> Void
+  ensure_dir(dir_path)
+end
+
 ## Remove a file or directory.
 ##
 ## Examples:
@@ -36,10 +59,77 @@ pub def remove(file_path: String) -> Void
   intrinsics.fs_remove(file_path)
 end
 
+## Return true when a path exists.
+pub def exists(file_path: String) -> Bool
+  intrinsics.fs_exists(file_path)
+end
+
 ## List all entries in a directory.
 ##
 ## Examples:
 ##   var entries = fs.read_dir(".")
+##
+## Returns full paths sorted lexicographically.
 pub def read_dir(dir_path: String) -> List[String]
   intrinsics.fs_list_dir(dir_path)
+end
+
+## Recursively walk a directory and return full entry paths.
+pub def walk(dir_path: String) -> List[String]
+  intrinsics.fs_walk(dir_path)
+end
+
+## Return filesystem entries that match a glob pattern.
+pub def glob(pattern: String) -> List[String]
+  intrinsics.fs_glob(pattern)
+end
+
+## Copy a file to a new location.
+pub def copy(source_path: String, target_path: String) -> Void
+  intrinsics.fs_copy(source_path, target_path)
+end
+
+## Rename or move a file or directory.
+pub def rename(source_path: String, target_path: String) -> Void
+  intrinsics.fs_rename(source_path, target_path)
+end
+
+## Get metadata information for a file or directory.
+pub def metadata(file_path: String) -> FileMetadata
+  const raw = intrinsics.fs_stat(file_path)
+  FileMetadata(
+    path: raw["path"],
+    is_dir: raw["is_dir"],
+    is_file: raw["is_file"],
+    is_symlink: raw["is_symlink"],
+    readonly: raw["readonly"],
+    size: raw["size"],
+    permissions: raw["permissions"],
+    modified: raw["modified"],
+    parent: raw["parent"]
+  )
+end
+
+## Alias for metadata().
+pub def stat(file_path: String) -> FileMetadata
+  metadata(file_path)
+end
+
+## Read a text file and split it into lines.
+pub def read_lines(file_path: String) -> List[String]
+  string.lines(read_file(file_path))
+end
+
+## Write a list of lines to a file, joining them with "\n".
+pub def write_lines(file_path: String, lines: List[String]) -> Void
+  write_file(file_path, string.join(lines, "\n"))
+end
+
+## Append text to a file, creating it when it does not exist.
+pub def append_file(file_path: String, content: String) -> Void
+  if exists(file_path)
+    write_file(file_path, read_file(file_path) + content)
+  else
+    write_file(file_path, content)
+  end
 end

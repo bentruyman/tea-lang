@@ -6,6 +6,23 @@
 
 use intrinsics = "std.intrinsics"
 
+## Find the first occurrence of a substring.
+##
+## Returns -1 when the substring is not present.
+pub def index_of(text: String, pattern: String) -> Int
+  intrinsics.string_index_of(text, pattern)
+end
+
+## Return true when the string contains a substring.
+pub def contains(text: String, pattern: String) -> Bool
+  intrinsics.string_contains(text, pattern)
+end
+
+## Split a string by a delimiter.
+pub def split(text: String, delimiter: String) -> List[String]
+  intrinsics.string_split(text, delimiter)
+end
+
 ## Check if a string starts with a given prefix.
 ##
 ## Examples:
@@ -147,4 +164,64 @@ end
 ##   string.to_upper("tea")  # => "TEA"
 pub def to_upper(text: String) -> String
   intrinsics.string_to_upper(text)
+end
+
+## Join a list of strings with a separator.
+pub def join(parts: List[String], separator: String) -> String
+  if @len(parts) == 0
+    return ""
+  end
+
+  var result = parts[0]
+  var i = 1
+
+  while i < @len(parts)
+    result = result + separator + parts[i]
+    i = i + 1
+  end
+
+  result
+end
+
+## Split text into lines, trimming a trailing "\r" from each line and
+## dropping the final empty line produced by a trailing newline.
+pub def lines(text: String) -> List[String]
+  var result: List[String] = []
+
+  if @len(text) == 0
+    return result
+  end
+
+  const raw = split(text, "\n")
+  var i = 0
+
+  while i < @len(raw)
+    var line = raw[i]
+
+    if ends_with(line, "\r")
+      line = line[0...(@len(line) - 1)]
+    end
+
+    if i == @len(raw) - 1 && @len(line) == 0
+      return result
+    end
+
+    @append(result, line)
+    i = i + 1
+  end
+
+  result
+end
+
+## Repeat a string count times.
+pub def repeat(text: String, count: Int) -> String
+  var result = ""
+  var i = 0
+
+  while i < count
+    result = result + text
+    i = i + 1
+  end
+
+  result
 end

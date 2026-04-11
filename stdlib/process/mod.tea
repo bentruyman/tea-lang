@@ -10,6 +10,7 @@
 #   - stderr: String (captured standard error)
 #   - command: String (the command that was executed)
 use intrinsics = "std.intrinsics"
+use string = "std.string"
 
 ## Run a command synchronously and wait for it to complete.
 ##
@@ -115,4 +116,38 @@ end
 ##   const result = process.wait(handle)
 pub def close_stdin(handle: Int) -> Void
   intrinsics.process_close_stdin(handle)
+end
+
+## Close a spawned process handle without waiting for it.
+pub def close(handle: Int) -> Void
+  intrinsics.process_close(handle)
+end
+
+## Require a process result to have exited successfully.
+pub def check(result: ProcessResult) -> ProcessResult
+  if ! result.success
+    @panic(`command failed (${result.exit}): ${result.command}\n${result.stderr}`)
+  end
+
+  result
+end
+
+## Run a command and fail when it exits with a non-zero status.
+pub def run_checked(command: String, args: List[String]) -> ProcessResult
+  check(run(command, args))
+end
+
+## Run a command with full options and fail when it exits with a non-zero status.
+pub def run_checked_with_options(command: String, args: List[String], env: Dict[String, String], cwd: String, stdin: String) -> ProcessResult
+  check(run_with_options(command, args, env, cwd, stdin))
+end
+
+## Split captured stdout into lines.
+pub def stdout_lines(result: ProcessResult) -> List[String]
+  string.lines(result.stdout)
+end
+
+## Split captured stderr into lines.
+pub def stderr_lines(result: ProcessResult) -> List[String]
+  string.lines(result.stderr)
 end

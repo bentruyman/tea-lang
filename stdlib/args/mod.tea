@@ -46,6 +46,16 @@ pub def program() -> String
   intrinsics.args_program()
 end
 
+## Parse command-line arguments using a declarative command spec.
+pub def parse[T](spec: T) -> CliParseResult
+  intrinsics.cli_parse(spec)
+end
+
+## Parse an explicit argv list using a declarative command spec.
+pub def parse_with[T](spec: T, argv: List[String]) -> CliParseResult
+  intrinsics.cli_parse(spec, argv)
+end
+
 ## Check if a flag is present in the arguments.
 ##
 ## Searches for an exact match of the flag string in the argument list.

@@ -120,10 +120,38 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
+        "env_get_or",
+        StdFunctionKind::EnvGetOr,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "env_has",
+        StdFunctionKind::EnvHas,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
+        "env_require",
+        StdFunctionKind::EnvRequire,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
         "env_set",
         StdFunctionKind::EnvSet,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "env_unset",
+        StdFunctionKind::EnvUnset,
+        StdArity::Exact(1),
+        &[StdType::String],
         StdType::Void,
     ),
     std_function(
@@ -136,6 +164,34 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "env_cwd",
         StdFunctionKind::EnvCwd,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "env_set_cwd",
+        StdFunctionKind::EnvSetCwd,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "env_temp_dir",
+        StdFunctionKind::EnvTempDir,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "env_home_dir",
+        StdFunctionKind::EnvHomeDir,
+        StdArity::Exact(0),
+        &[],
+        StdType::String,
+    ),
+    std_function(
+        "env_config_dir",
+        StdFunctionKind::EnvConfigDir,
         StdArity::Exact(0),
         &[],
         StdType::String,
@@ -158,6 +214,16 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "fs_create_dir",
         StdFunctionKind::FsCreateDir,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::String, StdType::Bool],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_ensure_dir",
+        StdFunctionKind::FsEnsureDir,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::Void,
@@ -170,11 +236,39 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "fs_exists",
+        StdFunctionKind::FsExists,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
         "fs_list_dir",
         StdFunctionKind::FsListDir,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::List,
+    ),
+    std_function(
+        "fs_walk",
+        StdFunctionKind::FsWalk,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::List,
+    ),
+    std_function(
+        "fs_glob",
+        StdFunctionKind::FsGlob,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::List,
+    ),
+    std_function(
+        "fs_copy",
+        StdFunctionKind::FsCopy,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Void,
     ),
     std_function(
         "fs_rename",
@@ -188,7 +282,7 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::FsStat,
         StdArity::Exact(1),
         &[StdType::String],
-        StdType::Struct,
+        StdType::Dict,
     ),
     // Path
     std_function(
@@ -224,6 +318,44 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::PathExtension,
         StdArity::Exact(1),
         &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "path_normalize",
+        StdFunctionKind::PathNormalize,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "path_absolute",
+        StdFunctionKind::PathAbsolute,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::String, StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "path_relative",
+        StdFunctionKind::PathRelative,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "path_is_absolute",
+        StdFunctionKind::PathIsAbsolute,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
+        "path_separator",
+        StdFunctionKind::PathSeparator,
+        StdArity::Exact(0),
+        &[],
         StdType::String,
     ),
     // Process execution
@@ -306,6 +438,13 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::Int],
         StdType::Void,
     ),
+    std_function(
+        "process_close",
+        StdFunctionKind::ProcessClose,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Void,
+    ),
     // Args intrinsics
     std_function(
         "args_all",
@@ -320,6 +459,16 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(0),
         &[],
         StdType::String,
+    ),
+    std_function(
+        "cli_parse",
+        StdFunctionKind::CliParse,
+        StdArity::Range {
+            min: 1,
+            max: Some(2),
+        },
+        &[StdType::Any, StdType::List],
+        StdType::Struct,
     ),
     // Regex intrinsics
     std_function(

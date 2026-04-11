@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpenText,
   Boxes,
+  Download,
   Sparkles,
   Terminal,
 } from "lucide-react";
@@ -31,15 +32,17 @@ end
 @println(string.to_upper(user.name))
 @println(total)`;
 
+const installCommand = "curl -fsSL https://tea-lang.dev/install | bash";
+
 const destinations = [
   {
-    title: "Docs",
+    title: "Get Started",
     summary:
-      "Install Tea, learn the language, and understand how to run, build, test, and organize Tea programs.",
-    href: "/docs/getting-started",
+      "Install Tea locally, verify the CLI, and follow the first-run path from script to binary.",
+    href: "/docs/install",
     icon: BookOpenText,
     tone: "feature" as const,
-    kicker: "Practical onboarding",
+    kicker: "Install locally",
   },
   {
     title: "Reference",
@@ -94,19 +97,62 @@ export default function HomePage() {
               </h1>
               <p className="max-w-lg text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
                 A strongly typed scripting language with familiar syntax and
-                native compilation. Start with the browser runner, explore the
-                standard library, and work through runnable examples.
+                native compilation. Install the CLI, run a real script locally,
+                then use the playground, reference docs, and runnable examples
+                when you need them.
               </p>
-              <Button
-                size="lg"
-                className="rounded-full px-6 font-semibold shadow-sm"
-                asChild
-              >
-                <Link href="/playground">
-                  Open playground
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  size="lg"
+                  className="rounded-full px-6 font-semibold shadow-sm"
+                  asChild
+                >
+                  <Link href="/docs/install">
+                    Install Tea
+                    <Download className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="surface-quiet rounded-full border-border/70 px-6 font-semibold shadow-none hover:border-primary/25 hover:bg-background/80"
+                  asChild
+                >
+                  <Link href="/playground">
+                    Open playground
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+              <Card className="surface-quiet max-w-xl gap-4 rounded-[1.4rem] border-border/70 bg-background/70 p-5 shadow-none backdrop-blur-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                      Quick install
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Prebuilt release with checksum verification. Installs to{" "}
+                      <code>~/.local/bin</code> by default.
+                    </p>
+                  </div>
+                  <Link
+                    href="/docs/install"
+                    className="shrink-0 text-sm font-semibold text-foreground underline decoration-primary/40 underline-offset-4"
+                  >
+                    Full guide
+                  </Link>
+                </div>
+                <pre className="overflow-x-auto rounded-xl bg-foreground px-4 py-3">
+                  <code className="font-mono text-sm text-background">
+                    {installCommand}
+                  </code>
+                </pre>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Keep a host C toolchain available for linking:{" "}
+                  <code>xcode-select --install</code> on macOS, <code>cc</code>{" "}
+                  or <code>clang</code> on Linux.
+                </p>
+              </Card>
             </div>
 
             <div className="space-y-3">

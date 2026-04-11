@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tea_compiler::{
     CatchKind, CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
-    InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module, ModuleAliasBinding, SourceFile,
-    SourceId, Statement, TokenKind,
+    Expression, ExpressionKind, InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module,
+    ModuleAliasBinding, SourceFile, SourceId, Statement, TokenKind,
 };
 use tokio::{
     sync::Mutex,
@@ -33,13 +33,10 @@ macro_rules! range_from_span {
         let start_line = span.line.saturating_sub(1) as u32;
         let start_col = span.column.saturating_sub(1) as u32;
         let mut end_line = span.end_line.saturating_sub(1) as u32;
-        let mut end_col = span.end_column.saturating_sub(1) as u32;
+        let mut end_col = span.end_column as u32;
 
         if end_line < start_line || (end_line == start_line && end_col < start_col) {
             end_line = start_line;
-            end_col = start_col;
-        }
-        if end_line == start_line && end_col == start_col {
             end_col = end_col.saturating_add(1);
         }
 
@@ -88,6 +85,7 @@ impl Default for ServerState {
 
 #[derive(Debug, Clone, Default)]
 struct DocumentAnalysis {
+    module: Module,
     symbols: Vec<SymbolInfo>,
     module_aliases: HashMap<String, tea_compiler::ModuleAliasBinding>,
     argument_expectations: Vec<ArgumentExpectation>,
@@ -814,6 +812,70 @@ var counter = 10
         let counter_occurrences = find_identifier_occurrences(text, "counter");
         assert_eq!(counter_occurrences.len(), 1);
     }
+
+    #[test]
+    fn scoped_rename_target_limits_parameter_occurrences_to_its_function() {
+        let compilation = compile_source(
+            r#"
+def foo(a: Int) -> Int
+  return a + 5
+end
+
+def bar(a: Int) -> Int
+  return a * 5
+end
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let target = scoped_rename_target(
+            &analysis.module,
+            &Position {
+                line: 1,
+                character: 8,
+            },
+        )
+        .expect("rename target to exist");
+
+        assert_eq!(target.name, "a");
+        assert_eq!(target.kind, SymbolKind::Parameter);
+        assert_eq!(target.occurrences.len(), 2);
+        assert_eq!(target.occurrences[0].start.line, 1);
+        assert_eq!(target.occurrences[0].start.character, 8);
+        assert_eq!(target.occurrences[1].start.line, 2);
+        assert_eq!(target.occurrences[1].start.character, 9);
+    }
+
+    #[test]
+    fn scoped_rename_target_resolves_parameter_from_use_site() {
+        let compilation = compile_source(
+            r#"
+def foo(a: Int) -> Int
+  return a + 5
+end
+
+def bar(a: Int) -> Int
+  return a * 5
+end
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+        let target = scoped_rename_target(
+            &analysis.module,
+            &Position {
+                line: 2,
+                character: 9,
+            },
+        )
+        .expect("rename target to exist");
+
+        assert_eq!(target.name, "a");
+        assert_eq!(target.kind, SymbolKind::Parameter);
+        assert_eq!(target.occurrences.len(), 2);
+        assert!(target.occurrences.iter().all(|range| range.start.line < 4));
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -918,6 +980,14 @@ struct ImportPathCandidate {
     path: String,
     detail: String,
     documentation: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ScopedRenameTarget {
+    name: String,
+    kind: SymbolKind,
+    declaration_range: Range,
+    occurrences: Vec<Range>,
 }
 
 fn merge_document_analysis(
@@ -1902,6 +1972,7 @@ fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -
         .collect();
 
     DocumentAnalysis {
+        module: module.clone(),
         symbols,
         module_aliases: alias_bindings,
         argument_expectations,
@@ -2517,18 +2588,13 @@ impl LanguageServer for TeaLanguageServer {
             return Ok(None);
         };
 
-        let symbol = symbol_at_position(analysis, &position).or_else(|| {
-            identifier_at_position(&doc.text, &position)
-                .and_then(|name| symbol_by_name(analysis, &name))
-        });
-
-        let Some(symbol) = symbol else {
+        let Some(target) = identifier_target_at_position(analysis, &doc.text, &position) else {
             return Ok(None);
         };
 
         Ok(Some(GotoDefinitionResponse::Scalar(Location {
             uri,
-            range: symbol.range.clone(),
+            range: target.declaration_range,
         })))
     }
 
@@ -2556,19 +2622,11 @@ impl LanguageServer for TeaLanguageServer {
             return Ok(None);
         };
 
-        // Find the symbol at the cursor position
-        let symbol = symbol_at_position(analysis, &position).or_else(|| {
-            identifier_at_position(&doc.text, &position)
-                .and_then(|name| symbol_by_name(analysis, &name))
-        });
-
-        let Some(symbol) = symbol else {
+        let Some(target) = identifier_target_at_position(analysis, &doc.text, &position) else {
             return Ok(None);
         };
 
-        // Check if this symbol can be renamed (exclude module aliases for now as they have
-        // complex cross-file implications with external modules)
-        match symbol.kind {
+        match target.kind {
             SymbolKind::Variable
             | SymbolKind::Const
             | SymbolKind::Parameter
@@ -2582,7 +2640,7 @@ impl LanguageServer for TeaLanguageServer {
             }
         }
 
-        Ok(Some(PrepareRenameResponse::Range(symbol.range.clone())))
+        Ok(Some(PrepareRenameResponse::Range(target.current_range)))
     }
 
     async fn rename(&self, params: RenameParams) -> jsonrpc::Result<Option<WorkspaceEdit>> {
@@ -2620,21 +2678,25 @@ impl LanguageServer for TeaLanguageServer {
             return Ok(None);
         };
 
-        // Find the symbol at the cursor position
-        let symbol = symbol_at_position(analysis, &position).or_else(|| {
-            identifier_at_position(&doc.text, &position)
-                .and_then(|name| symbol_by_name(analysis, &name))
-        });
-
-        let Some(symbol) = symbol else {
+        let Some(target) = identifier_target_at_position(analysis, &doc.text, &position) else {
             return Ok(None);
         };
 
-        let old_name = symbol.name.clone();
-        let symbol_kind = symbol.kind;
-
-        // Find all occurrences in the current file
-        let occurrences = find_identifier_occurrences(&doc.text, &old_name);
+        let old_name = target.name.clone();
+        let symbol_kind = target.kind;
+        let occurrences = if uses_scoped_rename_occurrences(symbol_kind) {
+            let scoped = target
+                .scoped_occurrences
+                .clone()
+                .unwrap_or_else(|| find_identifier_occurrences(&doc.text, &old_name));
+            if symbol_kind == SymbolKind::ModuleAlias {
+                merge_ranges(scoped, find_member_object_occurrences(&doc.text, &old_name))
+            } else {
+                scoped
+            }
+        } else {
+            find_identifier_occurrences(&doc.text, &old_name)
+        };
 
         // Create text edits for this file
         let edits: Vec<TextEdit> = occurrences
@@ -2955,7 +3017,7 @@ fn format_std_type(ty: &tea_compiler::StdType) -> &'static str {
     }
 }
 
-fn identifier_at_position(text: &str, position: &Position) -> Option<String> {
+fn identifier_range_at_position(text: &str, position: &Position) -> Option<Range> {
     let offset = position_to_offset(text, position)?;
     let (line_start, line_end) = {
         let start = text[..offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
@@ -2994,9 +3056,23 @@ fn identifier_at_position(text: &str, position: &Position) -> Option<String> {
         end += 1;
     }
 
-    std::str::from_utf8(&bytes[start..end])
-        .ok()
-        .map(|s| s.to_string())
+    Some(Range {
+        start: Position {
+            line: position.line,
+            character: start as u32,
+        },
+        end: Position {
+            line: position.line,
+            character: end as u32,
+        },
+    })
+}
+
+fn identifier_at_position(text: &str, position: &Position) -> Option<String> {
+    let range = identifier_range_at_position(text, position)?;
+    let start = position_to_offset(text, &range.start)?;
+    let end = position_to_offset(text, &range.end)?;
+    Some(text[start..end].to_string())
 }
 
 fn is_identifier_byte(b: u8) -> bool {
@@ -3010,6 +3086,419 @@ fn is_identifier_byte(b: u8) -> bool {
 
 fn is_identifier_char(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
+}
+
+#[derive(Debug, Clone)]
+struct ScopedRenameBinding {
+    name: String,
+    kind: SymbolKind,
+    declaration_range: Range,
+}
+
+struct ScopedRenameCollector<'a> {
+    position: &'a Position,
+    scopes: Vec<HashMap<String, tea_compiler::SourceSpan>>,
+    bindings: HashMap<tea_compiler::SourceSpan, ScopedRenameBinding>,
+    occurrences: HashMap<tea_compiler::SourceSpan, Vec<Range>>,
+    target: Option<tea_compiler::SourceSpan>,
+}
+
+impl<'a> ScopedRenameCollector<'a> {
+    fn new(position: &'a Position) -> Self {
+        Self {
+            position,
+            scopes: vec![HashMap::new()],
+            bindings: HashMap::new(),
+            occurrences: HashMap::new(),
+            target: None,
+        }
+    }
+
+    fn collect(mut self, module: &Module) -> Option<ScopedRenameTarget> {
+        self.visit_statements(&module.statements);
+        let binding_id = self.target?;
+        let binding = self.bindings.remove(&binding_id)?;
+        let occurrences = self
+            .occurrences
+            .remove(&binding_id)
+            .unwrap_or_else(|| vec![binding.declaration_range.clone()]);
+
+        Some(ScopedRenameTarget {
+            name: binding.name,
+            kind: binding.kind,
+            declaration_range: binding.declaration_range,
+            occurrences,
+        })
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        if self.scopes.len() > 1 {
+            self.scopes.pop();
+        }
+    }
+
+    fn declare_binding(&mut self, name: &str, span: tea_compiler::SourceSpan, kind: SymbolKind) {
+        let range = range_from_span!(&span);
+        self.bindings.insert(
+            span,
+            ScopedRenameBinding {
+                name: name.to_string(),
+                kind,
+                declaration_range: range.clone(),
+            },
+        );
+        self.occurrences
+            .entry(span)
+            .or_default()
+            .push(range.clone());
+        if range_contains(&range, self.position) {
+            self.target = Some(span);
+        }
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name.to_string(), span);
+        }
+    }
+
+    fn resolve_identifier(&mut self, identifier: &tea_compiler::Identifier) {
+        let range = range_from_span!(&identifier.span);
+        let Some(binding_id) = self.lookup(&identifier.name) else {
+            return;
+        };
+        self.occurrences
+            .entry(binding_id)
+            .or_default()
+            .push(range.clone());
+        if range_contains(&range, self.position) {
+            self.target = Some(binding_id);
+        }
+    }
+
+    fn lookup(&self, name: &str) -> Option<tea_compiler::SourceSpan> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+    }
+
+    fn visit_statements(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            self.visit_statement(statement);
+        }
+    }
+
+    fn visit_statement(&mut self, statement: &Statement) {
+        match statement {
+            Statement::Use(use_stmt) => self.declare_binding(
+                &use_stmt.alias.name,
+                use_stmt.alias.span,
+                SymbolKind::ModuleAlias,
+            ),
+            Statement::Var(var_stmt) => {
+                let kind = if var_stmt.is_const {
+                    SymbolKind::Const
+                } else {
+                    SymbolKind::Variable
+                };
+                for binding in &var_stmt.bindings {
+                    self.declare_binding(&binding.name, binding.span, kind);
+                }
+                for binding in &var_stmt.bindings {
+                    if let Some(initializer) = &binding.initializer {
+                        self.visit_expression(initializer);
+                    }
+                }
+            }
+            Statement::Function(function_stmt) => {
+                self.declare_binding(
+                    &function_stmt.name,
+                    function_stmt.name_span,
+                    SymbolKind::Function,
+                );
+                self.push_scope();
+                for parameter in &function_stmt.parameters {
+                    self.declare_binding(&parameter.name, parameter.span, SymbolKind::Parameter);
+                    if let Some(default_value) = &parameter.default_value {
+                        self.visit_expression(default_value);
+                    }
+                }
+                self.visit_statements(&function_stmt.body.statements);
+                self.pop_scope();
+            }
+            Statement::Test(test_stmt) => {
+                self.push_scope();
+                self.visit_statements(&test_stmt.body.statements);
+                self.pop_scope();
+            }
+            Statement::Struct(struct_stmt) => {
+                self.declare_binding(&struct_stmt.name, struct_stmt.name_span, SymbolKind::Struct);
+            }
+            Statement::Union(union_stmt) => {
+                self.declare_binding(&union_stmt.name, union_stmt.name_span, SymbolKind::Struct);
+            }
+            Statement::Enum(enum_stmt) => {
+                self.declare_binding(&enum_stmt.name, enum_stmt.name_span, SymbolKind::Enum);
+            }
+            Statement::Error(_) => {}
+            Statement::Conditional(cond_stmt) => {
+                self.visit_expression(&cond_stmt.condition);
+                self.visit_scoped_block(&cond_stmt.consequent);
+                if let Some(alternative) = &cond_stmt.alternative {
+                    self.visit_scoped_block(alternative);
+                }
+            }
+            Statement::Loop(loop_stmt) => match &loop_stmt.header {
+                tea_compiler::LoopHeader::For { pattern, iterator } => {
+                    self.visit_expression(iterator);
+                    self.push_scope();
+                    match pattern {
+                        tea_compiler::ForPattern::Single(ident) => {
+                            self.declare_binding(&ident.name, ident.span, SymbolKind::Variable);
+                        }
+                        tea_compiler::ForPattern::Pair(key_ident, value_ident) => {
+                            self.declare_binding(
+                                &key_ident.name,
+                                key_ident.span,
+                                SymbolKind::Variable,
+                            );
+                            self.declare_binding(
+                                &value_ident.name,
+                                value_ident.span,
+                                SymbolKind::Variable,
+                            );
+                        }
+                    }
+                    self.visit_scoped_block(&loop_stmt.body);
+                    self.pop_scope();
+                }
+                tea_compiler::LoopHeader::Condition(condition) => {
+                    self.visit_expression(condition);
+                    self.visit_scoped_block(&loop_stmt.body);
+                }
+            },
+            Statement::Break(_) | Statement::Continue(_) => {}
+            Statement::Throw(throw_stmt) => self.visit_expression(&throw_stmt.expression),
+            Statement::Return(return_stmt) => {
+                if let Some(expression) = &return_stmt.expression {
+                    self.visit_expression(expression);
+                }
+            }
+            Statement::Match(match_stmt) => {
+                self.visit_expression(&match_stmt.scrutinee);
+                for arm in &match_stmt.arms {
+                    for pattern in &arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.visit_expression(pattern_expr);
+                        }
+                    }
+                    self.visit_statements(&arm.block.statements);
+                }
+            }
+            Statement::Expression(expr_stmt) => self.visit_expression(&expr_stmt.expression),
+        }
+    }
+
+    fn visit_scoped_block(&mut self, block: &tea_compiler::Block) {
+        self.push_scope();
+        self.visit_statements(&block.statements);
+        self.pop_scope();
+    }
+
+    fn visit_expression(&mut self, expression: &Expression) {
+        match &expression.kind {
+            ExpressionKind::Identifier(identifier) => self.resolve_identifier(identifier),
+            ExpressionKind::Literal(_) => {}
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        self.visit_expression(expr);
+                    }
+                }
+            }
+            ExpressionKind::List(list) => {
+                for element in &list.elements {
+                    self.visit_expression(element);
+                }
+            }
+            ExpressionKind::Dict(dict) => {
+                for entry in &dict.entries {
+                    self.visit_expression(&entry.value);
+                }
+            }
+            ExpressionKind::Unary(unary) => self.visit_expression(&unary.operand),
+            ExpressionKind::Binary(binary) => {
+                self.visit_expression(&binary.left);
+                self.visit_expression(&binary.right);
+            }
+            ExpressionKind::Is(is_expr) => self.visit_expression(&is_expr.value),
+            ExpressionKind::Call(call) => {
+                self.visit_expression(&call.callee);
+                for argument in &call.arguments {
+                    self.visit_expression(&argument.expression);
+                }
+            }
+            ExpressionKind::Member(member) => self.visit_expression(&member.object),
+            ExpressionKind::Index(index) => {
+                self.visit_expression(&index.object);
+                self.visit_expression(&index.index);
+            }
+            ExpressionKind::Range(range) => {
+                self.visit_expression(&range.start);
+                self.visit_expression(&range.end);
+            }
+            ExpressionKind::Lambda(lambda) => {
+                self.push_scope();
+                for parameter in &lambda.parameters {
+                    self.declare_binding(&parameter.name, parameter.span, SymbolKind::Parameter);
+                    if let Some(default_value) = &parameter.default_value {
+                        self.visit_expression(default_value);
+                    }
+                }
+                match &lambda.body {
+                    tea_compiler::LambdaBody::Expression(expr) => self.visit_expression(expr),
+                    tea_compiler::LambdaBody::Block(block) => {
+                        self.visit_statements(&block.statements)
+                    }
+                }
+                self.pop_scope();
+            }
+            ExpressionKind::Assignment(assignment) => {
+                self.visit_expression(&assignment.target);
+                self.visit_expression(&assignment.value);
+            }
+            ExpressionKind::Match(match_expr) => {
+                self.visit_expression(&match_expr.scrutinee);
+                for arm in &match_expr.arms {
+                    for pattern in &arm.patterns {
+                        if let MatchPattern::Expression(pattern_expr) = pattern {
+                            self.visit_expression(pattern_expr);
+                        }
+                    }
+                    self.visit_expression(&arm.expression);
+                }
+            }
+            ExpressionKind::Conditional(cond) => {
+                self.visit_expression(&cond.condition);
+                self.visit_expression(&cond.consequent);
+                self.visit_expression(&cond.alternative);
+            }
+            ExpressionKind::Unwrap(inner) | ExpressionKind::Grouping(inner) => {
+                self.visit_expression(inner);
+            }
+            ExpressionKind::Try(try_expr) => {
+                self.visit_expression(&try_expr.expression);
+                if let Some(clause) = &try_expr.catch {
+                    match &clause.kind {
+                        CatchKind::Fallback(fallback) => self.visit_expression(fallback),
+                        CatchKind::Arms(arms) => {
+                            if let Some(binding) = &clause.binding {
+                                self.push_scope();
+                                self.declare_binding(
+                                    &binding.name,
+                                    binding.span,
+                                    SymbolKind::Variable,
+                                );
+                                self.visit_catch_arms(&arms);
+                                self.pop_scope();
+                            } else {
+                                self.visit_catch_arms(&arms);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn visit_catch_arms(&mut self, arms: &[tea_compiler::CatchArm]) {
+        for arm in arms {
+            for pattern in &arm.patterns {
+                if let MatchPattern::Expression(expr) = pattern {
+                    self.visit_expression(expr);
+                }
+            }
+            match &arm.handler {
+                tea_compiler::CatchHandler::Expression(expr) => self.visit_expression(expr),
+                tea_compiler::CatchHandler::Block(block) => {
+                    self.visit_statements(&block.statements)
+                }
+            }
+        }
+    }
+}
+
+fn scoped_rename_target(module: &Module, position: &Position) -> Option<ScopedRenameTarget> {
+    ScopedRenameCollector::new(position).collect(module)
+}
+
+#[derive(Debug, Clone)]
+struct IdentifierTarget {
+    name: String,
+    kind: SymbolKind,
+    declaration_range: Range,
+    current_range: Range,
+    scoped_occurrences: Option<Vec<Range>>,
+}
+
+fn identifier_target_at_position(
+    analysis: &DocumentAnalysis,
+    text: &str,
+    position: &Position,
+) -> Option<IdentifierTarget> {
+    let current_range = identifier_range_at_position(text, position);
+
+    if let Some(target) = scoped_rename_target(&analysis.module, position) {
+        return Some(IdentifierTarget {
+            name: target.name,
+            kind: target.kind,
+            declaration_range: target.declaration_range,
+            current_range: current_range?,
+            scoped_occurrences: Some(target.occurrences),
+        });
+    }
+
+    let symbol = symbol_at_position(analysis, position).or_else(|| {
+        identifier_at_position(text, position).and_then(|name| symbol_by_name(analysis, &name))
+    })?;
+
+    Some(IdentifierTarget {
+        name: symbol.name.clone(),
+        kind: symbol.kind,
+        declaration_range: symbol.range.clone(),
+        current_range: current_range.unwrap_or_else(|| symbol.range.clone()),
+        scoped_occurrences: None,
+    })
+}
+
+fn uses_scoped_rename_occurrences(kind: SymbolKind) -> bool {
+    matches!(
+        kind,
+        SymbolKind::Variable
+            | SymbolKind::Const
+            | SymbolKind::Parameter
+            | SymbolKind::ModuleAlias
+            | SymbolKind::Function
+    )
+}
+
+fn merge_ranges(mut left: Vec<Range>, right: Vec<Range>) -> Vec<Range> {
+    for range in right {
+        if !left.contains(&range) {
+            left.push(range);
+        }
+    }
+    left.sort_by_key(|range| {
+        (
+            range.start.line,
+            range.start.character,
+            range.end.line,
+            range.end.character,
+        )
+    });
+    left
 }
 
 /// Find all occurrences of an identifier in text, returning their ranges.
@@ -3090,6 +3579,18 @@ fn find_identifier_occurrences(text: &str, name: &str) -> Vec<Range> {
     }
 
     results
+}
+
+fn find_member_object_occurrences(text: &str, name: &str) -> Vec<Range> {
+    find_identifier_occurrences(text, name)
+        .into_iter()
+        .filter(|range| {
+            let Some(end) = position_to_offset(text, &range.end) else {
+                return false;
+            };
+            text[end..].starts_with('.')
+        })
+        .collect()
 }
 
 fn previous_char(text: &str, idx: usize) -> Option<(usize, char)> {
@@ -3483,11 +3984,11 @@ fn convert_diagnostic(diagnostic: &tea_compiler::Diagnostic) -> LspDiagnostic {
         let start_line = span.line.saturating_sub(1) as u32;
         let start_col = span.column.saturating_sub(1) as u32;
         let mut end_line = span.end_line.saturating_sub(1) as u32;
-        let mut end_col = span.end_column.saturating_sub(1) as u32;
+        let mut end_col = span.end_column as u32;
 
         if end_line < start_line || (end_line == start_line && end_col < start_col) {
             end_line = start_line;
-            end_col = start_col;
+            end_col = end_col.saturating_add(1);
         }
 
         Range {

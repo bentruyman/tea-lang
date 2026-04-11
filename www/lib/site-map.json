@@ -19,7 +19,7 @@
           "slug": "install",
           "title": "Installation",
           "href": "/docs/install",
-          "summary": "Install Tea from source and verify the CLI."
+          "summary": "Install a prebuilt Tea release and verify the CLI."
         },
         {
           "slug": "getting-started",

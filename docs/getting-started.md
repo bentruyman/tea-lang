@@ -16,27 +16,28 @@ Tea is a strongly typed scripting language with a Ruby-inspired syntax that comp
 
 ## Installation
 
-### Prerequisites
-
-Before installing Tea, you'll need:
-
-- **Rust** (1.70+) - Install from [rustup.rs](https://rustup.rs)
-- **Bun** - Install from [bun.sh](https://bun.sh)
-- **Make** - Usually pre-installed on macOS/Linux
-- **LLVM 17** (optional but recommended) - For AOT compilation
-  - macOS: `brew install llvm@17`
-  - Ubuntu/Debian: `apt-get install llvm-dev`
-  - RHEL/CentOS: `yum install llvm-devel`
-
 ### Quick Install
 
 The fastest way to get started:
 
 ```bash
-curl -fsSL https://tea-lang.dev/install.sh | bash
+curl -fsSL https://tea-lang.dev/install | bash
 ```
 
-Or clone and install locally:
+The installer downloads a prebuilt Tea release, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
+
+Before running it, make sure a host C toolchain is available:
+
+- **macOS** - `xcode-select --install`
+- **Linux** - install `cc` or `clang` with your package manager
+
+You can customize the installer with:
+
+- `TEA_VERSION=v0.1.0` - Pin a specific release
+- `TEA_INSTALL_DIR=/custom/bin` - Change the install location
+- `TEA_GITHUB_REPO=owner/fork` - Install from a fork or staging repo
+
+Or clone and run the same installer locally:
 
 ```bash
 git clone https://github.com/bentruyman/tea-lang
@@ -46,29 +47,31 @@ cd tea-lang
 
 This will:
 
-1. Install dependencies
-2. Build the Tea compiler
-3. Install the `tea` command to `~/.cargo/bin`
+1. Download the matching release artifact for your machine
+2. Verify the release checksum
+3. Install the `tea` command to `~/.local/bin`
 
-Make sure `~/.cargo/bin` is in your PATH:
+Make sure `~/.local/bin` is in your PATH:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
 
 ### Manual Installation
 
-If you prefer more control:
+If you prefer to build Tea from source:
 
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
 ./scripts/setup-worktree.sh  # Bootstrap a fresh dev checkout/worktree
 cargo build --release        # Build the compiler
-make install                 # Install to ~/.cargo/bin
+make install                 # Install to ~/.local/bin
 ```
+
+Source builds require Rust, Bun, Make, and LLVM 17 on the local machine.
 
 ### Verify Installation
 
@@ -236,13 +239,19 @@ Tea has a Language Server Protocol (LSP) implementation for editor integration. 
 
 **`tea: command not found`**
 
-- Ensure `~/.cargo/bin` is in your PATH
+- Ensure `~/.local/bin` is in your PATH
 - Run `source ~/.bashrc` (or your shell profile) to reload
 
-**LLVM errors during build**
+**`cc` or linker errors while running Tea**
+
+- Tea uses the host C toolchain to link executables
+- On macOS, run `xcode-select --install`
+- On Linux, install `build-essential clang` or the equivalent packages for your distro
+
+**LLVM errors during source build**
 
 - Install LLVM 17: `brew install llvm@17` (macOS) or `apt-get install llvm-17-dev` (Ubuntu)
-- You can still run scripts without building: `tea script.tea`
+- The prebuilt installer does not need local LLVM, but source builds do
 
 **Build fails with "failed to compile tea-runtime"**
 

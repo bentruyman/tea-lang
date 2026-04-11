@@ -1,0 +1,20 @@
+version = 1
+
+[release]
+mode = "bundled-runtime-system-linker"
+notes = "Official Tea release binaries embed the host runtime archive and rely on a host C toolchain for the final link step when executing or building Tea programs."
+
+[targets.x86_64-unknown-linux-gnu]
+runtime_archive = "bundled from tea-runtime staticlib during release assembly"
+native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"
+host_requirements = ["cc on PATH"]
+
+[targets.x86_64-apple-darwin]
+runtime_archive = "bundled from tea-runtime staticlib during release assembly"
+native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"
+host_requirements = ["Xcode Command Line Tools or another cc-compatible linker driver on PATH"]
+
+[targets.aarch64-apple-darwin]
+runtime_archive = "bundled from tea-runtime staticlib during release assembly"
+native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"
+host_requirements = ["Xcode Command Line Tools or another cc-compatible linker driver on PATH"]

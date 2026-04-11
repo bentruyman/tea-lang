@@ -58,10 +58,23 @@ Modules like `std.assert`, `std.fs`, `std.path`, and the debug built-ins (`@prin
 For macOS and Linux, use the install script:
 
 ```bash
-curl -fsSL https://tea-lang.dev/install.sh | bash
+curl -fsSL https://tea-lang.dev/install | bash
 ```
 
-Or clone and run locally:
+The installer downloads the latest GitHub Release, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
+
+Before running it, make sure a host C toolchain is available:
+
+- **macOS**: `xcode-select --install`
+- **Linux**: install `cc`/`clang` with your package manager (for example `sudo apt-get install build-essential clang`)
+
+You can override the install behavior with:
+
+- `TEA_VERSION=v0.1.0` to pin a release
+- `TEA_INSTALL_DIR=/custom/bin` to change the install directory
+- `TEA_GITHUB_REPO=owner/fork` to install from a fork or staging repo
+
+Or clone and run the same installer locally:
 
 ```bash
 git clone https://github.com/bentruyman/tea-lang
@@ -69,34 +82,24 @@ cd tea-lang
 ./scripts/install.sh
 ```
 
-#### Prerequisites
-
-Before installing, ensure you have:
-
-- **Rust** (1.70+) – Install from [rustup.rs](https://rustup.rs)
-- **Bun** – Install from [bun.sh](https://bun.sh)
-- **Make** – Usually pre-installed on macOS/Linux
-- **LLVM 17** (optional but recommended) – For AOT compilation
-  - macOS: `brew install llvm@17`
-  - Ubuntu/Debian: `apt-get install llvm-dev`
-  - RHEL/CentOS: `yum install llvm-devel`
-
 #### Manual Installation
 
-If you prefer to build manually:
+If you prefer to build from source:
 
 ```bash
 git clone https://github.com/bentruyman/tea-lang
 cd tea-lang
 ./scripts/setup-worktree.sh  # Bootstrap a fresh dev checkout/worktree
 cargo build --release        # Build the compiler
-make install                 # Install to ~/.cargo/bin
+make install                 # Install to ~/.local/bin
 ```
 
-Ensure `~/.cargo/bin` is in your PATH:
+Source builds need the Rust toolchain, Bun, Make, and LLVM 17 available locally.
+
+Ensure `~/.local/bin` is in your PATH:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
@@ -179,19 +182,20 @@ Explore more in the [`examples/`](examples/) directory:
 
 **`tea: command not found`**
 
-- Ensure `~/.cargo/bin` is in your PATH
-- Run `export PATH="$HOME/.cargo/bin:$PATH"`
+- Ensure `~/.local/bin` is in your PATH
+- Run `export PATH="$HOME/.local/bin:$PATH"`
 - Add the export to your shell profile for persistence
 
-**`LLVM not found` errors during compilation**
+**`cc: command not found` or linker errors while running `tea`**
 
-- LLVM is required for AOT compilation features
+- Tea uses the host C toolchain to link executables
+- On macOS, run `xcode-select --install`
+- On Linux, install `build-essential clang` or the equivalent packages for your distro
+
+**Source build fails with LLVM errors**
+
+- LLVM 17 is required when building Tea from source
 - Install LLVM 17: `brew install llvm@17` (macOS) or `apt-get install llvm-17-dev` (Ubuntu)
-- Alternatively, run Tea scripts without building: `tea script.tea`
-
-**Build fails with "failed to compile tea-runtime"**
-
-- Ensure you have the latest Rust: `rustup update`
 - Clean and rebuild: `cargo clean && cargo build --release`
 
 **`bun: command not found` during setup**

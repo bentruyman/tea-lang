@@ -1,17 +1,28 @@
 <ContentPage
   eyebrow="Get Started"
   title="Installation"
-  description="Build Tea from source, install the `tea` binary, and verify the CLI on your machine."
+  description="Install a prebuilt Tea release or build from source if you need the full development toolchain."
 >
-  Tea is built from source with the standard Rust toolchain. You’ll also need **Bun** for codegen, **Make** for repo workflows, and optionally **LLVM** for AOT compilation.
+  The recommended install path downloads a prebuilt `tea` release, verifies its checksum, and installs it to `~/.local/bin`.
+
+  ```bash
+  curl -fsSL https://tea-lang.dev/install | bash
+  tea --version
+  ```
+
+  Tea still needs a host C toolchain to link executables while running scripts or `tea build`:
+
+  - macOS: `xcode-select --install`
+  - Linux: install `cc` or `clang` with your package manager
+
+  If you need a source build for local development, use the Rust/Bun/LLVM workflow instead:
 
   ```bash
   git clone https://github.com/bentruyman/tea-lang.git
   cd tea-lang
-  make setup
+  ./scripts/setup-worktree.sh
   cargo build --release
   make install
-  tea --version
   ```
 
   If you’d rather skip the install step, you can run Tea directly from the repo during development:

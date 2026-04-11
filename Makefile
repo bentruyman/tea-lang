@@ -1,5 +1,7 @@
 .PHONY: help setup codegen codegen-highlights codegen-ast test build fmt install
 
+INSTALL_DIR ?= $(HOME)/.local/bin
+
 help:
 	@echo "Tea Language Build Tasks"
 	@echo ""
@@ -10,7 +12,7 @@ help:
 	@echo "  test                Run all tests"
 	@echo "  build               Build all components"
 	@echo "  fmt                 Format all code"
-	@echo "  install             Install tea and tea-lsp to ~/.cargo/bin"
+	@echo "  install             Install tea to $(INSTALL_DIR)"
 	@echo ""
 
 setup:
@@ -50,10 +52,10 @@ fmt:
 	@npx prettier --write .
 
 install:
-	@echo "Building release binaries..."
-	@cargo build --release
-	@echo "Installing to ~/.cargo/bin..."
-	@cp target/release/tea-cli ~/.cargo/bin/tea
-	@cp target/release/tea-lsp ~/.cargo/bin/tea-lsp
+	@echo "Building release binary..."
+	@cargo build --release -p tea-cli
+	@echo "Installing to $(INSTALL_DIR)..."
+	@mkdir -p $(INSTALL_DIR)
+	@cp target/release/tea $(INSTALL_DIR)/tea
 	@echo "Verifying installation..."
-	@tea --version
+	@$(INSTALL_DIR)/tea --version

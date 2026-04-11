@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "tea"
+path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true

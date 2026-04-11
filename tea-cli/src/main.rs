@@ -1,3 +1,5 @@
+mod bundled;
+
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsString;
@@ -441,6 +443,45 @@ fn detect_workspace_root() -> Result<PathBuf> {
     Ok(root.to_path_buf())
 }
 
+fn using_bundled_linkkit() -> bool {
+    bundled::enabled()
+}
+
+fn bundled_host_target() -> Result<&'static str> {
+    bundled::target().ok_or_else(|| anyhow!("bundled linkkit build is missing a host target"))
+}
+
+fn active_toolchain_info(rustc: Option<&Path>) -> RustcInfo {
+    if using_bundled_linkkit() {
+        RustcInfo {
+            version: bundled::toolchain_label().map(str::to_string),
+            host: bundled::target().map(str::to_string),
+        }
+    } else {
+        rustc.map(detect_rustc_info).unwrap_or_default()
+    }
+}
+
+fn ensure_host_target_supported(requested_target: Option<&str>) -> Result<()> {
+    if !using_bundled_linkkit() {
+        return Ok(());
+    }
+
+    let Some(requested_target) = requested_target else {
+        return Ok(());
+    };
+
+    let normalized = aot::normalize_target_triple(requested_target);
+    let host = bundled_host_target()?;
+    if normalized == host {
+        return Ok(());
+    }
+
+    bail!(
+        "this prebuilt tea release only supports host-native builds for {host}; build tea from source to use `--target {normalized}`"
+    );
+}
+
 fn run_program(cli: RunCli) -> Result<()> {
     let contents = fs::read_to_string(&cli.input)
         .with_context(|| format!("Failed to read {:?}", cli.input))?;
@@ -503,9 +544,6 @@ fn run_program(cli: RunCli) -> Result<()> {
         return Ok(());
     }
 
-    let rustc_path = std::env::var_os("RUSTC")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("rustc"));
     let temp_dir = tempdir().context("failed to create temporary directory for execution")?;
     let mut temp_output = temp_dir.path().join(
         cli.input
@@ -517,7 +555,14 @@ fn run_program(cli: RunCli) -> Result<()> {
         temp_output.set_extension("exe");
     }
 
-    build_temporary_executable(&compilation, &temp_output, &rustc_path)?;
+    if using_bundled_linkkit() {
+        build_temporary_executable(&compilation, &temp_output, None)?;
+    } else {
+        let rustc_path = std::env::var_os("RUSTC")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("rustc"));
+        build_temporary_executable(&compilation, &temp_output, Some(&rustc_path))?;
+    }
 
     let status = Command::new(&temp_output)
         .args(&cli.script_args)
@@ -547,12 +592,19 @@ fn run_build(cli: BuildCli) -> Result<()> {
         }
     }
 
-    let rustc_path = cli
-        .rustc
-        .clone()
-        .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("rustc"));
-    let rustc_info = detect_rustc_info(&rustc_path);
+    ensure_host_target_supported(cli.target.as_deref())?;
+
+    let rustc_path = if using_bundled_linkkit() {
+        None
+    } else {
+        Some(
+            cli.rustc
+                .clone()
+                .or_else(|| std::env::var_os("RUSTC").map(PathBuf::from))
+                .unwrap_or_else(|| PathBuf::from("rustc")),
+        )
+    };
+    let rustc_info = active_toolchain_info(rustc_path.as_deref());
 
     let cache_entry = if cli.emit.is_empty() {
         build_cache_entry(&cli, &contents, &rustc_info)?
@@ -597,7 +649,13 @@ fn run_build(cli: BuildCli) -> Result<()> {
         }
     }
 
-    build_with_llvm(&cli, &compilation, &output, &rustc_path, &rustc_info)?;
+    build_with_llvm(
+        &cli,
+        &compilation,
+        &output,
+        rustc_path.as_deref(),
+        &rustc_info,
+    )?;
 
     if let Some(entry) = cache_entry {
         if let Err(err) = store_binary_in_cache(&entry.path, &output) {
@@ -651,7 +709,7 @@ fn build_with_llvm(
     cli: &BuildCli,
     compilation: &tea_compiler::Compilation,
     output: &Path,
-    rustc_path: &Path,
+    rustc_path: Option<&Path>,
     rustc_info: &RustcInfo,
 ) -> Result<()> {
     let object_options = object_options_from_cli(cli)?;
@@ -685,27 +743,42 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         println!("Object file written to {}", object_path.display());
     }
 
-    let stub_path = object_path.with_extension("stub.rs");
-    fs::write(&stub_path, STUB_SOURCE)?;
+    if using_bundled_linkkit() {
+        let runtime_archive = bundled_runtime_archive()?;
+        link_with_cc(
+            &object_path,
+            &runtime_archive,
+            output,
+            cli.linker.as_deref(),
+            &cli.linker_args,
+            cli.lto,
+        )?;
+    } else {
+        let rustc_path =
+            rustc_path.ok_or_else(|| anyhow!("missing rustc path for external toolchain mode"))?;
+        let stub_path = object_path.with_extension("stub.rs");
+        fs::write(&stub_path, STUB_SOURCE)?;
 
-    let runtime_rlib = locate_runtime_rlib(current_profile())?;
+        let runtime_rlib = locate_runtime_rlib(current_profile())?;
 
-    link_with_rustc(
-        rustc_path,
-        &stub_path,
-        &object_path,
-        &runtime_rlib,
-        output,
-        cli.target.as_deref(),
-        cli.linker.as_deref(),
-        &cli.linker_args,
-        cli.lto,
-    )?;
+        link_with_rustc(
+            rustc_path,
+            &stub_path,
+            &object_path,
+            &runtime_rlib,
+            output,
+            cli.target.as_deref(),
+            cli.linker.as_deref(),
+            &cli.linker_args,
+            cli.lto,
+        )?;
+
+        let _ = fs::remove_file(&stub_path);
+    }
 
     if !cli.emit.contains(&Emit::Obj) {
         let _ = fs::remove_file(&object_path);
     }
-    let _ = fs::remove_file(&stub_path);
 
     finalize_build_outputs(cli, output, &object_options, rustc_info)?;
     println!("Built {}", output.display());
@@ -715,7 +788,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
 fn build_temporary_executable(
     compilation: &tea_compiler::Compilation,
     output: &Path,
-    rustc_path: &Path,
+    rustc_path: Option<&Path>,
 ) -> Result<()> {
     let mut object_options = ObjectCompileOptions::default();
     object_options.entry_symbol = Some("tea_main");
@@ -726,24 +799,32 @@ fn build_temporary_executable(
     object_path.set_extension(object_extension());
     aot::compile_compilation_to_object(compilation, &object_path, &object_options)?;
 
-    let stub_path = object_path.with_extension("stub.rs");
-    fs::write(&stub_path, STUB_SOURCE)?;
-    let runtime_rlib = locate_runtime_rlib(current_profile())?;
+    if using_bundled_linkkit() {
+        let runtime_archive = bundled_runtime_archive()?;
+        link_with_cc(&object_path, &runtime_archive, output, None, &[], false)?;
+    } else {
+        let rustc_path =
+            rustc_path.ok_or_else(|| anyhow!("missing rustc path for external toolchain mode"))?;
+        let stub_path = object_path.with_extension("stub.rs");
+        fs::write(&stub_path, STUB_SOURCE)?;
+        let runtime_rlib = locate_runtime_rlib(current_profile())?;
 
-    link_with_rustc(
-        rustc_path,
-        &stub_path,
-        &object_path,
-        &runtime_rlib,
-        output,
-        None,
-        None,
-        &[],
-        false,
-    )?;
+        link_with_rustc(
+            rustc_path,
+            &stub_path,
+            &object_path,
+            &runtime_rlib,
+            output,
+            None,
+            None,
+            &[],
+            false,
+        )?;
+
+        let _ = fs::remove_file(&stub_path);
+    }
 
     let _ = fs::remove_file(&object_path);
-    let _ = fs::remove_file(&stub_path);
     Ok(())
 }
 
@@ -980,15 +1061,65 @@ fn store_binary_in_cache(cache_path: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
-fn cache_root_dir() -> Option<PathBuf> {
+fn state_root_dir() -> Option<PathBuf> {
     if let Ok(xdg_state) = std::env::var("XDG_STATE_HOME") {
-        return Some(PathBuf::from(xdg_state).join("tea").join("cache"));
+        return Some(PathBuf::from(xdg_state).join("tea"));
     }
+
     home_dir().map(|mut dir| {
         dir.push(".local");
         dir.push("state");
-        dir.join("tea").join("cache")
+        dir.join("tea")
     })
+}
+
+fn ensure_writable_dir(preferred: PathBuf) -> Option<PathBuf> {
+    if fs::create_dir_all(&preferred).is_ok() {
+        return Some(preferred);
+    }
+
+    let fallback = std::env::temp_dir().join("tea");
+    if fs::create_dir_all(&fallback).is_ok() {
+        return Some(fallback);
+    }
+
+    None
+}
+
+fn cache_root_dir() -> Option<PathBuf> {
+    let preferred = state_root_dir()
+        .map(|dir| dir.join("cache"))
+        .unwrap_or_else(|| std::env::temp_dir().join("tea").join("cache"));
+    ensure_writable_dir(preferred).map(|dir| {
+        if dir.ends_with("cache") {
+            dir
+        } else {
+            dir.join("cache")
+        }
+    })
+}
+
+fn bundled_runtime_archive() -> Result<PathBuf> {
+    let preferred_root =
+        ensure_writable_dir(state_root_dir().unwrap_or_else(|| std::env::temp_dir().join("tea")))
+            .unwrap_or_else(|| std::env::temp_dir().join("tea"));
+    match bundled::materialize_runtime_archive(&preferred_root) {
+        Ok(path) => Ok(path),
+        Err(error) => {
+            let fallback_root = std::env::temp_dir().join("tea");
+            if fallback_root == preferred_root {
+                Err(error)
+            } else {
+                bundled::materialize_runtime_archive(&fallback_root).with_context(|| {
+                    format!(
+                        "failed to materialize bundled runtime archive under {} and {}",
+                        preferred_root.display(),
+                        fallback_root.display()
+                    )
+                })
+            }
+        }
+    }
 }
 
 fn workspace_slug(path: &Path) -> String {
@@ -1146,6 +1277,103 @@ fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     );
 }
 
+fn cc_driver_path() -> PathBuf {
+    std::env::var_os("CC")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("cc"))
+}
+
+fn link_with_cc(
+    object_path: &Path,
+    runtime_archive: &Path,
+    output: &Path,
+    linker: Option<&Path>,
+    linker_args: &[String],
+    lto: bool,
+) -> Result<()> {
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+
+    let cc = cc_driver_path();
+    let temp_dir = tempdir().context("failed to create temporary directory for C launcher")?;
+    let launcher_source = temp_dir.path().join("tea_launcher.c");
+    let launcher_object = temp_dir.path().join("tea_launcher.o");
+    fs::write(&launcher_source, C_LAUNCHER_SOURCE)?;
+
+    let compile_output = Command::new(&cc)
+        .arg("-x")
+        .arg("c")
+        .arg("-c")
+        .arg(&launcher_source)
+        .arg("-o")
+        .arg(&launcher_object)
+        .output()
+        .with_context(|| format!("failed to invoke C compiler at {}", cc.display()))?;
+    if !compile_output.status.success() {
+        let stderr = String::from_utf8_lossy(&compile_output.stderr);
+        let stdout = String::from_utf8_lossy(&compile_output.stdout);
+        bail!(
+            "failed to compile Tea launcher with status {}:\n{}\n{}",
+            compile_output.status,
+            stdout.trim_end(),
+            stderr.trim_end()
+        );
+    }
+
+    let mut cmd = Command::new(&cc);
+    cmd.arg(&launcher_object);
+    cmd.arg(object_path);
+    cmd.arg(runtime_archive);
+    cmd.arg("-o").arg(output);
+
+    if let Some(linker) = linker {
+        cmd.arg(format!("-fuse-ld={}", linker.display()));
+    }
+    for arg in linker_args {
+        cmd.arg(format!("-Wl,{arg}"));
+    }
+    for lib in bundled::native_static_libs() {
+        cmd.arg(lib);
+    }
+
+    if lto {
+        eprintln!("Note: --lto flag is not currently supported for Tea object files.");
+        eprintln!("Tea code is already optimized before the system link step.");
+        eprintln!("Building without LTO...");
+    }
+
+    let output_status = match cmd.output() {
+        Ok(status) => status,
+        Err(error) => {
+            if error.kind() == io::ErrorKind::NotFound {
+                bail!(
+                    "failed to invoke C linker driver at {}: command not found",
+                    cc.display()
+                );
+            } else {
+                return Err(error).context("failed to invoke C linker driver");
+            }
+        }
+    };
+    if !output_status.status.success() {
+        let stderr = String::from_utf8_lossy(&output_status.stderr);
+        let stdout = String::from_utf8_lossy(&output_status.stdout);
+        bail!(
+            "linker failed with status {}:
+{}
+{}",
+            output_status.status,
+            stdout.trim_end(),
+            stderr.trim_end()
+        );
+    }
+
+    Ok(())
+}
+
 fn link_with_rustc(
     rustc: &Path,
     stub_path: &Path,
@@ -1260,6 +1488,16 @@ fn main() {
     std::process::exit(unsafe { tea_main() });
 }
 "#;
+
+const C_LAUNCHER_SOURCE: &str = r#"extern int tea_main(void);
+
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    return tea_main();
+}
+"#;
+
 #[derive(Default)]
 struct RustcInfo {
     version: Option<String>,

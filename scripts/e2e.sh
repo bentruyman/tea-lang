@@ -25,21 +25,16 @@ echo "Running tree-sitter grammar tests..."
 
 echo "✅ tree-sitter tests passed"
 
-echo "Building tea-cli once for example runs..."
+echo "Building tea once for example runs..."
 cargo build -p tea-cli >/tmp/tea-e2e-build-cli.log 2>&1
 tea_bin="${root_dir}/target/debug/tea"
 
 if [[ ! -x "${tea_bin}" ]]; then
-  alt_bin="${root_dir}/target/debug/tea-cli"
-  if [[ -x "${alt_bin}" ]]; then
-    tea_bin="${alt_bin}"
-  else
-    echo "error: expected tea binary at ${tea_bin} or ${alt_bin} but neither was created" >&2
-    exit 1
-  fi
+  echo "error: expected tea binary at ${tea_bin} but it was not created" >&2
+  exit 1
 fi
 
-echo "✅ tea-cli binary ready at ${tea_bin}"
+echo "✅ tea binary ready at ${tea_bin}"
 
 echo "Running Tea examples..."
 while IFS= read -r example; do

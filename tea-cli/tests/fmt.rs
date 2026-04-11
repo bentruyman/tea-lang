@@ -28,7 +28,7 @@ var total =
 "#;
 
 fn tea_cli_binary() -> &'static str {
-    env!("CARGO_BIN_EXE_tea-cli")
+    env!("CARGO_BIN_EXE_tea")
 }
 
 #[test]

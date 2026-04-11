@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -58,13 +64,41 @@ version = "0.1.0"
 edition = "2021"
 `,
   );
-  writeFile(root, "tea-cli/Cargo.toml", `[package]\nname = "tea-cli"\nversion.workspace = true\n`);
-  writeFile(root, "tea-compiler/Cargo.toml", `[package]\nname = "tea-compiler"\nversion.workspace = true\n`);
-  writeFile(root, "tea-eval/Cargo.toml", `[package]\nname = "tea-eval"\nversion.workspace = true\n`);
-  writeFile(root, "tea-intrinsics/Cargo.toml", `[package]\nname = "tea-intrinsics"\nversion.workspace = true\n`);
-  writeFile(root, "tea-lsp/Cargo.toml", `[package]\nname = "tea-lsp"\nversion.workspace = true\n`);
-  writeFile(root, "tea-runtime/Cargo.toml", `[package]\nname = "tea-runtime"\nversion.workspace = true\n`);
-  writeFile(root, "tea-support/Cargo.toml", `[package]\nname = "tea-support"\nversion.workspace = true\n`);
+  writeFile(
+    root,
+    "tea-cli/Cargo.toml",
+    `[package]\nname = "tea-cli"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-compiler/Cargo.toml",
+    `[package]\nname = "tea-compiler"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-eval/Cargo.toml",
+    `[package]\nname = "tea-eval"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-intrinsics/Cargo.toml",
+    `[package]\nname = "tea-intrinsics"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-lsp/Cargo.toml",
+    `[package]\nname = "tea-lsp"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-runtime/Cargo.toml",
+    `[package]\nname = "tea-runtime"\nversion.workspace = true\n`,
+  );
+  writeFile(
+    root,
+    "tea-support/Cargo.toml",
+    `[package]\nname = "tea-support"\nversion.workspace = true\n`,
+  );
   writeFile(
     root,
     "tea-web/Cargo.toml",
@@ -202,7 +236,9 @@ describe("release automation", () => {
     const root = initFixtureRepo();
 
     const result = runRelease(root, "prepare", "0.0.1-alpha.1");
-    expect(result.stdout).toContain("Updated 9 file(s) for release 0.0.1-alpha.1");
+    expect(result.stdout).toContain(
+      "Updated 9 file(s) for release 0.0.1-alpha.1",
+    );
     expect(readFileSync(join(root, "Cargo.toml"), "utf8")).toContain(
       'version = "0.0.1-alpha.1"',
     );
@@ -212,9 +248,9 @@ describe("release automation", () => {
     expect(readFileSync(join(root, "bun.lock"), "utf8")).toContain(
       '"version": "0.0.1-alpha.1"',
     );
-    expect(readFileSync(join(root, "www/public/tea-web/pkg/package.json"), "utf8")).toContain(
-      '"version": "0.0.1-alpha.1"',
-    );
+    expect(
+      readFileSync(join(root, "www/public/tea-web/pkg/package.json"), "utf8"),
+    ).toContain('"version": "0.0.1-alpha.1"');
   });
 
   test("tag and push-tag publish a ref that can be cloned by tag", () => {
@@ -233,11 +269,21 @@ describe("release automation", () => {
     expect(tagResult.stdout).toContain("Created annotated tag v0.0.1-alpha.1");
 
     const pushResult = runRelease(root, "push-tag", "0.0.1-alpha.1");
-    expect(pushResult.stdout).toContain(`Pushed tag v0.0.1-alpha.1 to origin (${remoteUrl}).`);
+    expect(pushResult.stdout).toContain(
+      `Pushed tag v0.0.1-alpha.1 to origin (${remoteUrl}).`,
+    );
 
     run(
       "git",
-      ["clone", "--depth", "1", "--branch", "v0.0.1-alpha.1", remoteUrl, clonePath],
+      [
+        "clone",
+        "--depth",
+        "1",
+        "--branch",
+        "v0.0.1-alpha.1",
+        remoteUrl,
+        clonePath,
+      ],
       process.cwd(),
     );
 

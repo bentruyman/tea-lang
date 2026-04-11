@@ -316,7 +316,9 @@ function prepareRelease(version, dryRun) {
   console.log("Next steps:");
   console.log("- Commit the release prep changes.");
   console.log(`- Create the release tag with: make release-tag ${version}`);
-  console.log(`- Publish the tag to ${REMOTE} with: make release-push-tag ${version}`);
+  console.log(
+    `- Publish the tag to ${REMOTE} with: make release-push-tag ${version}`,
+  );
   console.log(
     `- Once ${tagName} exists on GitHub, smoke-test the installer with: TEA_REF=${tagName} ./scripts/install.sh`,
   );
@@ -405,7 +407,9 @@ function ensureTagExists(tagName) {
   );
 
   if (existing.status !== 0) {
-    throw new Error(`tag ${tagName} does not exist locally; run "make release-tag ${tagName.slice(TAG_PREFIX.length)}" first`);
+    throw new Error(
+      `tag ${tagName} does not exist locally; run "make release-tag ${tagName.slice(TAG_PREFIX.length)}" first`,
+    );
   }
 }
 

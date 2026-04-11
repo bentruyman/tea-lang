@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 TEA_REPO="${TEA_REPO:-https://github.com/bentruyman/tea-lang}"
-TEA_BRANCH="${TEA_BRANCH:-main}"
+TEA_REF="${TEA_REF:-${TEA_BRANCH:-main}}"
 INSTALL_DIR="${HOME}/.cargo/bin"
 
 # Helper functions
@@ -134,11 +134,11 @@ main() {
         log_info "Installing from current directory..."
         INSTALL_FROM_PWD=true
     else
-        log_info "Cloning Tea repository..."
+        log_info "Cloning Tea repository at ref ${TEA_REF}..."
         TEMP_DIR=$(mktemp -d)
         cd "$TEMP_DIR"
 
-        if ! git clone --depth 1 --branch "$TEA_BRANCH" "$TEA_REPO" tea-lang; then
+        if ! git clone --depth 1 --branch "$TEA_REF" "$TEA_REPO" tea-lang; then
             log_error "Failed to clone repository"
             exit 1
         fi

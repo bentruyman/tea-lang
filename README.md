@@ -211,6 +211,19 @@ make build                   # Build the compiler and CLI
 make test                    # Run test suite
 ```
 
+### Preparing a Release
+
+```bash
+make release 0.0.1      # Update versioned manifests and lockfiles
+git add .
+git commit -m "chore(release): 0.0.1"
+make release-tag 0.0.1  # Create annotated tag v0.0.1 on clean HEAD
+make release-push-tag 0.0.1  # Publish v0.0.1 to origin so GitHub can see it
+TEA_REF=v0.0.1 ./scripts/install.sh
+```
+
+If you run any GitHub-side release automation, do it after the tag exists on the remote.
+
 ### Project Structure
 
 - `tea-cli/` – Command-line interface

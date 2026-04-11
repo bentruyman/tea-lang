@@ -232,10 +232,26 @@ make test                    # Run test suite
 git push origin main
 ```
 
-Then run the manual `Release` GitHub Actions workflow with `version=v0.1.0`.
-The workflow prepares version metadata, commits the release prep back to the
-target branch, creates the tag, builds the release artifacts, and publishes the
-GitHub Release.
+Then run the manual `Release` GitHub Actions workflow with `version=0.1.0` or
+`version=0.1.0-alpha.1`. A leading `v` also works.
+
+The workflow is the source of truth for releases. It:
+
+- prepares the version metadata
+- commits the release prep back to the target branch
+- creates or reuses the annotated `v...` tag
+- builds the release artifacts for each supported target
+- publishes or updates the GitHub Release
+
+Rerunning the workflow is safe as long as the requested version already points
+at the same prepared release commit.
+
+Pre-releases are installable, but not through the default "latest" installer
+path. Pin them explicitly:
+
+```bash
+curl -fsSL https://tea-lang.dev/install | TEA_VERSION=v0.1.0-alpha.1 bash
+```
 
 ### Project Structure
 

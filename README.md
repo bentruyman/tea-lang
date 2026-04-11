@@ -229,15 +229,13 @@ make test                    # Run test suite
 ### Preparing a Release
 
 ```bash
-make release 0.0.1      # Update versioned manifests and lockfiles
-git add .
-git commit -m "chore(release): 0.0.1"
-make release-tag 0.0.1  # Create annotated tag v0.0.1 on clean HEAD
-make release-push-tag 0.0.1  # Publish v0.0.1 to origin so GitHub can see it
-TEA_REF=v0.0.1 ./scripts/install.sh
+git push origin main
 ```
 
-If you run any GitHub-side release automation, do it after the tag exists on the remote.
+Then run the manual `Release` GitHub Actions workflow with `version=v0.1.0`.
+The workflow prepares version metadata, commits the release prep back to the
+target branch, creates the tag, builds the release artifacts, and publishes the
+GitHub Release.
 
 ### Project Structure
 

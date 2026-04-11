@@ -34,9 +34,9 @@ help:
 	@echo "  build               Build all components"
 	@echo "  fmt                 Format all code"
 	@echo "  install             Install tea to $(INSTALL_DIR)"
-	@echo "  release             Update release versions (use VERSION=0.0.1 or 'make release 0.0.1')"
-	@echo "  release-tag         Create an annotated git tag on clean HEAD after committing"
-	@echo "  release-push-tag    Push an existing annotated release tag to origin"
+	@echo "  release             Update release versions locally (GitHub Release workflow is preferred)"
+	@echo "  release-tag         Create an annotated git tag locally (legacy/manual flow)"
+	@echo "  release-push-tag    Push an existing local release tag (legacy/manual flow)"
 	@echo ""
 
 setup:

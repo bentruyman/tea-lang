@@ -16,10 +16,10 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse, Documentation,
+    CompletionItem, CompletionItemKind, CompletionOptions, CompletionResponse,
     Diagnostic as LspDiagnostic, DiagnosticRelatedInformation, DiagnosticSeverity,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+    Documentation, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
     HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, Location,
     MarkupContent, MarkupKind, MessageType, OneOf, Position, PrepareRenameResponse, Range,
     RenameParams, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
@@ -284,6 +284,191 @@ use fs = "std.fs"
     }
 
     #[test]
+    fn use_statement_import_completion_returns_stdlib_and_relative_modules() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        let helper_path = dir.path().join("helper.tea");
+        let util_path = dir.path().join("util.tea");
+        let nested_dir = dir.path().join("nested");
+        fs::create_dir(&nested_dir).expect("nested dir to be created");
+        fs::write(&main_path, "").expect("main module to be written");
+        fs::write(&helper_path, "").expect("helper module to be written");
+        fs::write(&util_path, "").expect("util module to be written");
+        fs::write(dir.path().join("note.txt"), "").expect("note file to be written");
+        fs::write(nested_dir.join("ignored.tea"), "").expect("nested module to be written");
+
+        let text = "use fs = \"";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, Some("\""))
+            .expect("import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"std.fs"));
+        assert!(labels.contains(&"std.env"));
+        assert!(labels.contains(&"./helper"));
+        assert!(labels.contains(&"./util"));
+        assert!(!labels.contains(&"./main"));
+        assert!(!labels.contains(&"./ignored"));
+    }
+
+    #[test]
+    fn use_statement_import_completion_filters_stdlib_by_prefix() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+
+        let text = "use fs = \"std.";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, Some("."))
+            .expect("import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"std.fs"));
+        assert!(labels.contains(&"std.env"));
+        assert!(labels.iter().all(|label| label.starts_with("std.")));
+    }
+
+    #[test]
+    fn use_statement_import_completion_returns_relative_siblings() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        let helper_path = dir.path().join("helper.tea");
+        let util_path = dir.path().join("util.tea");
+        let nested_dir = dir.path().join("nested");
+        fs::create_dir(&nested_dir).expect("nested dir to be created");
+        fs::write(&main_path, "").expect("main module to be written");
+        fs::write(&helper_path, "").expect("helper module to be written");
+        fs::write(&util_path, "").expect("util module to be written");
+        fs::write(nested_dir.join("ignored.tea"), "").expect("nested module to be written");
+
+        let text = "use helper = \"./";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, Some("/"))
+            .expect("import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert_eq!(labels, vec!["./helper", "./util"]);
+    }
+
+    #[test]
+    fn use_statement_import_completion_item_replaces_only_string_contents() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+
+        let text = "use fs = \"std.f\"";
+        let position = Position {
+            line: 0,
+            character: 14,
+        };
+
+        let item = import_path_completion_items(&main_path, text, &position, None)
+            .expect("import completion context to exist")
+            .into_iter()
+            .find(|item| item.label == "std.fs")
+            .expect("std.fs completion to be present");
+
+        let edit = match item.text_edit {
+            Some(tower_lsp::lsp_types::CompletionTextEdit::Edit(edit)) => edit,
+            other => panic!("expected text edit, got {other:?}"),
+        };
+
+        assert_eq!(edit.new_text, "std.fs");
+        assert_eq!(edit.range.start.line, 0);
+        assert_eq!(edit.range.start.character, 10);
+        assert_eq!(edit.range.end.line, 0);
+        assert_eq!(edit.range.end.character, 15);
+    }
+
+    #[test]
+    fn use_statement_import_completion_does_not_activate_in_normal_string_literals() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+
+        let text = "var message = \"std.\"";
+        let position = Position {
+            line: 0,
+            character: 18,
+        };
+
+        assert!(import_path_completion_items(&main_path, text, &position, None).is_none());
+    }
+
+    #[test]
+    fn unterminated_import_string_completion_returns_items_without_analysis() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+
+        let text = "use fs = \"std";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, None)
+            .expect("import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"std.fs"));
+        assert!(labels.contains(&"std.env"));
+    }
+
+    #[test]
+    fn use_statement_import_completion_handles_virtual_quote_trigger() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+
+        let text = "use fs = ";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, Some("\""))
+            .expect("virtual quote import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert!(labels.contains(&"std.fs"));
+        assert!(labels.contains(&"std.path"));
+    }
+
+    #[test]
+    fn use_statement_import_completion_handles_virtual_slash_trigger() {
+        let dir = tempdir().expect("temp dir to be created");
+        let main_path = dir.path().join("main.tea");
+        let helper_path = dir.path().join("helper.tea");
+        fs::write(&main_path, "").expect("main module to be written");
+        fs::write(&helper_path, "").expect("helper module to be written");
+
+        let text = "use helper = \".";
+        let position = Position {
+            line: 0,
+            character: text.chars().count() as u32,
+        };
+
+        let items = import_path_completion_items(&main_path, text, &position, Some("/"))
+            .expect("virtual slash import completion context to exist");
+        let labels = completion_labels(&items);
+
+        assert_eq!(labels, vec!["./helper"]);
+    }
+
+    #[test]
     fn member_at_position_finds_module_member_identifier() {
         let text = "fs.read_file(\"demo.txt\")";
         let position = Position {
@@ -292,7 +477,8 @@ use fs = "std.fs"
         };
 
         assert_eq!(
-            member_at_position(text, &position).map(|reference| (reference.alias, reference.member)),
+            member_at_position(text, &position)
+                .map(|reference| (reference.alias, reference.member)),
             Some(("fs".to_string(), "read_file".to_string()))
         );
     }
@@ -321,7 +507,8 @@ use fs = "std.fs"
         };
 
         assert_eq!(
-            member_at_position(text, &position).map(|reference| (reference.alias, reference.member)),
+            member_at_position(text, &position)
+                .map(|reference| (reference.alias, reference.member)),
             Some(("fs".to_string(), "read_file".to_string()))
         );
     }
@@ -340,7 +527,10 @@ use fs = "std.fs"
         });
 
         let merged = merge_document_analysis(existing.clone(), None);
-        assert_eq!(merged.as_ref().map(|analysis| analysis.symbols.len()), Some(1));
+        assert_eq!(
+            merged.as_ref().map(|analysis| analysis.symbols.len()),
+            Some(1)
+        );
 
         let replacement = Some(DocumentAnalysis {
             symbols: vec![SymbolInfo {
@@ -421,7 +611,6 @@ end
             assert_binding.export_docs.get("ok").is_some(),
             "assert.ok should have docstring"
         );
-
     }
 
     #[test]
@@ -718,6 +907,19 @@ struct MemberReference {
     range: Range,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImportCompletionContext {
+    partial: String,
+    replace_range: Range,
+}
+
+#[derive(Debug, Clone)]
+struct ImportPathCandidate {
+    path: String,
+    detail: String,
+    documentation: Option<String>,
+}
+
 fn merge_document_analysis(
     existing: Option<DocumentAnalysis>,
     updated: Option<DocumentAnalysis>,
@@ -779,11 +981,17 @@ fn module_alias_completion_item(
 ) -> CompletionItem {
     let type_detail = binding.export_types.get(export);
     let mut item = CompletionItem::new_simple(export.to_string(), format!("module {alias}"));
-    item.kind = Some(module_alias_completion_kind(type_detail.map(String::as_str)));
+    item.kind = Some(module_alias_completion_kind(
+        type_detail.map(String::as_str),
+    ));
     if let Some(ty) = type_detail {
         item.detail = Some(ty.clone());
     }
-    if let Some(doc) = binding.export_docs.get(export).filter(|doc| !doc.is_empty()) {
+    if let Some(doc) = binding
+        .export_docs
+        .get(export)
+        .filter(|doc| !doc.is_empty())
+    {
         item.documentation = Some(Documentation::String(doc.clone()));
     }
     item
@@ -799,8 +1007,7 @@ fn module_alias_completion_items(
         return Vec::new();
     }
 
-    let matches_partial =
-        |export: &String| partial.is_empty() || export.starts_with(partial);
+    let matches_partial = |export: &String| partial.is_empty() || export.starts_with(partial);
     let matches_expected_type = |export: &String| match expected_type {
         Some(expected) => binding
             .export_types
@@ -826,6 +1033,110 @@ fn module_alias_completion_items(
     }
 
     items
+}
+
+fn import_path_candidate(
+    path: String,
+    detail: &str,
+    documentation: Option<String>,
+) -> ImportPathCandidate {
+    ImportPathCandidate {
+        path,
+        detail: detail.to_string(),
+        documentation,
+    }
+}
+
+fn stdlib_import_candidates() -> Vec<ImportPathCandidate> {
+    tea_compiler::STDLIB_MODULE_PATHS
+        .iter()
+        .map(|module_path| {
+            let documentation = tea_compiler::stdlib_find_module(module_path)
+                .map(|module| module.docstring.to_string())
+                .filter(|doc| !doc.is_empty());
+            import_path_candidate((*module_path).to_string(), "stdlib module", documentation)
+        })
+        .collect()
+}
+
+fn relative_import_candidates(doc_path: &Path) -> Vec<ImportPathCandidate> {
+    let Some(parent) = doc_path.parent() else {
+        return Vec::new();
+    };
+
+    let entries = match std::fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut candidates = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path == doc_path || !path.is_file() {
+            continue;
+        }
+        if !path.extension().is_some_and(|ext| ext == "tea") {
+            continue;
+        }
+        let Some(stem) = path.file_stem() else {
+            continue;
+        };
+        let stem = stem.to_string_lossy();
+        if stem.is_empty() {
+            continue;
+        }
+        candidates.push(import_path_candidate(
+            format!("./{stem}"),
+            "relative module",
+            None,
+        ));
+    }
+
+    candidates.sort_by(|left, right| left.path.cmp(&right.path));
+    candidates
+}
+
+fn import_path_completion_item(
+    candidate: &ImportPathCandidate,
+    replace_range: Range,
+) -> CompletionItem {
+    let mut item = CompletionItem::new_simple(candidate.path.clone(), candidate.detail.clone());
+    item.kind = Some(CompletionItemKind::MODULE);
+    item.text_edit = Some(
+        TextEdit {
+            range: replace_range,
+            new_text: candidate.path.clone(),
+        }
+        .into(),
+    );
+    if let Some(doc) = candidate
+        .documentation
+        .as_ref()
+        .filter(|doc| !doc.is_empty())
+    {
+        item.documentation = Some(Documentation::String(doc.clone()));
+    }
+    item
+}
+
+fn import_path_completion_items(
+    doc_path: &Path,
+    text: &str,
+    position: &Position,
+    trigger_character: Option<&str>,
+) -> Option<Vec<CompletionItem>> {
+    let context = import_completion_context(text, position, trigger_character)?;
+
+    let mut candidates = stdlib_import_candidates();
+    candidates.extend(relative_import_candidates(doc_path));
+
+    Some(
+        candidates
+            .into_iter()
+            .filter(|candidate| candidate.path.starts_with(&context.partial))
+            .map(|candidate| import_path_completion_item(&candidate, context.replace_range.clone()))
+            .collect(),
+    )
 }
 
 impl ServerState {
@@ -1807,7 +2118,7 @@ impl LanguageServer for TeaLanguageServer {
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: Some(CompletionOptions {
                 resolve_provider: Some(false),
-                trigger_characters: Some(vec![".".into()]),
+                trigger_characters: Some(vec![".".into(), "\"".into(), "/".into()]),
                 all_commit_characters: None,
                 work_done_progress_options: WorkDoneProgressOptions {
                     work_done_progress: None,
@@ -1941,8 +2252,7 @@ impl LanguageServer for TeaLanguageServer {
                 {
                     if let Some(struct_info) = analysis.structs.get(&struct_name) {
                         if let Some(field_info) = struct_info.fields.get(&reference.member) {
-                            let mut value =
-                                format!("field `{}.{}`", struct_name, reference.member);
+                            let mut value = format!("field `{}.{}`", struct_name, reference.member);
                             if let Some(ref ty) = field_info.type_desc {
                                 value.push_str(&format!(" : {}", ty));
                             }
@@ -2043,11 +2353,22 @@ impl LanguageServer for TeaLanguageServer {
         params: tower_lsp::lsp_types::CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let trigger_character = params
+            .context
+            .as_ref()
+            .and_then(|context| context.trigger_character.as_deref());
 
         let mut doc = match self.document_snapshot(&uri).await {
             Some(doc) => doc,
             None => return Ok(None),
         };
+
+        if let Some(items) =
+            import_path_completion_items(&doc.path, &doc.text, &position, trigger_character)
+        {
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
 
         if doc.analysis.is_none() {
             let _ = self.compile_and_publish(&uri, None).await;
@@ -2061,14 +2382,9 @@ impl LanguageServer for TeaLanguageServer {
             return Ok(None);
         };
 
-        let position = params.text_document_position.position;
         let expected_type = analysis
             .expected_type_at(&position)
             .filter(|ty| *ty != "Unknown");
-        let trigger_character = params
-            .context
-            .as_ref()
-            .and_then(|context| context.trigger_character.as_deref());
 
         if let Some((alias, partial)) =
             member_completion_context(&doc.text, &position, trigger_character)
@@ -2781,6 +3097,153 @@ fn previous_char(text: &str, idx: usize) -> Option<(usize, char)> {
         return None;
     }
     text[..idx].char_indices().next_back()
+}
+
+fn skip_whitespace_backwards(text: &str, mut idx: usize) -> usize {
+    while let Some((prev_idx, ch)) = previous_char(text, idx) {
+        if ch.is_whitespace() {
+            idx = prev_idx;
+        } else {
+            break;
+        }
+    }
+    idx
+}
+
+fn identifier_before(text: &str, idx: usize) -> Option<(usize, usize)> {
+    let end = skip_whitespace_backwards(text, idx);
+    let (last_idx, last_ch) = previous_char(text, end)?;
+    if !is_identifier_char(last_ch) {
+        return None;
+    }
+
+    let mut start = last_idx;
+    while let Some((prev_idx, ch)) = previous_char(text, start) {
+        if is_identifier_char(ch) {
+            start = prev_idx;
+        } else {
+            break;
+        }
+    }
+
+    Some((start, last_idx + last_ch.len_utf8()))
+}
+
+fn quote_is_escaped(text: &str, quote_idx: usize) -> bool {
+    let mut cursor = quote_idx;
+    let mut slash_count = 0usize;
+    while let Some((prev_idx, ch)) = previous_char(text, cursor) {
+        if ch != '\\' {
+            break;
+        }
+        slash_count = slash_count.saturating_add(1);
+        cursor = prev_idx;
+    }
+    slash_count % 2 == 1
+}
+
+fn previous_unescaped_quote(text: &str, idx: usize) -> Option<usize> {
+    let mut cursor = idx;
+    while let Some((prev_idx, ch)) = previous_char(text, cursor) {
+        if ch == '"' && !quote_is_escaped(text, prev_idx) {
+            return Some(prev_idx);
+        }
+        cursor = prev_idx;
+    }
+    None
+}
+
+fn import_path_end(text: &str, start: usize) -> usize {
+    for (rel_idx, ch) in text[start..].char_indices() {
+        let idx = start + rel_idx;
+        if ch == '\n' {
+            return idx;
+        }
+        if ch == '"' && !quote_is_escaped(text, idx) {
+            return idx;
+        }
+    }
+    text.len()
+}
+
+fn import_context_before_quote(text: &str, quote_idx: usize) -> bool {
+    let eq_idx = skip_whitespace_backwards(text, quote_idx);
+    let Some((equal_idx, '=')) = previous_char(text, eq_idx) else {
+        return false;
+    };
+
+    let Some((alias_start, _)) = identifier_before(text, equal_idx) else {
+        return false;
+    };
+    let Some((keyword_start, keyword_end)) = identifier_before(text, alias_start) else {
+        return false;
+    };
+
+    &text[keyword_start..keyword_end] == "use"
+}
+
+fn import_completion_context_from_text(
+    text: &str,
+    offset: usize,
+) -> Option<ImportCompletionContext> {
+    let quote_idx = previous_unescaped_quote(text, offset)?;
+    if !import_context_before_quote(text, quote_idx) {
+        return None;
+    }
+
+    let content_start = quote_idx.saturating_add(1);
+    let content_end = import_path_end(text, content_start);
+    if offset < content_start || offset > content_end {
+        return None;
+    }
+
+    Some(ImportCompletionContext {
+        partial: text[content_start..offset].to_string(),
+        replace_range: Range {
+            start: offset_to_position(text, content_start)?,
+            end: offset_to_position(text, content_end)?,
+        },
+    })
+}
+
+fn virtual_import_completion_context(
+    text: &str,
+    position: &Position,
+    trigger_character: Option<&str>,
+) -> Option<ImportCompletionContext> {
+    let offset = position_to_offset(text, position)?;
+
+    if trigger_character == Some("\"") && import_context_before_quote(text, offset) {
+        let point = offset_to_position(text, offset)?;
+        return Some(ImportCompletionContext {
+            partial: String::new(),
+            replace_range: Range {
+                start: point,
+                end: point,
+            },
+        });
+    }
+
+    let mut context = import_completion_context_from_text(text, offset)?;
+    let trigger = match trigger_character {
+        Some(trigger @ "/") | Some(trigger @ ".") => trigger,
+        _ => return Some(context),
+    };
+
+    let previous = previous_char(text, offset).map(|(_, ch)| ch);
+    if previous != trigger.chars().next() {
+        context.partial.push_str(trigger);
+    }
+
+    Some(context)
+}
+
+fn import_completion_context(
+    text: &str,
+    position: &Position,
+    trigger_character: Option<&str>,
+) -> Option<ImportCompletionContext> {
+    virtual_import_completion_context(text, position, trigger_character)
 }
 
 fn virtual_member_completion_context(

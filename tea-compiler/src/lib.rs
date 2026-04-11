@@ -45,7 +45,8 @@ pub use crate::reference::{
 pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
 pub use crate::source::{SourceFile, SourceId};
 pub use crate::stdlib::{
-    find_module as stdlib_find_module, StdFunction, StdModule, StdType, BUILTINS as STDLIB_BUILTINS,
+    find_module as stdlib_find_module, StdFunction, StdModule, StdType,
+    BUILTINS as STDLIB_BUILTINS, REFERENCE_STDLIB_MODULES as STDLIB_MODULE_PATHS,
 };
 pub use crate::typechecker::TypeChecker;
 

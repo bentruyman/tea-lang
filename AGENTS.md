@@ -180,3 +180,22 @@ tea --emit llvm-ir script.tea  # Show LLVM IR
 **Parser issues**: Check `--emit ast` to see parsed structure
 
 **E2E test failures**: Check `scripts/e2e.sh` output; validates all examples run correctly
+
+**Neovim LSP issues**: Use headless Neovim to verify the live `tea_lsp` client and raw LSP responses without UI/plugin noise.
+
+```bash
+printf 'use fs = "std.fs"\n\nfs.read_file("demo.txt")\n' >/tmp/tea-lsp-debug.tea
+
+nvim --headless -n -i NONE /tmp/tea-lsp-debug.tea \
+  +'lua vim.wait(1500, function() return #vim.lsp.get_clients({ name = "tea_lsp" }) > 0 end)' \
+  +'lua for _, client in ipairs(vim.lsp.get_clients()) do print(client.name, vim.inspect(client.config.cmd)) end' \
+  +'lua vim.api.nvim_win_set_cursor(0, { 3, 5 })' \
+  +'lua vim.print(vim.lsp.buf_request_sync(0, "textDocument/hover", vim.lsp.util.make_position_params(), 1000))' \
+  +q
+```
+
+Notes:
+
+- `-n -i NONE` disables swap and ShaDa, which avoids local state/permission issues in headless runs.
+- `vim.api.nvim_win_set_cursor(0, { row, col })` uses 1-based rows and 0-based columns.
+- `vim.lsp.buf_request_sync(...)` is useful for checking whether `tea-lsp` returned real hover/completion data or `null`.

@@ -75,9 +75,9 @@ fmt:
 	@echo "Formatting with Prettier..."
 	@npx prettier --write .
 
-install:
+install: codegen
 	@echo "Building release binary..."
-	@cargo build --release -p tea-cli
+	@./scripts/build-bundled-tea.sh
 	@echo "Installing to $(INSTALL_DIR)..."
 	@mkdir -p $(INSTALL_DIR)
 	@cp target/release/tea $(INSTALL_DIR)/tea

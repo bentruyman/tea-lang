@@ -1255,9 +1255,17 @@ fn build_runtime_archive(target_dir: &Path) -> Result<()> {
         cmd.env("CARGO_TARGET_DIR", target_dir);
     }
 
-    let status = cmd
-        .status()
-        .context("failed to invoke cargo to build tea-runtime")?;
+    let status = match cmd.status() {
+        Ok(status) => status,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            bail!(
+                "this tea binary was built in source mode and still requires `cargo` at runtime to build tea-runtime; install a bundled release or rebuild with `make install`"
+            );
+        }
+        Err(error) => {
+            return Err(error).context("failed to invoke cargo to build tea-runtime");
+        }
+    };
     if !status.success() {
         bail!("cargo build -p tea-runtime failed with status {}", status);
     }

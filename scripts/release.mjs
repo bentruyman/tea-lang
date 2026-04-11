@@ -432,7 +432,7 @@ function pushTag(version, dryRun) {
   if (dryRun) {
     console.log(`Would push tag ${tagName} to ${REMOTE} (${url}).`);
     console.log(
-      `Once pushed, smoke-test the installer with: TEA_REF=${tagName} ./scripts/install.sh`,
+      `Once pushed, smoke-test the installer with: TEA_VERSION=${tagName} ./scripts/install.sh`,
     );
     return;
   }
@@ -440,7 +440,7 @@ function pushTag(version, dryRun) {
   git(["push", REMOTE, `refs/tags/${tagName}`]);
   console.log(`Pushed tag ${tagName} to ${REMOTE} (${url}).`);
   console.log(
-    `Smoke-test the installer with: TEA_REF=${tagName} ./scripts/install.sh`,
+    `Smoke-test the installer with: TEA_VERSION=${tagName} ./scripts/install.sh`,
   );
 }
 

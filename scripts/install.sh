@@ -1,232 +1,232 @@
 #!/usr/bin/env bash
-# Tea Language Installer
-#
-# This script installs Tea by building from source.
-# It checks for required dependencies and guides you through the process.
 
-set -e
+set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Configuration
-TEA_REPO="${TEA_REPO:-https://github.com/bentruyman/tea-lang}"
-TEA_REF="${TEA_REF:-${TEA_BRANCH:-main}}"
-INSTALL_DIR="${HOME}/.cargo/bin"
+TEA_GITHUB_REPO="${TEA_GITHUB_REPO:-bentruyman/tea-lang}"
+TEA_VERSION="${TEA_VERSION:-}"
+TEA_INSTALL_DIR="${TEA_INSTALL_DIR:-${HOME}/.local/bin}"
 
-# Helper functions
 log_info() {
-    echo -e "${BLUE}==>${NC} $1"
+  echo -e "${BLUE}==>${NC} $1"
 }
 
 log_success() {
-    echo -e "${GREEN}✓${NC} $1"
+  echo -e "${GREEN}✓${NC} $1"
 }
 
-log_warning() {
-    echo -e "${YELLOW}!${NC} $1"
+log_warn() {
+  echo -e "${YELLOW}!${NC} $1"
 }
 
 log_error() {
-    echo -e "${RED}✗${NC} $1"
+  echo -e "${RED}✗${NC} $1" >&2
 }
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
+require_command() {
+  local command_name="$1"
+  local install_hint="$2"
 
-check_dependency() {
-    local cmd=$1
-    local name=$2
-    local install_instructions=$3
+  if command -v "${command_name}" >/dev/null 2>&1; then
+    return 0
+  fi
 
-    if command_exists "$cmd"; then
-        log_success "$name is installed"
-        return 0
-    else
-        log_error "$name is not installed"
-        echo "  Install instructions: $install_instructions"
-        return 1
-    fi
+  log_error "Missing required command: ${command_name}"
+  echo "  Install: ${install_hint}" >&2
+  exit 1
 }
 
 detect_os() {
-    case "$(uname -s)" in
-        Darwin*)    echo "macos" ;;
-        Linux*)     echo "linux" ;;
-        *)          echo "unknown" ;;
-    esac
+  case "$(uname -s)" in
+    Darwin) echo "apple-darwin" ;;
+    Linux) echo "unknown-linux-gnu" ;;
+    *)
+      log_error "Unsupported operating system: $(uname -s)"
+      exit 1
+      ;;
+  esac
 }
 
-# Main installation process
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo "x86_64" ;;
+    arm64|aarch64) echo "aarch64" ;;
+    *)
+      log_error "Unsupported architecture: $(uname -m)"
+      exit 1
+      ;;
+  esac
+}
+
+host_target() {
+  echo "$(detect_arch)-$(detect_os)"
+}
+
+require_host_linker() {
+  if command -v cc >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$(detect_os)" in
+    apple-darwin)
+      log_error "Tea needs a host C toolchain to run and build Tea programs"
+      echo "  Install: xcode-select --install" >&2
+      ;;
+    unknown-linux-gnu)
+      log_error "Tea needs a host C toolchain to run and build Tea programs"
+      echo "  Install: sudo apt-get install build-essential clang" >&2
+      ;;
+  esac
+  exit 1
+}
+
+resolve_version() {
+  if [[ -n "${TEA_VERSION}" ]]; then
+    echo "${TEA_VERSION}"
+    return 0
+  fi
+
+  local api_url="https://api.github.com/repos/${TEA_GITHUB_REPO}/releases/latest"
+  local version
+  version="$(curl -fsSL "${api_url}" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  if [[ -z "${version}" ]]; then
+    log_error "Failed to resolve the latest Tea release"
+    echo "  Set TEA_VERSION explicitly or check ${api_url}" >&2
+    exit 1
+  fi
+
+  echo "${version}"
+}
+
+checksum_file_name() {
+  local version="$1"
+  echo "tea-${version}-SHA256SUMS.txt"
+}
+
+archive_file_name() {
+  local version="$1"
+  local target="$2"
+  echo "tea-${version}-${target}.tar.gz"
+}
+
+download_release_asset() {
+  local version="$1"
+  local asset="$2"
+  local output="$3"
+  local asset_url="https://github.com/${TEA_GITHUB_REPO}/releases/download/${version}/${asset}"
+
+  log_info "Downloading ${asset}"
+  curl --proto '=https' --tlsv1.2 -fLsS "${asset_url}" -o "${output}"
+}
+
+current_sha256() {
+  local file_path="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${file_path}" | awk '{print $1}'
+    return 0
+  fi
+
+  sha256sum "${file_path}" | awk '{print $1}'
+}
+
+verify_checksum() {
+  local archive_path="$1"
+  local checksums_path="$2"
+  local archive_name
+  archive_name="$(basename "${archive_path}")"
+  local expected
+  expected="$(awk -v asset="${archive_name}" '$2 == asset { print $1 }' "${checksums_path}")"
+
+  if [[ -z "${expected}" ]]; then
+    log_error "Checksum entry for ${archive_name} is missing"
+    exit 1
+  fi
+
+  local actual
+  actual="$(current_sha256 "${archive_path}")"
+  if [[ "${expected}" != "${actual}" ]]; then
+    log_error "Checksum mismatch for ${archive_name}"
+    echo "  expected: ${expected}" >&2
+    echo "  actual:   ${actual}" >&2
+    exit 1
+  fi
+
+  log_success "Verified checksum for ${archive_name}"
+}
+
+ensure_install_dir() {
+  mkdir -p "${TEA_INSTALL_DIR}"
+}
+
+show_path_hint() {
+  case ":${PATH}:" in
+    *":${TEA_INSTALL_DIR}:"*) return 0 ;;
+  esac
+
+  log_warn "${TEA_INSTALL_DIR} is not currently on PATH"
+  echo "Add this line to your shell profile:"
+  echo "  export PATH=\"${TEA_INSTALL_DIR}:\$PATH\""
+}
+
 main() {
-    echo ""
-    echo "╔══════════════════════════════════════════╗"
-    echo "║     Tea Language Installer              ║"
-    echo "╚══════════════════════════════════════════╝"
-    echo ""
+  echo ""
+  echo "╔══════════════════════════════════════════╗"
+  echo "║     Tea Language Installer              ║"
+  echo "╚══════════════════════════════════════════╝"
+  echo ""
 
-    # Detect OS
-    OS=$(detect_os)
-    log_info "Detected OS: $OS"
+  require_command "curl" "Install curl using your package manager"
+  require_command "tar" "Install tar using your package manager"
+  require_command "mktemp" "Install mktemp using your package manager"
+  require_host_linker
 
-    if [ "$OS" = "unknown" ]; then
-        log_error "Unsupported operating system"
-        log_info "Tea currently supports macOS and Linux"
-        exit 1
-    fi
+  local version
+  version="$(resolve_version)"
+  local target
+  target="$(host_target)"
+  local archive_name
+  archive_name="$(archive_file_name "${version}" "${target}")"
+  local checksums_name
+  checksums_name="$(checksum_file_name "${version}")"
 
-    echo ""
-    log_info "Checking dependencies..."
-    echo ""
+  log_info "Installing Tea ${version} for ${target}"
+  log_info "GitHub repository: ${TEA_GITHUB_REPO}"
 
-    # Check for required dependencies
-    local deps_ok=true
+  local temp_dir
+  temp_dir="$(mktemp -d)"
+  trap 'rm -rf "${temp_dir}"' EXIT
 
-    # Check Rust/Cargo
-    if [ "$OS" = "macos" ]; then
-        check_dependency "cargo" "Rust/Cargo" "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" || deps_ok=false
-    else
-        check_dependency "cargo" "Rust/Cargo" "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" || deps_ok=false
-    fi
+  local archive_path="${temp_dir}/${archive_name}"
+  local checksums_path="${temp_dir}/${checksums_name}"
 
-    # Check Bun
-    if [ "$OS" = "macos" ]; then
-        check_dependency "bun" "Bun" "curl -fsSL https://bun.sh/install | bash" || deps_ok=false
-    else
-        check_dependency "bun" "Bun" "curl -fsSL https://bun.sh/install | bash" || deps_ok=false
-    fi
+  download_release_asset "${version}" "${archive_name}" "${archive_path}"
+  download_release_asset "${version}" "${checksums_name}" "${checksums_path}"
+  verify_checksum "${archive_path}" "${checksums_path}"
 
-    # Check for make
-    check_dependency "make" "Make" "Install build-essential (Linux) or Xcode Command Line Tools (macOS)" || deps_ok=false
+  ensure_install_dir
+  tar -xzf "${archive_path}" -C "${temp_dir}"
 
-    # Check for LLVM (optional but recommended)
-    if ! command_exists "llvm-config"; then
-        log_warning "LLVM is not detected (optional, but recommended for AOT compilation)"
-        if [ "$OS" = "macos" ]; then
-            echo "  Install with: brew install llvm@17"
-        else
-            echo "  Install with: apt-get install llvm-dev (Ubuntu/Debian) or yum install llvm-devel (RHEL/CentOS)"
-        fi
-    else
-        log_success "LLVM is installed"
-    fi
+  if [[ ! -f "${temp_dir}/tea" ]]; then
+    log_error "Release archive did not contain a top-level tea binary"
+    exit 1
+  fi
 
-    echo ""
+  install -m 0755 "${temp_dir}/tea" "${TEA_INSTALL_DIR}/tea"
+  log_success "Installed tea to ${TEA_INSTALL_DIR}/tea"
 
-    if [ "$deps_ok" = false ]; then
-        log_error "Missing required dependencies"
-        echo ""
-        echo "Please install the missing dependencies and run this script again."
-        echo "For more information, visit: https://github.com/bentruyman/tea-lang#installation"
-        exit 1
-    fi
+  "${TEA_INSTALL_DIR}/tea" --version
+  show_path_hint
 
-    log_success "All required dependencies are installed!"
-    echo ""
-
-    # Determine if we're in the Tea repo or need to clone
-    if [ -f "Cargo.toml" ] && grep -q "tea-lang" Cargo.toml 2>/dev/null; then
-        log_info "Installing from current directory..."
-        INSTALL_FROM_PWD=true
-    else
-        log_info "Cloning Tea repository at ref ${TEA_REF}..."
-        TEMP_DIR=$(mktemp -d)
-        cd "$TEMP_DIR"
-
-        if ! git clone --depth 1 --branch "$TEA_REF" "$TEA_REPO" tea-lang; then
-            log_error "Failed to clone repository"
-            exit 1
-        fi
-
-        cd tea-lang
-        INSTALL_FROM_PWD=false
-    fi
-
-    echo ""
-    log_info "Setting up build environment..."
-
-    # Run setup
-    if ! make setup; then
-        log_error "Setup failed"
-        exit 1
-    fi
-
-    log_success "Setup complete"
-    echo ""
-
-    log_info "Building Tea (this may take a few minutes)..."
-
-    # Build in release mode
-    if ! cargo build --release --workspace; then
-        log_error "Build failed"
-        exit 1
-    fi
-
-    log_success "Build complete"
-    echo ""
-
-    # Install binaries
-    log_info "Installing binaries to $INSTALL_DIR..."
-
-    # Ensure install directory exists
-    mkdir -p "$INSTALL_DIR"
-
-    # Copy binaries
-    if ! cp target/release/tea-cli "$INSTALL_DIR/tea"; then
-        log_error "Failed to install tea binary"
-        exit 1
-    fi
-
-    if ! cp target/release/tea-lsp "$INSTALL_DIR/tea-lsp"; then
-        log_error "Failed to install tea-lsp binary"
-        exit 1
-    fi
-
-    # Make executable
-    chmod +x "$INSTALL_DIR/tea"
-    chmod +x "$INSTALL_DIR/tea-lsp"
-
-    log_success "Binaries installed"
-    echo ""
-
-    # Verify installation
-    log_info "Verifying installation..."
-
-    if command_exists tea; then
-        TEA_VERSION=$(tea --version 2>&1 || echo "unknown")
-        log_success "Tea installed successfully: $TEA_VERSION"
-    else
-        log_warning "Tea binary installed but not found in PATH"
-        echo ""
-        echo "Add $INSTALL_DIR to your PATH:"
-        echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
-        echo ""
-        echo "Add this line to your shell profile (~/.bashrc, ~/.zshrc, etc.)"
-    fi
-
-    # Clean up if we cloned
-    if [ "$INSTALL_FROM_PWD" = false ]; then
-        log_info "Cleaning up temporary files..."
-        cd /
-        rm -rf "$TEMP_DIR"
-    fi
-
-    echo ""
-    echo "╔══════════════════════════════════════════╗"
-    echo "║     Installation Complete!              ║"
-    echo "╚══════════════════════════════════════════╝"
-    echo ""
-    echo "Tea has been installed successfully."
-    echo ""
-    echo "Try it out:"
-    echo "  tea --version"
-    echo "  tea --help"
-    echo ""
+  echo ""
+  echo "Tea is ready."
+  echo "  tea --help"
+  echo "  tea examples/echo/main.tea hello tea"
+  echo ""
 }
 
 main "$@"

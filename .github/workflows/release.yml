@@ -1,0 +1,258 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver tag to publish (for example v0.1.0)"
+        required: true
+        type: string
+      ref:
+        description: "Git ref to release. Defaults to the default branch tip."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-latest
+    outputs:
+      release_ref: ${{ steps.release_ref.outputs.value }}
+
+    steps:
+      - name: Resolve release ref
+        id: release_ref
+        run: |
+          value="${{ inputs.ref }}"
+          if [[ -z "${value}" ]]; then
+            value="${{ github.event.repository.default_branch }}"
+          fi
+          echo "value=${value}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.release_ref.outputs.value }}
+
+      - name: Validate version format
+        run: |
+          version="${{ inputs.version }}"
+          if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release version must look like v0.1.0" >&2
+            exit 1
+          fi
+
+      - name: Verify crate versions match release
+        run: |
+          expected="${{ inputs.version }}"
+          expected="${expected#v}"
+          mismatches="$(rg -n '^version = "' tea-*/Cargo.toml | grep -v "version = \"${expected}\"" || true)"
+          if [[ -n "${mismatches}" ]]; then
+            echo "crate versions do not match ${expected}:" >&2
+            echo "${mismatches}" >&2
+            exit 1
+          fi
+
+      - name: Verify tea binary name
+        run: |
+          if ! grep -q 'name = "tea"' tea-cli/Cargo.toml; then
+            echo "tea-cli/Cargo.toml must define a tea binary target" >&2
+            exit 1
+          fi
+
+      - name: Verify bundled linkkit provenance manifest
+        run: test -f dist/linkkit-provenance.toml
+
+      - name: Create or validate git tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git fetch --tags --force
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          release_sha="$(git rev-parse HEAD)"
+
+          if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            tag_sha="$(git rev-list -n 1 "${VERSION}")"
+            if [[ "${tag_sha}" != "${release_sha}" ]]; then
+              echo "existing tag ${VERSION} points at ${tag_sha}, expected ${release_sha}" >&2
+              exit 1
+            fi
+          else
+            git tag -a "${VERSION}" -m "Release ${VERSION}" "${release_sha}"
+            git push origin "refs/tags/${VERSION}"
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            unsupported_target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+            unsupported_target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+            unsupported_target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ inputs.version }}
+      TARGET: ${{ matrix.target }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux LLVM dependencies
+        if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> "${GITHUB_ENV}"
+          echo "LLVM_CONFIG_PATH=/usr/lib/llvm-17/bin/llvm-config" >> "${GITHUB_ENV}"
+
+      - name: Install macOS LLVM dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@17
+          prefix="$(brew --prefix llvm@17)"
+          echo "LLVM_SYS_170_PREFIX=${prefix}" >> "${GITHUB_ENV}"
+          echo "LLVM_CONFIG_PATH=${prefix}/bin/llvm-config" >> "${GITHUB_ENV}"
+          echo "${prefix}/bin" >> "${GITHUB_PATH}"
+
+      - name: Install root Bun dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate code from specifications
+        run: make codegen
+
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build bundled Tea runtime archive
+        shell: bash
+        run: |
+          cargo_log="$(mktemp)"
+          cargo rustc -p tea-runtime --release -- --print=native-static-libs 2>&1 | tee "${cargo_log}"
+          runtime_native_libs="$(sed -n 's/^note: native-static-libs: //p' "${cargo_log}" | tail -n 1)"
+          if [[ -z "${runtime_native_libs}" ]]; then
+            echo "failed to resolve native static libs for tea-runtime" >&2
+            exit 1
+          fi
+          runtime_archive="$(pwd)/target/release/libtea_runtime.a"
+          echo "TEA_BUNDLED_RUNTIME_ARCHIVE=${runtime_archive}" >> "${GITHUB_ENV}"
+          echo "TEA_BUNDLED_RUNTIME_NATIVE_LIBS=${runtime_native_libs}" >> "${GITHUB_ENV}"
+          echo "TEA_BUNDLED_RUNTIME_TARGET=${TARGET}" >> "${GITHUB_ENV}"
+
+      - name: Build release tea binary
+        run: cargo build --release -p tea-cli
+
+      - name: Smoke test bundled release binary
+        shell: bash
+        run: |
+          target/release/tea --version
+          target/release/tea examples/echo/main.tea hello tea
+          target/release/tea build examples/echo/main.tea --output /tmp/tea-release-echo
+          /tmp/tea-release-echo hello tea
+
+      - name: Verify bundled mode rejects non-host target
+        shell: bash
+        run: |
+          set +e
+          output="$(target/release/tea build examples/echo/main.tea --target "${{ matrix.unsupported_target }}" 2>&1)"
+          status=$?
+          set -e
+          if [[ "${status}" -eq 0 ]]; then
+            echo "expected non-host target build to fail" >&2
+            exit 1
+          fi
+          if [[ "${output}" != *"build tea from source"* ]]; then
+            echo "expected actionable host-only message, got:" >&2
+            echo "${output}" >&2
+            exit 1
+          fi
+
+      - name: Check Linux LLVM linkage
+        if: runner.os == 'Linux'
+        run: |
+          if ldd target/release/tea | grep -q 'libLLVM'; then
+            echo "release tea binary unexpectedly links against libLLVM" >&2
+            exit 1
+          fi
+
+      - name: Check macOS Homebrew LLVM linkage
+        if: runner.os == 'macOS'
+        run: |
+          if otool -L target/release/tea | grep -q '/opt/homebrew\|/usr/local/opt'; then
+            echo "release tea binary unexpectedly links against a Homebrew LLVM path" >&2
+            exit 1
+          fi
+
+      - name: Package release archive
+        shell: bash
+        run: |
+          asset_dir="dist/release"
+          mkdir -p "${asset_dir}"
+          cp target/release/tea "${asset_dir}/tea"
+          tar -C "${asset_dir}" -czf "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" tea
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" > "${asset_dir}/tea-${VERSION}-${TARGET}.sha256"
+          else
+            shasum -a 256 "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" > "${asset_dir}/tea-${VERSION}-${TARGET}.sha256"
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            dist/release/tea-${{ inputs.version }}-${{ matrix.target }}.tar.gz
+            dist/release/tea-${{ inputs.version }}-${{ matrix.target }}.sha256
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - build
+
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/artifacts
+
+      - name: Assemble checksum manifest
+        run: |
+          mkdir -p dist/final
+          find dist/artifacts -name '*.tar.gz' -exec cp {} dist/final/ \;
+          find dist/artifacts -name '*.sha256' -print0 | sort -z | xargs -0 cat > "dist/final/tea-${{ inputs.version }}-SHA256SUMS.txt"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/final/*.tar.gz
+            dist/final/tea-${{ inputs.version }}-SHA256SUMS.txt

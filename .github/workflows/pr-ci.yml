@@ -63,6 +63,8 @@ jobs:
                 "Makefile",
                 "bun.lock",
                 "package.json",
+                "scripts/release.mjs",
+                "scripts/release.test.mjs",
                 "scripts/codegen-ast.js",
                 "scripts/codegen-highlights.js",
                 "scripts/e2e.sh",
@@ -161,6 +163,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Run release automation smoke tests
+        run: bun test scripts/release.test.mjs
 
       - name: Generate code from specifications
         run: make codegen

@@ -4,12 +4,12 @@ Welcome to Tea! This guide will help you install Tea and write your first progra
 
 ## What is Tea?
 
-Tea is a strongly typed scripting language with a Ruby-inspired syntax that compiles to native code. It combines the expressiveness of scripting languages with the performance and safety of compiled languages.
+Tea is a strongly typed scripting language with familiar syntax that compiles to native code. It combines the expressiveness of scripting languages with the performance and safety of compiled languages.
 
 **Key Features:**
 
 - **Static typing with inference** - Type safety without verbose annotations
-- **Familiar syntax** - Clean, indentation-based syntax inspired by Ruby and Python
+- **Familiar syntax** - clean, indentation-based, designed for readable scripting
 - **Native compilation** - Compiles to fast, standalone binaries via LLVM
 - **Rich standard library** - Built-in modules for filesystem, JSON, strings, and more
 - **Generics** - Write reusable, type-safe code

@@ -1,6 +1,6 @@
 # Tea Language Documentation
 
-Welcome to the Tea language documentation! Tea is a strongly typed scripting language with Ruby-inspired syntax that compiles to native code.
+Welcome to the Tea language documentation! Tea is a strongly typed scripting language with familiar syntax that compiles to native code.
 
 ## Quick Links
 

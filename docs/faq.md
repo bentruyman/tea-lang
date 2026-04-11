@@ -6,7 +6,7 @@ Common questions about the Tea programming language.
 
 ### What is Tea?
 
-Tea is a strongly typed scripting language with Ruby-inspired syntax that compiles to native code via LLVM. It combines the expressiveness and simplicity of scripting languages with the performance and type safety of compiled languages.
+Tea is a strongly typed scripting language with familiar syntax that compiles to native code. It combines the expressiveness and simplicity of scripting languages with the performance and type safety of compiled languages.
 
 ### Why should I use Tea?
 
@@ -14,7 +14,7 @@ Use Tea when you want:
 
 - **Type safety** without verbose annotations - catch errors before runtime
 - **Native performance** - fast, standalone binaries
-- **Simple syntax** - clean, readable code inspired by Ruby and Python
+- **Familiar syntax** - clean, indentation-based, designed for readable scripting
 - **Rich standard library** - filesystem, JSON, path, and string utilities built-in
 - **Quick development** - run scripts directly or compile to binaries
 

@@ -1,9 +1,20 @@
-# Tea Language
+<h1 align="center">
+  <img src="./www/public/tea-logo.svg" alt="Tea logo" width="96" /><br>
+  Tea Language
+</h1>
 
-[![CI](https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml/badge.svg)](https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <sup>A strongly typed scripting language with familiar syntax that compiles to native code.</sup>
+</p>
 
-A strongly typed scripting language with Ruby-inspired syntax that compiles to native code.
+<p align="center">
+  <a href="https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml">
+    <img src="https://github.com/bentruyman/tea-lang/actions/workflows/pr-ci.yml/badge.svg" alt="CI" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
+  </a>
+</p>
 
 ```tea
 def greet(name: String) -> String
@@ -20,7 +31,7 @@ end
 ## Features
 
 - **Static typing with inference** – catch errors before runtime while keeping code concise
-- **Familiar syntax** – indentation-based, inspired by Ruby and Python
+- **Familiar syntax** – clean, indentation-based, designed for readable scripting
 - **Generics** – write once, use anywhere with automatic specialization
 - **Native compilation** – compiles to fast, standalone native binaries
 - **Rich standard library** – filesystem, path, process, regex, and string utilities built-in

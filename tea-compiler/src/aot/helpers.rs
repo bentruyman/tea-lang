@@ -108,21 +108,6 @@ impl<'ctx> LoopMetadataBuilder<'ctx> {
         self
     }
 
-    /// Add an i32 metadata node (e.g., "llvm.loop.vectorize.width" = 4).
-    pub fn with_i32(mut self, key: &str, value: u32) -> Self {
-        let key_md = self.context.metadata_string(key);
-        let value_const = self
-            .context
-            .i32_type()
-            .const_int(value as u64, false)
-            .as_basic_value_enum();
-        let node = self
-            .context
-            .metadata_node(&[key_md.into(), value_const.into()]);
-        self.nodes.push(node);
-        self
-    }
-
     /// Attach the loop metadata to an instruction (typically a branch at loop end).
     pub fn attach_to(self, instruction: InstructionValue<'ctx>) {
         let md_kind = self.context.get_kind_id("llvm.loop");

@@ -246,7 +246,7 @@ show_path_hint() {
 main() {
   echo ""
   echo "╔══════════════════════════════════════════╗"
-  echo "║     Tea Language Installer              ║"
+  echo "║     Tea Language Installer               ║"
   echo "╚══════════════════════════════════════════╝"
   echo ""
 

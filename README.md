@@ -66,18 +66,20 @@ Modules like `std.assert`, `std.fs`, `std.path`, and the debug built-ins (`@prin
 
 #### Automated Installation (Recommended)
 
-For macOS and Linux, use the install script:
+For supported prebuilt hosts, use the install script:
 
 ```bash
 curl -fsSL https://tea-lang.dev/install | bash
 ```
 
-The installer downloads the latest GitHub Release, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
+The installer downloads the latest GitHub Release for x86_64 Linux or Apple Silicon macOS, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
 
 Before running it, make sure a host C toolchain is available:
 
-- **macOS**: `xcode-select --install`
+- **Apple Silicon macOS**: `xcode-select --install`
 - **Linux**: install `cc`/`clang` with your package manager (for example `sudo apt-get install build-essential clang`)
+
+Intel Macs should build from source instead.
 
 You can override the install behavior with:
 
@@ -240,7 +242,7 @@ The workflow is the source of truth for releases. It:
 - prepares the version metadata
 - commits the release prep back to the target branch
 - creates or reuses the annotated `v...` tag
-- builds the release artifacts for each supported target
+- builds the release artifacts for x86_64 Linux and Apple Silicon macOS
 - publishes or updates the GitHub Release
 
 Rerunning the workflow is safe as long as the requested version already points

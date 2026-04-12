@@ -24,12 +24,14 @@ The fastest way to get started:
 curl -fsSL https://tea-lang.dev/install | bash
 ```
 
-The installer downloads a prebuilt Tea release, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
+The installer downloads a prebuilt Tea release for x86_64 Linux or Apple Silicon macOS, verifies its checksum, and installs `tea` to `~/.local/bin` by default.
 
 Before running it, make sure a host C toolchain is available:
 
-- **macOS** - `xcode-select --install`
+- **Apple Silicon macOS** - `xcode-select --install`
 - **Linux** - install `cc` or `clang` with your package manager
+
+Intel Macs should build from source instead.
 
 You can customize the installer with:
 
@@ -47,7 +49,7 @@ cd tea-lang
 
 This will:
 
-1. Download the matching release artifact for your machine
+1. Download the matching release artifact for your supported machine
 2. Verify the release checksum
 3. Install the `tea` command to `~/.local/bin`
 

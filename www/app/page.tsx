@@ -166,8 +166,9 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
-                The recommended path downloads a prebuilt Tea release with
-                checksum verification and installs it to{" "}
+                The recommended path downloads a prebuilt Tea release for
+                x86_64 Linux or Apple Silicon macOS with checksum verification
+                and installs it to{" "}
                 <code>~/.local/bin</code> by default.
               </p>
             </div>
@@ -180,8 +181,9 @@ export default function HomePage() {
               </pre>
               <p className="text-sm leading-6 text-muted-foreground">
                 Tea uses a local C toolchain to build executables: run{" "}
-                <code>xcode-select --install</code> on macOS, or install{" "}
-                <code>clang</code> with your package manager on Linux.
+                <code>xcode-select --install</code> on Apple Silicon macOS, or
+                install <code>clang</code> with your package manager on Linux.
+                Intel Macs should build from source.
               </p>
             </div>
           </Card>

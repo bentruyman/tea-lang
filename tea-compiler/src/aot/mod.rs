@@ -1740,8 +1740,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             // before AOT registration, so there is no compiler-side builtin table
             // to populate here.
             Ok(())
-        } else {
+        } else if module_path.starts_with("std.") || module_path.starts_with("support.") {
             bail!(format!("unknown module '{module_path}'"));
+        } else {
+            // Non-stdlib Tea modules are also expanded before AOT registration.
+            // Their rewritten functions and constants are lowered as normal globals.
+            Ok(())
         }
     }
 

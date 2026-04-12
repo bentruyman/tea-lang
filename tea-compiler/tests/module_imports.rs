@@ -1,7 +1,7 @@
 use std::fs;
 
 use anyhow::Result;
-use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
+use tea_compiler::{aot, CompileOptions, Compiler, SourceFile, SourceId};
 use tempfile::tempdir;
 
 #[test]
@@ -91,6 +91,43 @@ helper.secret("tea")
             .contains("module 'helper' has no export named 'secret'")),
         "expected missing export diagnostic, found {:?}",
         diagnostics
+    );
+
+    Ok(())
+}
+
+#[test]
+fn relative_module_imports_compile_in_aot() -> Result<()> {
+    let dir = tempdir()?;
+    let helper_path = dir.path().join("helper.tea");
+    fs::write(
+        &helper_path,
+        r#"
+const SCALE: Int = 3
+
+pub def wrap(value: Int) -> Int
+  value * SCALE
+end
+"#,
+    )?;
+
+    let main_source = r#"
+use helper = "./helper"
+
+@println(helper.wrap(5))
+"#;
+
+    let main_path = dir.path().join("main.tea");
+    fs::write(&main_path, main_source)?;
+
+    let source_file = SourceFile::new(SourceId(0), main_path.clone(), main_source.to_string());
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let compilation = compiler.compile(&source_file)?;
+
+    let ir = aot::compile_compilation_to_llvm_ir(&compilation)?;
+    assert!(
+        ir.contains("define i32 @main"),
+        "expected AOT IR to contain a main entry point:\n{ir}"
     );
 
     Ok(())

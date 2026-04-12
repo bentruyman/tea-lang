@@ -91,3 +91,45 @@ double("hi")
         "expected caret underline pointing at the argument: {stderr}"
     );
 }
+
+#[test]
+fn runs_script_with_relative_module_import_from_external_directory() {
+    let tmp = tempdir().expect("tempdir");
+    let helper_path = tmp.path().join("hello.tea");
+    fs::write(
+        &helper_path,
+        r#"
+pub def greet() -> String
+  "hi"
+end
+"#,
+    )
+    .expect("write helper module");
+
+    let script_path = tmp.path().join("todo.tea");
+    fs::write(
+        &script_path,
+        r#"
+use hello = "./hello.tea"
+
+@println(hello.greet())
+"#,
+    )
+    .expect("write main script");
+
+    let output = Command::new(tea_cli_binary())
+        .current_dir(tmp.path())
+        .arg("todo.tea")
+        .output()
+        .expect("run tea on script with relative module import");
+
+    assert!(
+        output.status.success(),
+        "expected script to succeed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout, "hi\n", "expected script output: {stdout}");
+}

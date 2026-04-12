@@ -150,6 +150,10 @@
   line-height: inherit;
 }
 
+.shiki .line:empty {
+  min-height: 1.5em;
+}
+
 .shiki .line span {
   white-space: inherit;
 }

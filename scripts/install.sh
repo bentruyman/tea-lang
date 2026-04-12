@@ -177,7 +177,15 @@ verify_checksum() {
   local archive_name
   archive_name="$(basename "${archive_path}")"
   local expected
-  expected="$(awk -v asset="${archive_name}" '$2 == asset { print $1 }' "${checksums_path}")"
+  expected="$(awk -v asset="${archive_name}" '
+    {
+      file = $2
+      sub(/^.*\//, "", file)
+      if (file == asset) {
+        print $1
+      }
+    }
+  ' "${checksums_path}")"
 
   if [[ -z "${expected}" ]]; then
     log_error "Checksum entry for ${archive_name} is missing"

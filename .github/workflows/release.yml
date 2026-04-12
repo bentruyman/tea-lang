@@ -333,7 +333,13 @@ jobs:
         run: |
           mkdir -p dist/final
           find dist/artifacts -name '*.tar.gz' -exec cp {} dist/final/ \;
-          find dist/artifacts -name '*.sha256' -print0 | sort -z | xargs -0 cat > "dist/final/tea-${{ needs.validate.outputs.release_tag }}-SHA256SUMS.txt"
+          find dist/artifacts -name '*.sha256' -print0 | sort -z | xargs -0 awk '
+            {
+              file = $2
+              sub(/^.*\//, "", file)
+              print $1 "  " file
+            }
+          ' > "dist/final/tea-${{ needs.validate.outputs.release_tag }}-SHA256SUMS.txt"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

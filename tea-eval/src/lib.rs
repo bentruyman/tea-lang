@@ -155,7 +155,6 @@ enum FunctionValue {
 
 #[derive(Clone)]
 struct UserFunction {
-    name: Option<String>,
     parameters: Vec<FunctionParameter>,
     body: CallableBody,
     closure: Rc<Environment>,
@@ -331,7 +330,6 @@ impl Interpreter {
                     let cell = env.define_placeholder(function.name.clone());
                     *cell.borrow_mut() =
                         Value::Function(Rc::new(FunctionValue::User(UserFunction {
-                            name: Some(function.name.clone()),
                             parameters: function.parameters.clone(),
                             body: CallableBody::Block(function.body.clone()),
                             closure: env.clone(),
@@ -1074,7 +1072,6 @@ impl Interpreter {
 
     fn lambda_value(&self, env: &Rc<Environment>, lambda: &LambdaExpression) -> UserFunction {
         UserFunction {
-            name: None,
             parameters: lambda.parameters.clone(),
             body: match &lambda.body {
                 LambdaBody::Expression(expression) => {

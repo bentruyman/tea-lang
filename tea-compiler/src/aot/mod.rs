@@ -11730,9 +11730,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 )
             }
             ExprValue::Void => {
-                // Tag = 9 (Nil), payload = 0
+                // Tag = Nil, payload = 0
                 // Use const_named_struct for compile-time constant (more efficient)
-                let tag = self.context.i32_type().const_int(9, false);
+                let tag = self
+                    .context
+                    .i32_type()
+                    .const_int(TeaValueTag::Nil.as_u64(), false);
                 let payload = self.context.i64_type().const_zero();
                 let struct_val = tea_value_type.const_named_struct(&[tag.into(), payload.into()]);
                 Ok(struct_val.into())

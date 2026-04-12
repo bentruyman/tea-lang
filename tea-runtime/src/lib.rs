@@ -121,7 +121,6 @@ fn process_handles() -> &'static Mutex<HashMap<i64, ProcessHandleEntry>> {
 // Regex handles for compiled regex patterns
 struct RegexHandle {
     regex: regex::Regex,
-    pattern: String,
 }
 
 static REGEX_HANDLES: OnceLock<Mutex<HashMap<i64, RegexHandle>>> = OnceLock::new();
@@ -3378,13 +3377,7 @@ pub extern "C" fn tea_regex_compile(pattern: *const TeaString) -> c_longlong {
         Ok(regex) => {
             let mut table = regex_handles().lock().unwrap();
             let handle_id = NEXT_REGEX_HANDLE.fetch_add(1, Ordering::SeqCst);
-            table.insert(
-                handle_id,
-                RegexHandle {
-                    regex,
-                    pattern: pattern_str,
-                },
-            );
+            table.insert(handle_id, RegexHandle { regex });
             handle_id as c_longlong
         }
         Err(e) => {

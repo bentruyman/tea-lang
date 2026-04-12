@@ -399,10 +399,6 @@ impl TypeChecker {
         self.structs.clone()
     }
 
-    pub(crate) fn union_definitions(&self) -> HashMap<String, UnionDefinition> {
-        self.unions.clone()
-    }
-
     pub(crate) fn enum_definitions(&self) -> HashMap<String, EnumDefinition> {
         self.enums.clone()
     }

@@ -54,7 +54,15 @@ detect_os() {
 
 detect_arch() {
   case "$(uname -m)" in
-    x86_64|amd64) echo "x86_64" ;;
+    x86_64|amd64)
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        if [[ "$(sysctl -in hw.optional.arm64 2>/dev/null || true)" == "1" ]]; then
+          echo "aarch64"
+          return 0
+        fi
+      fi
+      echo "x86_64"
+      ;;
     arm64|aarch64) echo "aarch64" ;;
     *)
       log_error "Unsupported architecture: $(uname -m)"
@@ -63,8 +71,37 @@ detect_arch() {
   esac
 }
 
+show_source_build_instructions() {
+  local repo_name="${TEA_GITHUB_REPO##*/}"
+
+  echo "  Build from source instead:" >&2
+  echo "    git clone https://github.com/${TEA_GITHUB_REPO}" >&2
+  echo "    cd ${repo_name}" >&2
+  echo "    ./scripts/setup-worktree.sh" >&2
+  echo "    make install" >&2
+}
+
 host_target() {
-  echo "$(detect_arch)-$(detect_os)"
+  local target
+  target="$(detect_arch)-$(detect_os)"
+
+  case "${target}" in
+    x86_64-unknown-linux-gnu|aarch64-apple-darwin)
+      echo "${target}"
+      ;;
+    x86_64-apple-darwin)
+      log_error "Prebuilt Tea releases do not support Intel macOS"
+      echo "  Supported prebuilt targets: x86_64-unknown-linux-gnu, aarch64-apple-darwin" >&2
+      show_source_build_instructions
+      exit 1
+      ;;
+    *)
+      log_error "No prebuilt Tea release is available for ${target}"
+      echo "  Supported prebuilt targets: x86_64-unknown-linux-gnu, aarch64-apple-darwin" >&2
+      show_source_build_instructions
+      exit 1
+      ;;
+  esac
 }
 
 require_host_linker() {
@@ -163,6 +200,31 @@ ensure_install_dir() {
   mkdir -p "${TEA_INSTALL_DIR}"
 }
 
+install_extracted_payload() {
+  local extract_dir="$1"
+
+  if [[ ! -f "${extract_dir}/tea" ]]; then
+    log_error "Release archive did not contain a top-level tea binary"
+    exit 1
+  fi
+
+  install -m 0755 "${extract_dir}/tea" "${TEA_INSTALL_DIR}/tea"
+
+  local dylib_found=0
+  for dylib_path in "${extract_dir}"/*.dylib; do
+    if [[ ! -f "${dylib_path}" ]]; then
+      continue
+    fi
+    dylib_found=1
+    install -m 0644 "${dylib_path}" "${TEA_INSTALL_DIR}/$(basename "${dylib_path}")"
+  done
+
+  log_success "Installed tea to ${TEA_INSTALL_DIR}/tea"
+  if [[ "${dylib_found}" -eq 1 ]]; then
+    log_info "Installed companion runtime libraries to ${TEA_INSTALL_DIR}"
+  fi
+}
+
 show_path_hint() {
   case ":${PATH}:" in
     *":${TEA_INSTALL_DIR}:"*) return 0 ;;
@@ -210,14 +272,7 @@ main() {
 
   ensure_install_dir
   tar -xzf "${archive_path}" -C "${temp_dir}"
-
-  if [[ ! -f "${temp_dir}/tea" ]]; then
-    log_error "Release archive did not contain a top-level tea binary"
-    exit 1
-  fi
-
-  install -m 0755 "${temp_dir}/tea" "${TEA_INSTALL_DIR}/tea"
-  log_success "Installed tea to ${TEA_INSTALL_DIR}/tea"
+  install_extracted_payload "${temp_dir}"
 
   "${TEA_INSTALL_DIR}/tea" --version
   show_path_hint

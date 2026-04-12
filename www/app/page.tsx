@@ -173,8 +173,8 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-3">
-              <pre className="overflow-x-auto rounded-[1.15rem] bg-foreground px-4 py-4 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.08),0_18px_35px_-28px_rgb(32_21_14_/_0.6)]">
-                <code className="font-mono text-sm text-background md:text-[0.95rem]">
+              <pre className="command-panel overflow-x-auto rounded-[1.15rem] px-4 py-4">
+                <code className="font-mono text-sm text-inherit md:text-[0.95rem]">
                   {installCommand}
                 </code>
               </pre>

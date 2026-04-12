@@ -483,6 +483,7 @@ struct LlvmCodeGenerator<'ctx> {
     string_concat_fn: Option<FunctionValue<'ctx>>,
     string_push_str_fn: Option<FunctionValue<'ctx>>,
     string_push_byte_fn: Option<FunctionValue<'ctx>>,
+    string_push_int_fn: Option<FunctionValue<'ctx>>,
     string_slice_fn: Option<FunctionValue<'ctx>>,
     list_slice_fn: Option<FunctionValue<'ctx>>,
     struct_set_fn: Option<FunctionValue<'ctx>>,
@@ -517,7 +518,11 @@ struct LlvmCodeGenerator<'ctx> {
     list_equal_fn: Option<FunctionValue<'ctx>>,
     dict_new_fn: Option<FunctionValue<'ctx>>,
     dict_set_fn: Option<FunctionValue<'ctx>>,
+    dict_set_int_fn: Option<FunctionValue<'ctx>>,
+    dict_set_int_key_parts_fn: Option<FunctionValue<'ctx>>,
     dict_get_fn: Option<FunctionValue<'ctx>>,
+    dict_get_int_fn: Option<FunctionValue<'ctx>>,
+    dict_get_int_key_parts_fn: Option<FunctionValue<'ctx>>,
     dict_equal_fn: Option<FunctionValue<'ctx>>,
     struct_equal_fn: Option<FunctionValue<'ctx>>,
     closure_new_fn: Option<FunctionValue<'ctx>>,
@@ -1197,6 +1202,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             string_concat_fn: None,
             string_push_str_fn: None,
             string_push_byte_fn: None,
+            string_push_int_fn: None,
             string_slice_fn: None,
             list_slice_fn: None,
             struct_set_fn: None,
@@ -1227,7 +1233,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             list_equal_fn: None,
             dict_new_fn: None,
             dict_set_fn: None,
+            dict_set_int_fn: None,
+            dict_set_int_key_parts_fn: None,
             dict_get_fn: None,
+            dict_get_int_fn: None,
+            dict_get_int_key_parts_fn: None,
             dict_equal_fn: None,
             struct_equal_fn: None,
             closure_new_fn: None,
@@ -3868,6 +3878,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(result)
     }
 
+    fn push_int_value(
+        &mut self,
+        target: PointerValue<'ctx>,
+        value: IntValue<'ctx>,
+    ) -> Result<PointerValue<'ctx>> {
+        let push_fn = self.ensure_string_push_int_fn();
+        let result = self
+            .call_function(push_fn, &[target.into(), value.into()], "push_int")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_push_int returned no value"))?
+            .into_pointer_value();
+        Ok(result)
+    }
+
     fn compile_indexed_assignment(
         &mut self,
         base_name: &str,
@@ -3906,38 +3931,69 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         match loaded {
             ExprValue::Dict {
                 pointer,
-                value_type: _,
+                value_type,
             } => {
-                // Compile the key expression
-                let key_expr = self.compile_expression(index, function, locals)?;
-                let key_ptr = match key_expr {
-                    ExprValue::String(ptr) => ptr,
-                    _ => bail!("dictionary index expects a String key"),
-                };
-
                 // Compile the new value
                 let new_value = self.compile_expression(value, function, locals)?;
 
-                // Call tea_dict_set to mutate the dictionary in place
-                let dict_set = self.ensure_dict_set();
-                let tea_value = self.expr_to_tea_value(new_value)?.into_struct_value();
+                if matches!(value_type.as_ref(), ValueType::Int) {
+                    let int_value = new_value.into_int()?;
 
-                // ARM64 ABI fix: Pass TeaValue by pointer instead of by value
-                let tea_value_type = self
-                    .context
-                    .get_struct_type("TeaValue")
-                    .ok_or_else(|| anyhow!("TeaValue type not found"))?;
-                let alloca = map_builder_error(
-                    self.builder
-                        .build_alloca(tea_value_type, "dict_set_tea_value_tmp"),
-                )?;
-                map_builder_error(self.builder.build_store(alloca, tea_value))?;
+                    if let Some((prefix, key_expr, suffix)) = Self::interpolated_int_key_parts(index)
+                    {
+                        let prefix_ptr = self.compile_string_literal(prefix)?.into_string()?;
+                        let suffix_ptr = self.compile_string_literal(suffix)?.into_string()?;
+                        let key_int = self.compile_expression(key_expr, function, locals)?.into_int()?;
+                        let dict_set_parts = self.ensure_dict_set_int_key_parts();
+                        self.call_function(
+                            dict_set_parts,
+                            &[
+                                pointer.into(),
+                                prefix_ptr.into(),
+                                suffix_ptr.into(),
+                                key_int.into(),
+                                int_value.into(),
+                            ],
+                            "dict_set_int_key_parts",
+                        )?;
+                    } else {
+                        let key_expr = self.compile_expression(index, function, locals)?;
+                        let key_ptr = match key_expr {
+                            ExprValue::String(ptr) => ptr,
+                            _ => bail!("dictionary index expects a String key"),
+                        };
+                        let dict_set_int = self.ensure_dict_set_int();
+                        self.call_function(
+                            dict_set_int,
+                            &[pointer.into(), key_ptr.into(), int_value.into()],
+                            "dict_set_int",
+                        )?;
+                    }
+                } else {
+                    let key_expr = self.compile_expression(index, function, locals)?;
+                    let key_ptr = match key_expr {
+                        ExprValue::String(ptr) => ptr,
+                        _ => bail!("dictionary index expects a String key"),
+                    };
+                    let dict_set = self.ensure_dict_set();
+                    let tea_value = self.expr_to_tea_value(new_value)?.into_struct_value();
 
-                self.call_function(
-                    dict_set,
-                    &[pointer.into(), key_ptr.into(), alloca.into()],
-                    "dict_set",
-                )?;
+                    let tea_value_type = self
+                        .context
+                        .get_struct_type("TeaValue")
+                        .ok_or_else(|| anyhow!("TeaValue type not found"))?;
+                    let alloca = map_builder_error(
+                        self.builder
+                            .build_alloca(tea_value_type, "dict_set_tea_value_tmp"),
+                    )?;
+                    map_builder_error(self.builder.build_store(alloca, tea_value))?;
+
+                    self.call_function(
+                        dict_set,
+                        &[pointer.into(), key_ptr.into(), alloca.into()],
+                        "dict_set",
+                    )?;
+                }
 
                 Ok(ExprValue::Void)
             }
@@ -4290,12 +4346,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         } else {
             // Regular indexing
-            let key_expr = self.compile_expression(&index.index, function, locals)?;
             match object {
                 ExprValue::List {
                     pointer,
                     element_type,
                 } => {
+                    let key_expr = self.compile_expression(&index.index, function, locals)?;
                     let index_value = key_expr.into_int()?;
                     // Inline list access for small lists
                     // TeaList: { tag: i8, len: i8, padding: [6 x i8], data: [8 x TeaValue] }
@@ -4334,24 +4390,69 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     pointer,
                     value_type,
                 } => {
-                    let key_ptr = match key_expr {
-                        ExprValue::String(ptr) => ptr,
-                        _ => bail!("dictionary index expects a String key"),
-                    };
-                    let dict_get = self.ensure_dict_get();
-                    let tea_value = self
-                        .call_function(dict_get, &[pointer.into(), key_ptr.into()], "dict_get")?
-                        .try_as_basic_value()
-                        .left()
-                        .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
-                        .into_struct_value();
-                    if matches!(*value_type, ValueType::Void | ValueType::Any) {
-                        Ok(ExprValue::Any { value: tea_value })
+                    if matches!(value_type.as_ref(), ValueType::Int) {
+                        let int_value = if let Some((prefix, key_expr, suffix)) =
+                            Self::interpolated_int_key_parts(&index.index)
+                        {
+                            let prefix_ptr = self.compile_string_literal(prefix)?.into_string()?;
+                            let suffix_ptr = self.compile_string_literal(suffix)?.into_string()?;
+                            let key_int =
+                                self.compile_expression(key_expr, function, locals)?.into_int()?;
+                            let dict_get_parts = self.ensure_dict_get_int_key_parts();
+                            self.call_function(
+                                dict_get_parts,
+                                &[
+                                    pointer.into(),
+                                    prefix_ptr.into(),
+                                    suffix_ptr.into(),
+                                    key_int.into(),
+                                ],
+                                "dict_get_int_key_parts",
+                            )?
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("expected Int from dict_get_int_key_parts"))?
+                            .into_int_value()
+                        } else {
+                            let key_expr = self.compile_expression(&index.index, function, locals)?;
+                            let key_ptr = match key_expr {
+                                ExprValue::String(ptr) => ptr,
+                                _ => bail!("dictionary index expects a String key"),
+                            };
+                            let dict_get_int = self.ensure_dict_get_int();
+                            self.call_function(
+                                dict_get_int,
+                                &[pointer.into(), key_ptr.into()],
+                                "dict_get_int",
+                            )?
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("expected Int from dict_get_int"))?
+                            .into_int_value()
+                        };
+                        Ok(ExprValue::Int(int_value))
                     } else {
-                        self.tea_value_to_expr(tea_value, *value_type)
+                        let key_expr = self.compile_expression(&index.index, function, locals)?;
+                        let key_ptr = match key_expr {
+                            ExprValue::String(ptr) => ptr,
+                            _ => bail!("dictionary index expects a String key"),
+                        };
+                        let dict_get = self.ensure_dict_get();
+                        let tea_value = self
+                            .call_function(dict_get, &[pointer.into(), key_ptr.into()], "dict_get")?
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
+                            .into_struct_value();
+                        if matches!(*value_type, ValueType::Void | ValueType::Any) {
+                            Ok(ExprValue::Any { value: tea_value })
+                        } else {
+                            self.tea_value_to_expr(tea_value, *value_type)
+                        }
                     }
                 }
                 ExprValue::String(string_ptr) => {
+                    let key_expr = self.compile_expression(&index.index, function, locals)?;
                     let index_value = key_expr.into_int()?;
                     let string_index_fn = self.ensure_string_index();
                     let result_ptr = self
@@ -5343,25 +5444,64 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let mut current: Option<PointerValue<'ctx>> = None;
 
         for part in &template.parts {
-            let part_ptr = match part {
-                InterpolatedStringPart::Literal(text) => {
-                    self.compile_string_literal(text)?.into_string()?
-                }
+            current = Some(match part {
+                InterpolatedStringPart::Literal(text) => match current {
+                    Some(existing) => {
+                        let bytes = text.as_bytes();
+                        if bytes.len() == 1 {
+                            self.push_byte_value(existing, bytes[0])?
+                        } else if bytes.is_empty() {
+                            existing
+                        } else {
+                            let literal_ptr = self.compile_string_literal(text)?.into_string()?;
+                            self.push_string_value(existing, literal_ptr)?
+                        }
+                    }
+                    None => self.compile_string_literal(text)?.into_string()?,
+                },
                 InterpolatedStringPart::Expression(expr) => {
                     let value = self.compile_expression(expr, function, locals)?;
-                    self.expr_to_string_pointer(value)?
+                    match current {
+                        Some(existing) => match value {
+                            ExprValue::Int(int_value) => self.push_int_value(existing, int_value)?,
+                            ExprValue::String(string_ptr) => {
+                                self.push_string_value(existing, string_ptr)?
+                            }
+                            other => {
+                                let part_ptr = self.expr_to_string_pointer(other)?;
+                                self.push_string_value(existing, part_ptr)?
+                            }
+                        },
+                        None => self.expr_to_string_pointer(value)?,
+                    }
                 }
-            };
-
-            current = Some(match current {
-                Some(existing) => self.concat_string_values(existing, part_ptr)?,
-                None => part_ptr,
             });
         }
 
         let pointer =
             current.ok_or_else(|| anyhow::anyhow!("interpolated string evaluation failed"))?;
         Ok(ExprValue::String(pointer))
+    }
+
+    fn interpolated_int_key_parts<'a>(
+        expr: &'a Expression,
+    ) -> Option<(&'a str, &'a Expression, &'a str)> {
+        let ExpressionKind::InterpolatedString(template) = &expr.kind else {
+            return None;
+        };
+
+        match template.parts.as_slice() {
+            [
+                InterpolatedStringPart::Literal(prefix),
+                InterpolatedStringPart::Expression(value),
+            ] => Some((prefix.as_str(), value, "")),
+            [
+                InterpolatedStringPart::Literal(prefix),
+                InterpolatedStringPart::Expression(value),
+                InterpolatedStringPart::Literal(suffix),
+            ] => Some((prefix.as_str(), value, suffix.as_str())),
+            _ => None,
+        }
     }
 
     fn compile_binary(
@@ -13584,6 +13724,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_string_push_int_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_push_int_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[self.string_ptr_type().into(), self.int_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_push_int", fn_type, Some(Linkage::External));
+        self.string_push_int_fn = Some(func);
+        func
+    }
+
     fn ensure_alloc_list(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.alloc_list_fn {
             return func;
@@ -13813,6 +13968,46 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_dict_set_int(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_set_int_fn {
+            return func;
+        }
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                self.dict_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_dict_set_int", fn_type, Some(Linkage::External));
+        self.dict_set_int_fn = Some(func);
+        func
+    }
+
+    fn ensure_dict_set_int_key_parts(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_set_int_key_parts_fn {
+            return func;
+        }
+        let fn_type = self.context.void_type().fn_type(
+            &[
+                self.dict_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.int_type().into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_dict_set_int_key_parts", fn_type, Some(Linkage::External));
+        self.dict_set_int_key_parts_fn = Some(func);
+        func
+    }
+
     fn ensure_dict_get(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.dict_get_fn {
             return func;
@@ -13825,6 +14020,41 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_dict_get", fn_type, Some(Linkage::External));
         self.dict_get_fn = Some(func);
+        func
+    }
+
+    fn ensure_dict_get_int(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_get_int_fn {
+            return func;
+        }
+        let fn_type = self.int_type().fn_type(
+            &[self.dict_ptr_type().into(), self.string_ptr_type().into()],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_dict_get_int", fn_type, Some(Linkage::External));
+        self.dict_get_int_fn = Some(func);
+        func
+    }
+
+    fn ensure_dict_get_int_key_parts(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.dict_get_int_key_parts_fn {
+            return func;
+        }
+        let fn_type = self.int_type().fn_type(
+            &[
+                self.dict_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.string_ptr_type().into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func = self
+            .module
+            .add_function("tea_dict_get_int_key_parts", fn_type, Some(Linkage::External));
+        self.dict_get_int_key_parts_fn = Some(func);
         func
     }
 

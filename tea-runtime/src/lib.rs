@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::env;
 use std::ffi::{c_void, CStr};
 use std::fs::{self, File};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::io::{BufReader, Read, Write};
 use std::os::raw::{c_char, c_double, c_int, c_longlong};
 use std::path::{Component, Path, PathBuf};
@@ -89,7 +90,46 @@ pub struct TeaClosure {
 }
 
 pub struct TeaDict {
-    entries: HashMap<String, TeaValue>,
+    entries: TeaDictMap,
+}
+
+type TeaDictMap = HashMap<String, TeaValue, BuildHasherDefault<TeaDictHasher>>;
+
+#[derive(Default)]
+struct TeaDictHasher {
+    hash: u64,
+}
+
+impl TeaDictHasher {
+    const OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+
+    #[inline]
+    fn write_byte(&mut self, byte: u8) {
+        if self.hash == 0 {
+            self.hash = Self::OFFSET_BASIS;
+        }
+        self.hash ^= byte as u64;
+        self.hash = self.hash.wrapping_mul(Self::PRIME);
+    }
+}
+
+impl Hasher for TeaDictHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.write_byte(*byte);
+        }
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        if self.hash == 0 {
+            Self::OFFSET_BASIS
+        } else {
+            self.hash
+        }
+    }
 }
 
 struct FsHandle {
@@ -150,8 +190,109 @@ pub extern "C" fn tea_error_clear_current() {
 }
 
 fn alloc_tea_string(text: &str) -> *mut TeaString {
-    let bytes = text.as_bytes();
-    tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+    alloc_tea_string_bytes(text.as_bytes())
+}
+
+fn alloc_tea_string_bytes(bytes: &[u8]) -> *mut TeaString {
+    if bytes.len() <= 22 {
+        let mut tea_string = TeaString {
+            tag: 1,
+            len: bytes.len() as u8,
+            data: [0; 22],
+        };
+        tea_string.data[..bytes.len()].copy_from_slice(bytes);
+        return Box::into_raw(Box::new(tea_string));
+    }
+
+    let mut buffer = Vec::with_capacity(bytes.len() + 1);
+    buffer.extend_from_slice(bytes);
+    buffer.push(0);
+    let data_ptr = buffer.as_ptr() as *const c_char;
+    std::mem::forget(buffer);
+
+    let mut tea_string = TeaString {
+        tag: 0,
+        len: 0,
+        data: [0; 22],
+    };
+
+    let ptr_bytes = (data_ptr as usize).to_ne_bytes();
+    let len_bytes = (bytes.len() as i64).to_ne_bytes();
+    tea_string.data[0..8].copy_from_slice(&ptr_bytes);
+    tea_string.data[8..16].copy_from_slice(&len_bytes);
+
+    Box::into_raw(Box::new(tea_string))
+}
+
+fn alloc_tea_int_string(value: i64) -> *mut TeaString {
+    let mut buffer = [0u8; 20];
+    let bytes = format_i64_bytes(value, &mut buffer);
+    alloc_tea_string_bytes(bytes)
+}
+
+fn format_i64_bytes<'a>(value: i64, buffer: &'a mut [u8; 20]) -> &'a [u8] {
+    let negative = value < 0;
+    let mut number = value.unsigned_abs();
+    let mut index = buffer.len();
+
+    loop {
+        index -= 1;
+        buffer[index] = b'0' + (number % 10) as u8;
+        number /= 10;
+        if number == 0 {
+            break;
+        }
+    }
+
+    if negative {
+        index -= 1;
+        buffer[index] = b'-';
+    }
+
+    &buffer[index..]
+}
+
+unsafe fn with_string_int_key<R>(
+    prefix: *const TeaString,
+    suffix: *const TeaString,
+    value: i64,
+    f: impl FnOnce(&str) -> R,
+) -> R {
+    if prefix.is_null() || suffix.is_null() {
+        panic!("dict key parts must be valid strings");
+    }
+
+    let prefix_ref = &*prefix;
+    let suffix_ref = &*suffix;
+    let prefix_bytes = tea_string_as_bytes(prefix_ref);
+    let suffix_bytes = tea_string_as_bytes(suffix_ref);
+
+    let mut digits_buffer = [0u8; 20];
+    let digits = format_i64_bytes(value, &mut digits_buffer);
+    let total_len = prefix_bytes.len() + digits.len() + suffix_bytes.len();
+
+    if total_len <= 96 {
+        let mut stack_bytes = [0u8; 96];
+        let mut offset = 0;
+        stack_bytes[..prefix_bytes.len()].copy_from_slice(prefix_bytes);
+        offset += prefix_bytes.len();
+        stack_bytes[offset..offset + digits.len()].copy_from_slice(digits);
+        offset += digits.len();
+        stack_bytes[offset..offset + suffix_bytes.len()].copy_from_slice(suffix_bytes);
+        let key = std::str::from_utf8(&stack_bytes[..total_len])
+            .unwrap_or_else(|_| panic!("dict key must be a valid string"));
+        f(key)
+    } else {
+        let prefix_text = std::str::from_utf8(prefix_bytes)
+            .unwrap_or_else(|_| panic!("dict key must be a valid string"));
+        let suffix_text = std::str::from_utf8(suffix_bytes)
+            .unwrap_or_else(|_| panic!("dict key must be a valid string"));
+        let mut owned = String::with_capacity(total_len);
+        owned.push_str(prefix_text);
+        owned.push_str(std::str::from_utf8(digits).expect("int formatting produced invalid UTF-8"));
+        owned.push_str(suffix_text);
+        f(&owned)
+    }
 }
 
 fn dict_set_value(dict: *mut TeaDict, key: &str, value: TeaValue) {
@@ -385,94 +526,135 @@ pub extern "C" fn tea_string_push_str(
     src: *const TeaString,
 ) -> *mut TeaString {
     unsafe {
-        if target.is_null() {
-            // If target is null, just clone src
-            let src_bytes = if src.is_null() {
-                &[]
-            } else {
-                tea_string_as_bytes(&*src)
-            };
-            return alloc_tea_string(std::str::from_utf8_unchecked(src_bytes));
-        }
-
-        let target_ref = &mut *target;
         let src_bytes = if src.is_null() {
             &[]
         } else {
             tea_string_as_bytes(&*src)
         };
 
-        if src_bytes.is_empty() {
-            return target;
-        }
-
-        let target_len = tea_string_len(target_ref);
-        let src_len = src_bytes.len();
-        let new_len = target_len + src_len;
-
-        // If target is inline, create a NEW heap string (can't mutate - target might be const)
-        if target_ref.tag == 1 {
-            // Allocate a new heap string with growth capacity
-            let target_bytes = tea_string_as_bytes(target_ref);
-            let new_capacity = (new_len * 2).max(32);
-            let mut buffer = Vec::with_capacity(new_capacity + 1);
-            buffer.extend_from_slice(target_bytes);
-            buffer.extend_from_slice(src_bytes);
-            buffer.resize(new_capacity + 1, 0);
-            let data_ptr = buffer.as_mut_ptr();
-            std::mem::forget(buffer);
-
-            // Create a new TeaString on the heap
-            let mut new_tea_string = TeaString {
-                tag: 0,
-                len: 0, // padding for heap strings
-                data: [0; 22],
-            };
-            tea_string_set_data_ptr(&mut new_tea_string, data_ptr);
-            tea_string_set_len(&mut new_tea_string, new_len);
-            tea_string_set_capacity(&mut new_tea_string, new_capacity);
-            return Box::into_raw(Box::new(new_tea_string));
-        }
-
-        // Target is heap string
-        let capacity = tea_string_capacity(target_ref);
-
-        if new_len <= capacity {
-            // Enough capacity, just append in place
-            let data_ptr = tea_string_data_ptr_mut(target_ref);
-            std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), data_ptr.add(target_len), src_len);
-            *data_ptr.add(new_len) = 0; // null terminator
-            tea_string_set_len(target_ref, new_len);
-            target
-        } else {
-            // Need to grow - double capacity or fit new_len, whichever is larger
-            let new_capacity = (capacity * 2).max(new_len).max(32);
-            let old_data_ptr = tea_string_data_ptr_mut(target_ref);
-
-            // Allocate new buffer
-            let mut buffer = Vec::with_capacity(new_capacity + 1);
-            let old_bytes = std::slice::from_raw_parts(old_data_ptr, target_len);
-            buffer.extend_from_slice(old_bytes);
-            buffer.extend_from_slice(src_bytes);
-            buffer.resize(new_capacity + 1, 0);
-            let new_data_ptr = buffer.as_mut_ptr();
-            std::mem::forget(buffer);
-
-            // Free old buffer (it was allocated as Vec, so use Vec to free)
-            // The old buffer had capacity + 1 bytes
-            let old_capacity = capacity;
-            drop(Vec::from_raw_parts(
-                old_data_ptr,
-                target_len + 1,
-                old_capacity + 1,
-            ));
-
-            tea_string_set_data_ptr(target_ref, new_data_ptr);
-            tea_string_set_len(target_ref, new_len);
-            tea_string_set_capacity(target_ref, new_capacity);
-            target
-        }
+        tea_string_push_bytes(target, src_bytes)
     }
+}
+
+unsafe fn tea_string_push_bytes(target: *mut TeaString, src_bytes: &[u8]) -> *mut TeaString {
+    if target.is_null() {
+        return alloc_tea_string_bytes(src_bytes);
+    }
+
+    let target_ref = &*target;
+
+    if src_bytes.is_empty() {
+        return target;
+    }
+
+    let target_len = tea_string_len(target_ref);
+    let src_len = src_bytes.len();
+    let new_len = target_len + src_len;
+
+    if target_ref.tag == 1 && new_len <= 22 {
+        let mut new_tea_string = TeaString {
+            tag: 1,
+            len: new_len as u8,
+            data: [0; 22],
+        };
+        new_tea_string.data[..target_len].copy_from_slice(&target_ref.data[..target_len]);
+        new_tea_string.data[target_len..new_len].copy_from_slice(src_bytes);
+        return Box::into_raw(Box::new(new_tea_string));
+    }
+
+    if target_ref.tag == 1 {
+        let target_bytes = tea_string_as_bytes(target_ref);
+        let new_capacity = (new_len * 2).max(32);
+        let mut buffer = Vec::with_capacity(new_capacity + 1);
+        buffer.extend_from_slice(target_bytes);
+        buffer.extend_from_slice(src_bytes);
+        buffer.resize(new_capacity + 1, 0);
+        let data_ptr = buffer.as_mut_ptr();
+        std::mem::forget(buffer);
+
+        let mut new_tea_string = TeaString {
+            tag: 0,
+            len: 0,
+            data: [0; 22],
+        };
+        tea_string_set_data_ptr(&mut new_tea_string, data_ptr);
+        tea_string_set_len(&mut new_tea_string, new_len);
+        tea_string_set_capacity(&mut new_tea_string, new_capacity);
+        return Box::into_raw(Box::new(new_tea_string));
+    }
+
+    let target_ref = &mut *(target as *mut TeaString);
+    let capacity = tea_string_capacity(target_ref);
+
+    if new_len <= capacity {
+        let data_ptr = tea_string_data_ptr_mut(target_ref);
+        std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), data_ptr.add(target_len), src_len);
+        *data_ptr.add(new_len) = 0;
+        tea_string_set_len(target_ref, new_len);
+        target
+    } else {
+        let new_capacity = (capacity * 2).max(new_len).max(32);
+        let old_data_ptr = tea_string_data_ptr_mut(target_ref);
+
+        let mut buffer = Vec::with_capacity(new_capacity + 1);
+        let old_bytes = std::slice::from_raw_parts(old_data_ptr, target_len);
+        buffer.extend_from_slice(old_bytes);
+        buffer.extend_from_slice(src_bytes);
+        buffer.resize(new_capacity + 1, 0);
+        let new_data_ptr = buffer.as_mut_ptr();
+        std::mem::forget(buffer);
+
+        let old_capacity = capacity;
+        drop(Vec::from_raw_parts(
+            old_data_ptr,
+            target_len + 1,
+            old_capacity + 1,
+        ));
+
+        tea_string_set_data_ptr(target_ref, new_data_ptr);
+        tea_string_set_len(target_ref, new_len);
+        tea_string_set_capacity(target_ref, new_capacity);
+        target
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_push_int(target: *mut TeaString, value: c_longlong) -> *mut TeaString {
+    let mut buffer = [0u8; 20];
+    let bytes = format_i64_bytes(value, &mut buffer);
+    unsafe { tea_string_push_bytes(target, bytes) }
+}
+
+unsafe fn concat_string_bytes(left_bytes: &[u8], right_bytes: &[u8]) -> *mut TeaString {
+    let new_len = left_bytes.len() + right_bytes.len();
+
+    if new_len <= 22 {
+        let mut tea_string = TeaString {
+            tag: 1,
+            len: new_len as u8,
+            data: [0; 22],
+        };
+        tea_string.data[..left_bytes.len()].copy_from_slice(left_bytes);
+        tea_string.data[left_bytes.len()..new_len].copy_from_slice(right_bytes);
+        return Box::into_raw(Box::new(tea_string));
+    }
+
+    let mut buffer = Vec::with_capacity(new_len + 1);
+    buffer.extend_from_slice(left_bytes);
+    buffer.extend_from_slice(right_bytes);
+    buffer.push(0);
+    let data_ptr = buffer.as_mut_ptr();
+    std::mem::forget(buffer);
+
+    let mut tea_string = TeaString {
+        tag: 0,
+        len: 0,
+        data: [0; 22],
+    };
+    tea_string_set_data_ptr(&mut tea_string, data_ptr);
+    tea_string_set_len(&mut tea_string, new_len);
+    tea_string_set_capacity(&mut tea_string, new_len);
+    Box::into_raw(Box::new(tea_string))
 }
 
 /// Optimized push for a single byte - avoids string extraction overhead
@@ -480,9 +662,8 @@ pub extern "C" fn tea_string_push_str(
 pub extern "C" fn tea_string_push_byte(target: *mut TeaString, byte: u8) -> *mut TeaString {
     unsafe {
         if target.is_null() {
-            // Create new inline string with the single byte
             let mut tea_string = TeaString {
-                tag: 1, // inline
+                tag: 1,
                 len: 1,
                 data: [0; 22],
             };
@@ -496,15 +677,12 @@ pub extern "C" fn tea_string_push_byte(target: *mut TeaString, byte: u8) -> *mut
 
         // If target is inline and result still fits inline, stay inline
         if target_ref.tag == 1 && new_len <= 22 {
-            // Create new inline string (can't mutate - target might be const)
             let mut new_tea_string = TeaString {
                 tag: 1,
                 len: new_len as u8,
                 data: [0; 22],
             };
-            // Copy existing data
             new_tea_string.data[..target_len].copy_from_slice(&target_ref.data[..target_len]);
-            // Append the byte
             new_tea_string.data[target_len] = byte;
             return Box::into_raw(Box::new(new_tea_string));
         }
@@ -576,12 +754,19 @@ pub extern "C" fn tea_string_concat(
     left: *const TeaString,
     right: *const TeaString,
 ) -> *mut TeaString {
-    let left_text = tea_string_to_rust(left).unwrap_or_default();
-    let right_text = tea_string_to_rust(right).unwrap_or_default();
-    let mut combined = String::with_capacity(left_text.len() + right_text.len());
-    combined.push_str(&left_text);
-    combined.push_str(&right_text);
-    alloc_tea_string(&combined)
+    unsafe {
+        let left_bytes = if left.is_null() {
+            &[]
+        } else {
+            tea_string_as_bytes(&*left)
+        };
+        let right_bytes = if right.is_null() {
+            &[]
+        } else {
+            tea_string_as_bytes(&*right)
+        };
+        concat_string_bytes(left_bytes, right_bytes)
+    }
 }
 
 #[no_mangle]
@@ -715,12 +900,17 @@ fn tea_string_to_rust(ptr: *const TeaString) -> Option<String> {
         }
         let string_ref = &*ptr;
         let bytes = tea_string_as_bytes(string_ref);
-        Some(String::from_utf8_lossy(bytes).to_string())
+        std::str::from_utf8(bytes).ok().map(|text| text.to_owned())
     }
 }
 
 fn expect_string(ptr: *const TeaString, context: &str) -> String {
     tea_string_to_rust(ptr).unwrap_or_else(|| panic!("{context}"))
+}
+
+fn expect_string_ref<'a>(string_ref: &'a TeaString, context: &str) -> &'a str {
+    let bytes = unsafe { tea_string_as_bytes(string_ref) };
+    std::str::from_utf8(bytes).unwrap_or_else(|_| panic!("{context}"))
 }
 
 fn expect_path(path: *const TeaString) -> String {
@@ -1953,9 +2143,22 @@ pub extern "C" fn tea_util_len(value: TeaValue) -> c_longlong {
 pub extern "C" fn tea_util_to_string(value_ptr: *const TeaValue) -> *mut TeaString {
     unsafe {
         let value = *value_ptr;
-        let text = tea_value_to_string(value);
-        let bytes = text.into_bytes();
-        tea_alloc_string(bytes.as_ptr() as *const c_char, bytes.len() as c_longlong)
+        match value.tag {
+            TeaValueTag::Int => alloc_tea_int_string(value.payload.int_value),
+            TeaValueTag::Bool => {
+                if value.payload.bool_value != 0 {
+                    alloc_tea_string("true")
+                } else {
+                    alloc_tea_string("false")
+                }
+            }
+            TeaValueTag::Nil => alloc_tea_string("nil"),
+            TeaValueTag::String => tea_string_push_str(ptr::null_mut(), value.payload.string_value),
+            _ => {
+                let text = tea_value_to_string(value);
+                alloc_tea_string(&text)
+            }
+        }
     }
 }
 
@@ -2391,27 +2594,7 @@ pub extern "C" fn tea_fs_close(handle: c_longlong) {
 pub extern "C" fn tea_alloc_string(ptr: *const c_char, len: c_longlong) -> *mut TeaString {
     unsafe {
         let bytes = std::slice::from_raw_parts(ptr as *const u8, len as usize);
-        let mut buffer = Vec::with_capacity(bytes.len() + 1);
-        buffer.extend_from_slice(bytes);
-        buffer.push(0);
-        let data_ptr = buffer.as_ptr() as *const c_char;
-        std::mem::forget(buffer);
-
-        // Create heap string with tag=0
-        let mut tea_string = TeaString {
-            tag: 0,
-            len: 0, // padding for heap strings
-            data: [0; 22],
-        };
-
-        // Store heap pointer in first 8 bytes of data array
-        // Also store the actual length in second 8 bytes for heap strings
-        let ptr_bytes = (data_ptr as usize).to_ne_bytes();
-        let len_bytes = (len as i64).to_ne_bytes();
-        tea_string.data[0..8].copy_from_slice(&ptr_bytes);
-        tea_string.data[8..16].copy_from_slice(&len_bytes);
-
-        Box::into_raw(Box::new(tea_string))
+        alloc_tea_string_bytes(bytes)
     }
 }
 
@@ -2788,7 +2971,7 @@ pub extern "C" fn tea_list_slice(
 #[no_mangle]
 pub extern "C" fn tea_dict_new() -> *mut TeaDict {
     Box::into_raw(Box::new(TeaDict {
-        entries: HashMap::new(),
+        entries: TeaDictMap::default(),
     }))
 }
 
@@ -2797,10 +2980,17 @@ fn dict_set_internal(dict: *mut TeaDict, key: *const TeaString, value: TeaValue)
     if dict.is_null() {
         panic!("null dict");
     }
-    let key_str = expect_string(key, "dict key must be a valid string");
     unsafe {
+        if key.is_null() {
+            panic!("dict key must be a valid string");
+        }
+        let key_str = expect_string_ref(&*key, "dict key must be a valid string");
         let dict_ref = &mut *dict;
-        dict_ref.entries.insert(key_str, value);
+        if let Some(existing) = dict_ref.entries.get_mut(key_str) {
+            *existing = value;
+        } else {
+            dict_ref.entries.insert(key_str.to_owned(), value);
+        }
     }
 }
 
@@ -2818,18 +3008,99 @@ pub extern "C" fn tea_dict_set(
 }
 
 #[no_mangle]
+pub extern "C" fn tea_dict_set_int(dict: *mut TeaDict, key: *const TeaString, value: c_longlong) {
+    dict_set_internal(dict, key, tea_value_from_int(value));
+}
+
+#[no_mangle]
 pub extern "C" fn tea_dict_get(dict: *const TeaDict, key: *const TeaString) -> TeaValue {
     if dict.is_null() {
         panic!("null dict");
     }
-    let key_str = expect_string(key, "dict key must be a valid string");
     unsafe {
+        if key.is_null() {
+            panic!("dict key must be a valid string");
+        }
+        let key_str = expect_string_ref(&*key, "dict key must be a valid string");
         let dict_ref = &*dict;
         dict_ref
             .entries
-            .get(&key_str)
+            .get(key_str)
             .copied()
             .unwrap_or_else(|| tea_value_nil())
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_dict_get_int(dict: *const TeaDict, key: *const TeaString) -> c_longlong {
+    if dict.is_null() {
+        panic!("null dict");
+    }
+
+    unsafe {
+        if key.is_null() {
+            panic!("dict key must be a valid string");
+        }
+
+        let key_str = expect_string_ref(&*key, "dict key must be a valid string");
+        let dict_ref = &*dict;
+        match dict_ref.entries.get(key_str).copied() {
+            Some(value) => match value.tag {
+                TeaValueTag::Int => value.payload.int_value,
+                TeaValueTag::Nil => 0,
+                _ => panic!("dict value is not an Int"),
+            },
+            None => 0,
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_dict_set_int_key_parts(
+    dict: *mut TeaDict,
+    prefix: *const TeaString,
+    suffix: *const TeaString,
+    key_int: c_longlong,
+    value: c_longlong,
+) {
+    if dict.is_null() {
+        panic!("null dict");
+    }
+
+    unsafe {
+        let dict_ref = &mut *dict;
+        with_string_int_key(prefix, suffix, key_int, |key_str| {
+            let tea_value = tea_value_from_int(value);
+            if let Some(existing) = dict_ref.entries.get_mut(key_str) {
+                *existing = tea_value;
+            } else {
+                dict_ref.entries.insert(key_str.to_owned(), tea_value);
+            }
+        });
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_dict_get_int_key_parts(
+    dict: *const TeaDict,
+    prefix: *const TeaString,
+    suffix: *const TeaString,
+    key_int: c_longlong,
+) -> c_longlong {
+    if dict.is_null() {
+        panic!("null dict");
+    }
+
+    unsafe {
+        let dict_ref = &*dict;
+        with_string_int_key(prefix, suffix, key_int, |key_str| match dict_ref.entries.get(key_str).copied() {
+            Some(value) => match value.tag {
+                TeaValueTag::Int => value.payload.int_value,
+                TeaValueTag::Nil => 0,
+                _ => panic!("dict value is not an Int"),
+            },
+            None => 0,
+        })
     }
 }
 

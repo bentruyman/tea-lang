@@ -55,9 +55,11 @@ cd tea-lang
 
 See the [Getting Started Guide](getting-started.md#installation) for details.
 
+Prebuilt releases are available for x86_64 Linux and Apple Silicon macOS. Intel Macs should build from source.
+
 ### What are the system requirements?
 
-- **Prebuilt install** - a host C toolchain (`xcode-select --install` on macOS, `cc`/`clang` on Linux)
+- **Prebuilt install** - x86_64 Linux or Apple Silicon macOS, plus a host C toolchain (`xcode-select --install` on Apple Silicon macOS, `cc`/`clang` on Linux)
 - **Source build** - Rust 1.70+, Bun, Make, and LLVM 17
 
 ### I get `tea: command not found` after installing

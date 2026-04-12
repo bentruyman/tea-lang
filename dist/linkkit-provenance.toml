@@ -9,11 +9,6 @@ runtime_archive = "bundled from tea-runtime staticlib during release assembly"
 native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"
 host_requirements = ["cc on PATH"]
 
-[targets.x86_64-apple-darwin]
-runtime_archive = "bundled from tea-runtime staticlib during release assembly"
-native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"
-host_requirements = ["Xcode Command Line Tools or another cc-compatible linker driver on PATH"]
-
 [targets.aarch64-apple-darwin]
 runtime_archive = "bundled from tea-runtime staticlib during release assembly"
 native_static_libs_source = "cargo rustc -p tea-runtime --release -- --print=native-static-libs"

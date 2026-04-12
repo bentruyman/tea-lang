@@ -101,11 +101,11 @@ jobs:
           VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           expected="${VERSION}"
-          mismatches="$( \
-            { \
-              rg -n '^version = "' tea-*/Cargo.toml Cargo.toml tea-web/Cargo.toml || true; \
-              rg -n '"version": "' tree-sitter-tea/package.json tree-sitter-tea/tree-sitter.json www/package.json www/public/tea-web/pkg/package.json || true; \
-            } | grep -v "${expected}" || true \
+          mismatches="$(
+            {
+              grep -Hn '^version = "' Cargo.toml tea-*/Cargo.toml tea-web/Cargo.toml || true
+              grep -Hn '"version": "' tree-sitter-tea/package.json tree-sitter-tea/tree-sitter.json www/package.json www/public/tea-web/pkg/package.json || true
+            } | grep -v "${expected}" || true
           )"
           if [[ -n "${mismatches}" ]]; then
             echo "release metadata does not match ${expected}:" >&2
@@ -167,12 +167,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             unsupported_target: aarch64-apple-darwin
-          - os: macos-13
-            target: x86_64-apple-darwin
-            unsupported_target: x86_64-unknown-linux-gnu
           - os: macos-14
             target: aarch64-apple-darwin
-            unsupported_target: x86_64-unknown-linux-gnu
+            unsupported_target: x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     env:
       VERSION: ${{ needs.validate.outputs.release_tag }}
@@ -272,8 +269,8 @@ jobs:
       - name: Check macOS Homebrew LLVM linkage
         if: runner.os == 'macOS'
         run: |
-          if otool -L target/release/tea | grep -q '/opt/homebrew\|/usr/local/opt'; then
-            echo "release tea binary unexpectedly links against a Homebrew LLVM path" >&2
+          if otool -L target/release/tea | grep -q '/opt/homebrew/opt/llvm@17/lib/libLLVM'; then
+            echo "release tea binary unexpectedly links against a Homebrew LLVM dylib" >&2
             exit 1
           fi
 
@@ -283,7 +280,25 @@ jobs:
           asset_dir="dist/release"
           mkdir -p "${asset_dir}"
           cp target/release/tea "${asset_dir}/tea"
-          tar -C "${asset_dir}" -czf "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" tea
+
+          if [[ "${RUNNER_OS}" == "macOS" ]]; then
+            while IFS= read -r dylib_path; do
+              [[ -z "${dylib_path}" ]] && continue
+              dylib_name="$(basename "${dylib_path}")"
+              cp "${dylib_path}" "${asset_dir}/${dylib_name}"
+              chmod 0644 "${asset_dir}/${dylib_name}"
+              install_name_tool -id "@executable_path/${dylib_name}" "${asset_dir}/${dylib_name}"
+              install_name_tool -change "${dylib_path}" "@executable_path/${dylib_name}" "${asset_dir}/tea"
+            done < <(otool -L target/release/tea | awk '/\/opt\/homebrew\// { print $1 }')
+
+            if otool -L "${asset_dir}/tea" | grep -q '/opt/homebrew\|/usr/local/opt'; then
+              echo "packaged macOS tea binary still links against Homebrew paths" >&2
+              otool -L "${asset_dir}/tea" >&2
+              exit 1
+            fi
+          fi
+
+          tar -C "${asset_dir}" -czf "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" .
 
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "${asset_dir}/tea-${VERSION}-${TARGET}.tar.gz" > "${asset_dir}/tea-${VERSION}-${TARGET}.sha256"

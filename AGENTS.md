@@ -25,9 +25,9 @@
 
 ### Code Generation
 
-- **Regenerate AST**: `make codegen-ast` — Generates `tea-compiler/src/ast.rs` from `spec/ast.yaml`
-- **Regenerate highlights**: `make codegen-highlights` — Generates tree-sitter `highlights.scm` from `spec/tokens.toml`
-- **All codegen**: `make codegen` — Runs both
+- **Regenerate generated files**: `make codegen` — Regenerates `tea-compiler/src/ast.rs` and tree-sitter `highlights.scm`
+- **AST only (direct script)**: `bun scripts/codegen-ast.js`
+- **Highlights only (direct script)**: `bun scripts/codegen-highlights.js`
 
 **Important**: AST and tree-sitter files are code-generated. Edit `spec/ast.yaml` or `spec/tokens.toml`, then run codegen.
 
@@ -98,7 +98,7 @@ Stdlib modules are resolved by the compiler's resolver and inlined during compil
 The AST is **code-generated** from `spec/ast.yaml`:
 
 - Edit `spec/ast.yaml` to modify AST structure
-- Run `make codegen-ast` to regenerate `tea-compiler/src/ast.rs`
+- Run `make codegen` to regenerate derived files
 - Schema defines all node types, fields, and derives
 
 **Pattern**: All AST nodes include `SourceSpan` for error reporting.
@@ -154,7 +154,7 @@ tea --emit llvm-ir script.tea  # Show LLVM IR
 ### Modifying AST
 
 1. Edit `spec/ast.yaml`
-2. Run `make codegen-ast`
+2. Run `make codegen`
 3. Update parser in `tea-compiler/src/parser/`
 4. Update typechecker if needed
 5. Update AOT codegen if needed

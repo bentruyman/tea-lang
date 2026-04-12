@@ -318,8 +318,8 @@ function prepareRelease(version, dryRun) {
   console.log(
     `- Preferred: run the GitHub Release workflow with version ${tagName} to commit, tag, build, and publish remotely.`,
   );
-  console.log(`- Manual fallback: make release-tag ${version}`);
-  console.log(`- Manual fallback: make release-push-tag ${version}`);
+  console.log(`- Manual fallback: bun scripts/release.mjs tag ${version}`);
+  console.log(`- Manual fallback: bun scripts/release.mjs push-tag ${version}`);
 }
 
 function git(args, options = {}) {
@@ -385,13 +385,13 @@ function createTag(version, dryRun) {
 
   if (dryRun) {
     console.log(`Would create annotated tag ${tagName} on ${head}.`);
-    console.log(`Next step: make release-push-tag ${version}`);
+    console.log(`Next step: bun scripts/release.mjs push-tag ${version}`);
     return;
   }
 
   git(["tag", "-a", tagName, "-m", `Release ${version}`]);
   console.log(`Created annotated tag ${tagName} on ${head}.`);
-  console.log(`Next step: make release-push-tag ${version}`);
+  console.log(`Next step: bun scripts/release.mjs push-tag ${version}`);
 }
 
 function ensureTagExists(tagName) {
@@ -406,7 +406,7 @@ function ensureTagExists(tagName) {
 
   if (existing.status !== 0) {
     throw new Error(
-      `tag ${tagName} does not exist locally; run "make release-tag ${tagName.slice(TAG_PREFIX.length)}" first`,
+      `tag ${tagName} does not exist locally; run "bun scripts/release.mjs tag ${tagName.slice(TAG_PREFIX.length)}" first`,
     );
   }
 }

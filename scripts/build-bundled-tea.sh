@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${TEA_RUST_TOOLCHAIN_RESOLVED:-0}" != "1" ]] && \
+  (! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1); then
+  exec "${SCRIPT_DIR}/with-rust-toolchain.sh" "$0" "$@"
+fi
+
 profile="${1:-release}"
 
 if [[ "${profile}" != "release" ]]; then

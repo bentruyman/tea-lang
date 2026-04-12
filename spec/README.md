@@ -30,7 +30,7 @@ Complete Abstract Syntax Tree node schema.
 
 **Generates:**
 
-- `tea-compiler/src/ast.rs` (via `bun run codegen:ast`)
+- `tea-compiler/src/ast.rs` (via `make codegen` or `bun scripts/codegen-ast.js`)
 
 ### `tokens.toml`
 
@@ -46,14 +46,14 @@ Token definitions including keywords, operators, and semantic mappings.
 
 **Generates:**
 
-- `tree-sitter-tea/queries/highlights.scm` (via `bun run codegen:highlights`)
+- `tree-sitter-tea/queries/highlights.scm` (via `make codegen` or `bun scripts/codegen-highlights.js`)
 
 ## Making Changes
 
 When modifying these specifications:
 
 1. Edit the appropriate spec file
-2. Run `bun run codegen` to regenerate derived files
+2. Run `make codegen` to regenerate derived files
 3. Verify the build succeeds: `cargo build`
 4. Run tests: `cargo test --workspace`
 

@@ -5142,6 +5142,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: Some(new_string.into()),
                     ty: ValueType::String,
                     mutable: true,
+                    string_builder: None,
                 },
             );
         }
@@ -5156,6 +5157,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: Some(updated_counter.into()),
                     ty: ValueType::Int,
                     mutable: true,
+                    string_builder: None,
                 },
             );
         }

@@ -3,6 +3,12 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ "${TEA_RUST_TOOLCHAIN_RESOLVED:-0}" != "1" ]] && \
+  (! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1); then
+  exec "${root_dir}/scripts/with-rust-toolchain.sh" "$0" "$@"
+fi
+
 cd "${root_dir}"
 
 echo "Running tree-sitter grammar tests..."

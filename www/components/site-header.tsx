@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { isTopNavActive, repo, topNav } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -45,16 +46,19 @@ export function SiteHeader() {
             );
           })}
         </nav>
-        <Button
-          variant="outline"
-          size="sm"
-          className="surface-quiet rounded-full border-border/70 px-4 font-semibold shadow-none hover:border-primary/25 hover:bg-accent/40 hover:text-foreground"
-          asChild
-        >
-          <Link href={repo.url} target="_blank" rel="noreferrer">
-            GitHub
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
+          <Button
+            variant="outline"
+            size="sm"
+            className="surface-quiet rounded-full border-border/70 px-4 font-semibold shadow-none hover:border-primary/25 hover:bg-accent/40 hover:text-foreground"
+            asChild
+          >
+            <Link href={repo.url} target="_blank" rel="noreferrer">
+              GitHub
+            </Link>
+          </Button>
+        </div>
       </div>
     </header>
   );

@@ -339,7 +339,7 @@ export function PlaygroundClient() {
             </div>
 
             {runtimeError ? (
-              <div className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-950">
+              <div className="warning-panel rounded-[1.25rem] border p-4 text-sm leading-6">
                 <div className="flex items-center gap-2 font-semibold">
                   <AlertTriangle className="h-4 w-4" />
                   Runtime error

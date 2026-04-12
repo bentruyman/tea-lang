@@ -14,7 +14,7 @@ import type { ThemedToken } from "shiki";
 
 import {
   getDocsHighlighter,
-  DOCS_HIGHLIGHT_THEME,
+  getDocsHighlightTheme,
 } from "@/lib/docs-highlighter";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ const FONT_STYLE_STRIKETHROUGH = 8;
 const EDITOR_LINE_HEIGHT = "1.35";
 
 const highlightCache = new Map<string, ThemedToken[][]>();
+const EDITOR_HIGHLIGHT_THEME = getDocsHighlightTheme("dark");
 
 function fallbackTokens(code: string) {
   return code
@@ -82,7 +83,7 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
   const [lines, setLines] = useState<ThemedToken[][]>(fallbackTokens(value));
 
   useEffect(() => {
-    const cacheKey = `${DOCS_HIGHLIGHT_THEME}:${deferredValue}`;
+    const cacheKey = `${EDITOR_HIGHLIGHT_THEME}:${deferredValue}`;
     const cached = highlightCache.get(cacheKey);
 
     if (cached) {
@@ -99,7 +100,7 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
           lang: "tea" as Parameters<
             typeof highlighter.codeToTokensBase
           >[1]["lang"],
-          theme: DOCS_HIGHLIGHT_THEME,
+          theme: EDITOR_HIGHLIGHT_THEME,
         });
 
         if (cancelled) {

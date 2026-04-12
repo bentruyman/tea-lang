@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 
 import { SiteFooter } from "@/components/site-shell";
 import { SiteHeader } from "@/components/site-header";
+import { ThemeProvider } from "@/components/theme-provider";
 
 import "./globals.css";
 
@@ -32,16 +33,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${crimsonText.variable} ${geistMono.variable} ${nunitoSans.className} min-h-screen bg-background text-foreground antialiased`}
       >
-        <div className="flex min-h-screen flex-col">
-          <SiteHeader />
-          <main className="flex-1">{children}</main>
-          <SiteFooter />
-        </div>
-        <Analytics />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="flex min-h-screen flex-col">
+            <SiteHeader />
+            <main className="flex-1">{children}</main>
+            <SiteFooter />
+          </div>
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   );

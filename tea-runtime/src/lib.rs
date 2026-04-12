@@ -3093,13 +3093,15 @@ pub extern "C" fn tea_dict_get_int_key_parts(
 
     unsafe {
         let dict_ref = &*dict;
-        with_string_int_key(prefix, suffix, key_int, |key_str| match dict_ref.entries.get(key_str).copied() {
-            Some(value) => match value.tag {
-                TeaValueTag::Int => value.payload.int_value,
-                TeaValueTag::Nil => 0,
-                _ => panic!("dict value is not an Int"),
-            },
-            None => 0,
+        with_string_int_key(prefix, suffix, key_int, |key_str| {
+            match dict_ref.entries.get(key_str).copied() {
+                Some(value) => match value.tag {
+                    TeaValueTag::Int => value.payload.int_value,
+                    TeaValueTag::Nil => 0,
+                    _ => panic!("dict value is not an Int"),
+                },
+                None => 0,
+            }
         })
     }
 }

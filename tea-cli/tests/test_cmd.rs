@@ -22,6 +22,64 @@ fn cargo_bin() -> PathBuf {
 }
 
 #[test]
+fn bare_tea_prints_help_and_exits_successfully() {
+    let output = Command::new(tea_cli_binary())
+        .current_dir(workspace_root())
+        .output()
+        .expect("run tea without arguments");
+
+    assert!(
+        output.status.success(),
+        "tea without arguments should print help and exit successfully"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Usage: tea [OPTIONS] <INPUT> [ARG]..."),
+        "stdout missing usage line:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("See `tea <subcommand> --help` for command-specific options."),
+        "stdout missing subcommand hint:\n{stdout}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.is_empty(), "stderr should be empty:\n{stderr}");
+}
+
+#[test]
+fn help_subcommand_block_is_aligned() {
+    let output = Command::new(tea_cli_binary())
+        .current_dir(workspace_root())
+        .arg("--help")
+        .output()
+        .expect("run tea --help");
+
+    assert!(output.status.success(), "tea --help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let expected_block = "\
+Subcommands:
+  tea build <INPUT>        Compile a tea-lang file to a native executable.
+  tea docs-manifest        Generate the docs reference manifest for the website.
+  tea fmt [PATH]...        Format tea-lang sources in place (defaults to current directory).
+  tea test [PATH]...       Discover and run tea-lang test blocks.
+";
+    assert!(
+        stdout.contains(expected_block),
+        "help output missing aligned subcommand block:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("--dump-tokens"),
+        "top-level help should hide compiler debug flags:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("--emit <EMIT>"),
+        "top-level help should hide compiler debug flags:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_lists_discovered_tests() {
     let tmp = tempdir().expect("tempdir");
     let target_root = tmp.path().join("target");

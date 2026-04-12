@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{ArgAction, CommandFactory, Parser, ValueEnum};
 use dirs_next::home_dir;
 use pathdiff::diff_paths;
 use tea_compiler::{
@@ -33,7 +33,7 @@ const RUN_AFTER_HELP: &str = "\
 Subcommands:
   tea build <INPUT>        Compile a tea-lang file to a native executable.
   tea docs-manifest        Generate the docs reference manifest for the website.
-  tea fmt [PATH]...       Format tea-lang sources in place (defaults to current directory).
+  tea fmt [PATH]...        Format tea-lang sources in place (defaults to current directory).
   tea test [PATH]...       Discover and run tea-lang test blocks.
 
 See `tea <subcommand> --help` for command-specific options.";
@@ -58,11 +58,11 @@ struct RunCli {
     input: PathBuf,
 
     /// Dump the token stream produced by the lexer.
-    #[arg(long)]
+    #[arg(long, hide = true)]
     dump_tokens: bool,
 
     /// Emit additional compiler output (e.g. `ast`, `llvm-ir`).
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, hide = true)]
     emit: Vec<Emit>,
 
     /// Skip executing the compiled program.
@@ -197,6 +197,12 @@ struct DocsManifestCli {
 
 fn main() -> Result<()> {
     let mut raw: Vec<OsString> = std::env::args_os().collect();
+    if raw.len() == 1 {
+        let mut command = RunCli::command();
+        command.print_long_help()?;
+        println!();
+        return Ok(());
+    }
     if raw.get(1).map(|arg| arg == "build").unwrap_or(false) {
         return handle_build(raw);
     }

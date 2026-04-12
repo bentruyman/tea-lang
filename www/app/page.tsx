@@ -87,59 +87,62 @@ export default function HomePage() {
     <div className="mx-auto flex max-w-7xl flex-col gap-16 px-4 py-8 md:px-6 md:py-12">
       <section className="section-band texture-grid surface-feature overflow-hidden px-6 py-8 md:px-10 md:py-10 lg:px-14 lg:py-12">
         <div className="relative z-10 space-y-6 lg:space-y-8">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(22rem,0.88fr)] lg:items-start">
-            <div className="max-w-xl space-y-5 lg:pt-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
-                Tea Documentation
-              </p>
-              <h1 className="font-display text-4xl font-semibold tracking-tight text-balance md:text-5xl lg:text-6xl">
-                Learn Tea by building fast, native command-line tools.
-              </h1>
-              <p className="max-w-lg text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-                A strongly typed scripting language with familiar syntax and
-                native compilation. Install the CLI, run a real script locally,
-                then use the playground, reference docs, and runnable examples
-                when you need them.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  size="lg"
-                  className="rounded-full px-6 font-semibold shadow-sm"
-                  asChild
-                >
-                  <Link href="/docs/install">
-                    Install Tea
-                    <Download className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="surface-quiet rounded-full border-border/70 px-6 font-semibold shadow-none hover:border-primary/25 hover:bg-background/80"
-                  asChild
-                >
-                  <Link href="/playground">
-                    Open playground
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
+          <div className="space-y-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+              Tea Documentation
+            </p>
 
-            <div className="space-y-3 lg:pt-1">
-              <CodeHighlighter code={homeSample} language="tea" />
-              <div className="font-mono text-sm">
-                <span className="text-muted-foreground">Run it in </span>
-                <Link
-                  href="/playground"
-                  className="text-foreground underline decoration-primary/40 underline-offset-4"
-                >
-                  /playground
-                </Link>
-                <span className="text-muted-foreground">
-                  {" "}
-                  with the WASM runner
-                </span>
+            <div className="grid gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(22rem,0.88fr)] lg:items-start">
+              <div className="max-w-xl space-y-5">
+                <h1 className="font-display text-4xl font-semibold tracking-tight text-balance md:text-5xl lg:text-6xl">
+                  Learn Tea by building fast, native command-line tools.
+                </h1>
+                <p className="max-w-lg text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+                  A strongly typed scripting language with familiar syntax and
+                  native compilation. Install the CLI, run a real script
+                  locally, then use the playground, reference docs, and
+                  runnable examples when you need them.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    size="lg"
+                    className="rounded-full px-6 font-semibold shadow-sm"
+                    asChild
+                  >
+                    <Link href="/docs/install">
+                      Install Tea
+                      <Download className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="surface-quiet rounded-full border-border/70 px-6 font-semibold shadow-none hover:border-primary/25 hover:bg-background/80"
+                    asChild
+                  >
+                    <Link href="/playground">
+                      Open playground
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3 lg:pt-2">
+                <CodeHighlighter code={homeSample} language="tea" />
+                <div className="font-mono text-sm">
+                  <span className="text-muted-foreground">Run it in </span>
+                  <Link
+                    href="/playground"
+                    className="text-foreground underline decoration-primary/40 underline-offset-4"
+                  >
+                    /playground
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    in your browser
+                  </span>
+                </div>
               </div>
             </div>
           </div>

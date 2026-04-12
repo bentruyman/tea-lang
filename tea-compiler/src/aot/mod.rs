@@ -3939,11 +3939,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 if matches!(value_type.as_ref(), ValueType::Int) {
                     let int_value = new_value.into_int()?;
 
-                    if let Some((prefix, key_expr, suffix)) = Self::interpolated_int_key_parts(index)
+                    if let Some((prefix, key_expr, suffix)) =
+                        Self::interpolated_int_key_parts(index)
                     {
                         let prefix_ptr = self.compile_string_literal(prefix)?.into_string()?;
                         let suffix_ptr = self.compile_string_literal(suffix)?.into_string()?;
-                        let key_int = self.compile_expression(key_expr, function, locals)?.into_int()?;
+                        let key_int = self
+                            .compile_expression(key_expr, function, locals)?
+                            .into_int()?;
                         let dict_set_parts = self.ensure_dict_set_int_key_parts();
                         self.call_function(
                             dict_set_parts,
@@ -4396,8 +4399,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         {
                             let prefix_ptr = self.compile_string_literal(prefix)?.into_string()?;
                             let suffix_ptr = self.compile_string_literal(suffix)?.into_string()?;
-                            let key_int =
-                                self.compile_expression(key_expr, function, locals)?.into_int()?;
+                            let key_int = self
+                                .compile_expression(key_expr, function, locals)?
+                                .into_int()?;
                             let dict_get_parts = self.ensure_dict_get_int_key_parts();
                             self.call_function(
                                 dict_get_parts,
@@ -4414,7 +4418,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             .ok_or_else(|| anyhow!("expected Int from dict_get_int_key_parts"))?
                             .into_int_value()
                         } else {
-                            let key_expr = self.compile_expression(&index.index, function, locals)?;
+                            let key_expr =
+                                self.compile_expression(&index.index, function, locals)?;
                             let key_ptr = match key_expr {
                                 ExprValue::String(ptr) => ptr,
                                 _ => bail!("dictionary index expects a String key"),
@@ -5463,7 +5468,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     let value = self.compile_expression(expr, function, locals)?;
                     match current {
                         Some(existing) => match value {
-                            ExprValue::Int(int_value) => self.push_int_value(existing, int_value)?,
+                            ExprValue::Int(int_value) => {
+                                self.push_int_value(existing, int_value)?
+                            }
                             ExprValue::String(string_ptr) => {
                                 self.push_string_value(existing, string_ptr)?
                             }
@@ -5491,15 +5498,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         };
 
         match template.parts.as_slice() {
-            [
-                InterpolatedStringPart::Literal(prefix),
-                InterpolatedStringPart::Expression(value),
-            ] => Some((prefix.as_str(), value, "")),
-            [
-                InterpolatedStringPart::Literal(prefix),
-                InterpolatedStringPart::Expression(value),
-                InterpolatedStringPart::Literal(suffix),
-            ] => Some((prefix.as_str(), value, suffix.as_str())),
+            [InterpolatedStringPart::Literal(prefix), InterpolatedStringPart::Expression(value)] => {
+                Some((prefix.as_str(), value, ""))
+            }
+            [InterpolatedStringPart::Literal(prefix), InterpolatedStringPart::Expression(value), InterpolatedStringPart::Literal(suffix)] => {
+                Some((prefix.as_str(), value, suffix.as_str()))
+            }
             _ => None,
         }
     }
@@ -14001,9 +14005,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ],
             false,
         );
-        let func = self
-            .module
-            .add_function("tea_dict_set_int_key_parts", fn_type, Some(Linkage::External));
+        let func = self.module.add_function(
+            "tea_dict_set_int_key_parts",
+            fn_type,
+            Some(Linkage::External),
+        );
         self.dict_set_int_key_parts_fn = Some(func);
         func
     }
@@ -14051,9 +14057,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             ],
             false,
         );
-        let func = self
-            .module
-            .add_function("tea_dict_get_int_key_parts", fn_type, Some(Linkage::External));
+        let func = self.module.add_function(
+            "tea_dict_get_int_key_parts",
+            fn_type,
+            Some(Linkage::External),
+        );
         self.dict_get_int_key_parts_fn = Some(func);
         func
     }

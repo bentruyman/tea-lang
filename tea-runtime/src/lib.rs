@@ -224,6 +224,30 @@ fn alloc_tea_string_bytes(bytes: &[u8]) -> *mut TeaString {
     Box::into_raw(Box::new(tea_string))
 }
 
+fn alloc_tea_string_bytes_with_capacity(bytes: &[u8], capacity: usize) -> *mut TeaString {
+    let capacity = capacity.max(bytes.len());
+
+    let mut buffer = Vec::with_capacity(capacity + 1);
+    buffer.extend_from_slice(bytes);
+    buffer.resize(capacity + 1, 0);
+    let data_ptr = buffer.as_mut_ptr();
+    std::mem::forget(buffer);
+
+    let mut tea_string = TeaString {
+        tag: 0,
+        len: 0,
+        data: [0; 22],
+    };
+
+    tea_string.data[0..8].copy_from_slice(&(data_ptr as usize).to_ne_bytes());
+    tea_string.data[8..16].copy_from_slice(&(bytes.len() as i64).to_ne_bytes());
+    unsafe {
+        tea_string_set_capacity(&mut tea_string, capacity);
+    }
+
+    Box::into_raw(Box::new(tea_string))
+}
+
 fn alloc_tea_int_string(value: i64) -> *mut TeaString {
     let mut buffer = [0u8; 20];
     let bytes = format_i64_bytes(value, &mut buffer);
@@ -551,6 +575,14 @@ unsafe fn tea_string_push_bytes(target: *mut TeaString, src_bytes: &[u8]) -> *mu
     let src_len = src_bytes.len();
     let new_len = target_len + src_len;
 
+    // Builders commonly start from the shared inline empty-string literal.
+    // Promote that case straight to a growable heap string so repeated appends
+    // avoid churning through a sequence of tiny boxed inline strings.
+    if target_ref.tag == 1 && target_len == 0 {
+        let new_capacity = (new_len * 2).max(32);
+        return alloc_tea_string_bytes_with_capacity(src_bytes, new_capacity);
+    }
+
     if target_ref.tag == 1 && new_len <= 22 {
         let mut new_tea_string = TeaString {
             tag: 1,
@@ -675,6 +707,10 @@ pub extern "C" fn tea_string_push_byte(target: *mut TeaString, byte: u8) -> *mut
         let target_len = tea_string_len(target_ref);
         let new_len = target_len + 1;
 
+        if target_ref.tag == 1 && target_len == 0 {
+            return alloc_tea_string_bytes_with_capacity(&[byte], 32);
+        }
+
         // If target is inline and result still fits inline, stay inline
         if target_ref.tag == 1 && new_len <= 22 {
             let mut new_tea_string = TeaString {
@@ -734,6 +770,119 @@ pub extern "C" fn tea_string_push_byte(target: *mut TeaString, byte: u8) -> *mut
             std::mem::forget(buffer);
 
             // Free old buffer
+            let old_capacity = capacity;
+            drop(Vec::from_raw_parts(
+                old_data_ptr,
+                target_len + 1,
+                old_capacity + 1,
+            ));
+
+            tea_string_set_data_ptr(target_ref, new_data_ptr);
+            tea_string_set_len(target_ref, new_len);
+            tea_string_set_capacity(target_ref, new_capacity);
+            target
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_push_byte_n(
+    target: *mut TeaString,
+    byte: u8,
+    count: c_longlong,
+) -> *mut TeaString {
+    if count <= 0 {
+        return target;
+    }
+
+    let count = count as usize;
+
+    unsafe {
+        if target.is_null() {
+            if count <= 22 {
+                let mut tea_string = TeaString {
+                    tag: 1,
+                    len: count as u8,
+                    data: [0; 22],
+                };
+                std::ptr::write_bytes(tea_string.data.as_mut_ptr(), byte, count);
+                return Box::into_raw(Box::new(tea_string));
+            }
+
+            let mut buffer = vec![0; count + 1];
+            std::ptr::write_bytes(buffer.as_mut_ptr(), byte, count);
+            let data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            let mut tea_string = TeaString {
+                tag: 0,
+                len: 0,
+                data: [0; 22],
+            };
+            tea_string_set_data_ptr(&mut tea_string, data_ptr);
+            tea_string_set_len(&mut tea_string, count);
+            tea_string_set_capacity(&mut tea_string, count);
+            return Box::into_raw(Box::new(tea_string));
+        }
+
+        let target_ref = &*target;
+        let target_len = tea_string_len(target_ref);
+        let new_len = target_len + count;
+
+        if target_ref.tag == 1 && new_len <= 22 {
+            let mut new_tea_string = TeaString {
+                tag: 1,
+                len: new_len as u8,
+                data: [0; 22],
+            };
+            new_tea_string.data[..target_len].copy_from_slice(&target_ref.data[..target_len]);
+            std::ptr::write_bytes(
+                new_tea_string.data.as_mut_ptr().add(target_len),
+                byte,
+                count,
+            );
+            return Box::into_raw(Box::new(new_tea_string));
+        }
+
+        if target_ref.tag == 1 {
+            let target_bytes = tea_string_as_bytes(target_ref);
+            let new_capacity = (new_len * 2).max(32);
+            let mut buffer = vec![0; new_capacity + 1];
+            buffer[..target_len].copy_from_slice(target_bytes);
+            std::ptr::write_bytes(buffer.as_mut_ptr().add(target_len), byte, count);
+            let data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
+            let mut new_tea_string = TeaString {
+                tag: 0,
+                len: 0,
+                data: [0; 22],
+            };
+            tea_string_set_data_ptr(&mut new_tea_string, data_ptr);
+            tea_string_set_len(&mut new_tea_string, new_len);
+            tea_string_set_capacity(&mut new_tea_string, new_capacity);
+            return Box::into_raw(Box::new(new_tea_string));
+        }
+
+        let target_ref = &mut *target;
+        let capacity = tea_string_capacity(target_ref);
+
+        if new_len <= capacity {
+            let data_ptr = tea_string_data_ptr_mut(target_ref);
+            std::ptr::write_bytes(data_ptr.add(target_len), byte, count);
+            *data_ptr.add(new_len) = 0;
+            tea_string_set_len(target_ref, new_len);
+            target
+        } else {
+            let new_capacity = (capacity * 2).max(new_len).max(32);
+            let old_data_ptr = tea_string_data_ptr_mut(target_ref);
+            let mut buffer = vec![0; new_capacity + 1];
+            let old_bytes = std::slice::from_raw_parts(old_data_ptr, target_len);
+            buffer[..target_len].copy_from_slice(old_bytes);
+            std::ptr::write_bytes(buffer.as_mut_ptr().add(target_len), byte, count);
+            let new_data_ptr = buffer.as_mut_ptr();
+            std::mem::forget(buffer);
+
             let old_capacity = capacity;
             drop(Vec::from_raw_parts(
                 old_data_ptr,

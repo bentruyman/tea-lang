@@ -167,15 +167,26 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
       <label htmlFor={editorId} className="sr-only">
         Tea playground source
       </label>
-      <div className="relative min-h-[32rem] overflow-hidden rounded-[1.4rem] border border-border/70 bg-[#121516] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/20">
+      <div
+        className="relative min-h-[32rem] overflow-hidden rounded-[1.4rem] border transition focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15"
+        style={{
+          backgroundColor: "var(--code-background)",
+          borderColor: "var(--code-border)",
+          boxShadow:
+            "inset 0 0 0 1px var(--code-border), inset 0 1px 0 rgb(255 255 255 / 0.6), 0 18px 36px -30px rgb(70 47 30 / 0.28)",
+        }}
+      >
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
           <div
             ref={highlightRef}
-            className="px-4 py-3.5 font-mono text-[0.95rem] text-[#f2efe6] [tab-size:2] will-change-transform"
-            style={{ lineHeight: EDITOR_LINE_HEIGHT }}
+            className="px-4 py-3.5 font-mono text-[0.95rem] [tab-size:2] will-change-transform"
+            style={{
+              color: "var(--code-foreground)",
+              lineHeight: EDITOR_LINE_HEIGHT,
+            }}
           >
             <div className="min-h-[calc(32rem-2rem)] whitespace-pre-wrap break-words">
               {lines.map((line, lineIndex) => (
@@ -210,8 +221,11 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
           onKeyDown={handleKeyDown}
           onScroll={(event) => syncHighlightScroll(event.currentTarget)}
           spellCheck={false}
-          className="min-h-[32rem] w-full resize-none border-0 bg-transparent px-4 py-3.5 font-mono text-[0.95rem] text-transparent caret-[#f2efe6] outline-none selection:bg-emerald-400/20 [tab-size:2]"
-          style={{ lineHeight: EDITOR_LINE_HEIGHT }}
+          className="min-h-[32rem] w-full resize-none border-0 bg-transparent px-4 py-3.5 font-mono text-[0.95rem] text-transparent outline-none selection:bg-emerald-500/16 [tab-size:2]"
+          style={{
+            caretColor: "var(--code-foreground)",
+            lineHeight: EDITOR_LINE_HEIGHT,
+          }}
         />
       </div>
     </div>

@@ -95,13 +95,13 @@ export default function HomePage() {
             <div className="grid gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(22rem,0.88fr)] lg:items-start">
               <div className="max-w-xl space-y-5">
                 <h1 className="font-display text-4xl font-semibold tracking-tight text-balance md:text-5xl lg:text-6xl">
-                  Learn Tea by building fast, native command-line tools.
+                  Tea makes scripting fun again.
                 </h1>
                 <p className="max-w-lg text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
                   A strongly typed scripting language with familiar syntax and
                   native compilation. Install the CLI, run a real script
-                  locally, then use the playground, reference docs, and
-                  runnable examples when you need them.
+                  locally, then use the playground, reference docs, and runnable
+                  examples when you need them.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Button
@@ -166,10 +166,9 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
-                The recommended path downloads a prebuilt Tea release for
-                x86_64 Linux or Apple Silicon macOS with checksum verification
-                and installs it to{" "}
-                <code>~/.local/bin</code> by default.
+                The recommended path downloads a prebuilt Tea release for x86_64
+                Linux or Apple Silicon macOS with checksum verification and
+                installs it to <code>~/.local/bin</code> by default.
               </p>
             </div>
 

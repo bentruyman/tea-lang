@@ -208,6 +208,30 @@ ensure_install_dir() {
   mkdir -p "${TEA_INSTALL_DIR}"
 }
 
+refresh_macos_signatures() {
+  local -a installed_paths=("$@")
+
+  if [[ "$(detect_os)" != "apple-darwin" ]]; then
+    return 0
+  fi
+
+  require_command "codesign" "xcode-select --install"
+
+  local installed_path
+  for installed_path in "${installed_paths[@]}"; do
+    if ! codesign --force --sign - "${installed_path}" >/dev/null 2>&1; then
+      log_error "Failed to refresh the macOS code signature for ${installed_path}"
+      exit 1
+    fi
+    if ! codesign --verify --verbose=2 "${installed_path}" >/dev/null 2>&1; then
+      log_error "Failed to verify the macOS code signature for ${installed_path}"
+      exit 1
+    fi
+  done
+
+  log_info "Refreshed macOS code signatures for Tea"
+}
+
 install_extracted_payload() {
   local extract_dir="$1"
 
@@ -216,6 +240,7 @@ install_extracted_payload() {
     exit 1
   fi
 
+  local -a installed_paths=("${TEA_INSTALL_DIR}/tea")
   install -m 0755 "${extract_dir}/tea" "${TEA_INSTALL_DIR}/tea"
 
   local dylib_found=0
@@ -224,8 +249,12 @@ install_extracted_payload() {
       continue
     fi
     dylib_found=1
-    install -m 0644 "${dylib_path}" "${TEA_INSTALL_DIR}/$(basename "${dylib_path}")"
+    local installed_dylib="${TEA_INSTALL_DIR}/$(basename "${dylib_path}")"
+    install -m 0644 "${dylib_path}" "${installed_dylib}"
+    installed_paths+=("${installed_dylib}")
   done
+
+  refresh_macos_signatures "${installed_paths[@]}"
 
   log_success "Installed tea to ${TEA_INSTALL_DIR}/tea"
   if [[ "${dylib_found}" -eq 1 ]]; then
@@ -269,7 +298,7 @@ main() {
 
   local temp_dir
   temp_dir="$(mktemp -d)"
-  trap 'rm -rf "${temp_dir}"' EXIT
+  trap "rm -rf \"${temp_dir}\"" EXIT
 
   local archive_path="${temp_dir}/${archive_name}"
   local checksums_path="${temp_dir}/${checksums_name}"

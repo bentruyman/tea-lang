@@ -289,14 +289,25 @@ jobs:
               chmod 0644 "${asset_dir}/${dylib_name}"
               install_name_tool -id "@executable_path/${dylib_name}" "${asset_dir}/${dylib_name}"
               install_name_tool -change "${dylib_path}" "@executable_path/${dylib_name}" "${asset_dir}/tea"
+              codesign --force --sign - "${asset_dir}/${dylib_name}"
             done < <(otool -L target/release/tea | awk '/\/opt\/homebrew\// { print $1 }')
+
+            codesign --force --sign - "${asset_dir}/tea"
 
             if otool -L "${asset_dir}/tea" | grep -q '/opt/homebrew\|/usr/local/opt'; then
               echo "packaged macOS tea binary still links against Homebrew paths" >&2
               otool -L "${asset_dir}/tea" >&2
               exit 1
             fi
+
+            codesign --verify --verbose=4 "${asset_dir}/tea"
+            while IFS= read -r dylib_path; do
+              [[ -z "${dylib_path}" ]] && continue
+              codesign --verify --verbose=4 "${dylib_path}"
+            done < <(find "${asset_dir}" -maxdepth 1 -name '*.dylib' | sort)
           fi
+
+          "${asset_dir}/tea" --version
 
           archive_path="dist/tea-${VERSION}-${TARGET}.tar.gz"
           tar -C "${asset_dir}" -czf "${archive_path}" .

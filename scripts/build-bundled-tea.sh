@@ -20,8 +20,8 @@ if [[ -z "${host_target}" ]]; then
   exit 1
 fi
 
-cargo rustc -p tea-runtime --release -- --print=native-static-libs 2>&1 | tee "${runtime_log}"
-runtime_native_libs="$(sed -n 's/^note: native-static-libs: //p' "${runtime_log}" | tail -n 1)"
+cargo rustc -p tea-runtime --release --color never -- --print=native-static-libs 2>&1 | tee "${runtime_log}"
+runtime_native_libs="$(sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' "${runtime_log}" | sed -n 's/.*native-static-libs: //p' | tail -n 1)"
 if [[ -z "${runtime_native_libs}" ]]; then
   echo "failed to resolve native static libs for tea-runtime" >&2
   exit 1

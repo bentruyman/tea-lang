@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -43,7 +43,7 @@ use intrinsics::Intrinsic;
 use types::{
     format_struct_type_name, mangle_function_name, sanitize_symbol_component, type_to_value_type,
     ErrorHandlingMode, ErrorVariantLowering, ExprValue, FunctionSignature, GlobalBindingSlot,
-    LambdaSignature, LocalVariable, StructLowering, ValueType,
+    LambdaSignature, LocalVariable, StringBuilderState, StructLowering, ValueType,
 };
 
 struct SemanticMetadata {
@@ -102,7 +102,7 @@ pub fn compile_compilation_to_llvm_ir(compilation: &Compilation) -> Result<Strin
 
 pub fn compile_compilation_to_llvm_ir_with_options(
     compilation: &Compilation,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<String> {
     compile_module_to_llvm_ir_with_analysis(&compilation.module, &compilation.analysis, options)
 }
@@ -110,7 +110,7 @@ pub fn compile_compilation_to_llvm_ir_with_options(
 fn compile_module_to_llvm_ir_with_analysis(
     module_ast: &AstModule,
     analysis: &SemanticAnalysis,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<String> {
     let context = Context::create();
     let module = context.create_module("tea_module");
@@ -130,15 +130,15 @@ fn compile_module_to_llvm_ir_with_analysis(
     Ok(module.print_to_string().to_string())
 }
 
-pub struct ObjectCompileOptions<'a> {
-    pub triple: Option<&'a str>,
-    pub cpu: Option<&'a str>,
-    pub features: Option<&'a str>,
+pub struct ObjectCompileOptions {
+    pub triple: Option<String>,
+    pub cpu: Option<String>,
+    pub features: Option<String>,
     pub opt_level: OptimizationLevel,
-    pub entry_symbol: Option<&'a str>,
+    pub entry_symbol: Option<String>,
 }
 
-impl<'a> Default for ObjectCompileOptions<'a> {
+impl Default for ObjectCompileOptions {
     fn default() -> Self {
         Self {
             triple: None,
@@ -177,11 +177,11 @@ fn optimize_module_with_passes(
 
 fn configure_module_for_target(
     module: &LlvmModule<'_>,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<TargetMachine> {
     Target::initialize_all(&InitializationConfig::default());
 
-    let raw_triple = options.triple.map(str::to_string).unwrap_or_else(|| {
+    let raw_triple = options.triple.clone().unwrap_or_else(|| {
         TargetMachine::get_default_triple()
             .as_str()
             .to_str()
@@ -198,8 +198,8 @@ fn configure_module_for_target(
         ))
     })?;
 
-    let cpu = options.cpu.unwrap_or("generic");
-    let features = options.features.unwrap_or("");
+    let cpu = options.cpu.as_deref().unwrap_or("generic");
+    let features = options.features.as_deref().unwrap_or("");
     let opt_level = options.opt_level;
 
     let reloc_mode = if triple_str.contains("windows") {
@@ -225,10 +225,22 @@ fn configure_module_for_target(
     Ok(target_machine)
 }
 
+pub fn host_cpu_name() -> Option<String> {
+    Target::initialize_all(&InitializationConfig::default());
+    let cpu = TargetMachine::get_host_cpu_name().to_string();
+    (!cpu.is_empty()).then_some(cpu)
+}
+
+pub fn host_cpu_features() -> Option<String> {
+    Target::initialize_all(&InitializationConfig::default());
+    let features = TargetMachine::get_host_cpu_features().to_string();
+    (!features.is_empty()).then_some(features)
+}
+
 pub fn compile_source_to_object(
     source_path: &std::path::Path,
     output_path: &std::path::Path,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<()> {
     use crate::source::{SourceFile, SourceId};
     use std::fs;
@@ -245,7 +257,7 @@ pub fn compile_source_to_object(
 pub fn compile_compilation_to_object(
     compilation: &Compilation,
     output_path: &std::path::Path,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<()> {
     compile_module_to_object_with_analysis(
         &compilation.module,
@@ -259,7 +271,7 @@ fn compile_module_to_object_with_analysis(
     module_ast: &AstModule,
     analysis: &SemanticAnalysis,
     output_path: &std::path::Path,
-    options: &ObjectCompileOptions<'_>,
+    options: &ObjectCompileOptions,
 ) -> Result<()> {
     let context = Context::create();
     let module = context.create_module("tea_module");
@@ -275,7 +287,7 @@ fn compile_module_to_object_with_analysis(
     let target_machine = configure_module_for_target(&module, options)?;
     optimize_module_with_passes(&module, &target_machine, options.opt_level)?;
 
-    if let Some(symbol) = options.entry_symbol {
+    if let Some(symbol) = &options.entry_symbol {
         if let Some(main_fn) = module.get_function("main") {
             main_fn.as_global_value().set_name(symbol);
         }
@@ -298,6 +310,31 @@ struct LoopContext<'ctx> {
     continue_block: inkwell::basic_block::BasicBlock<'ctx>,
     /// Block to jump to for `break` (exit block)
     exit_block: inkwell::basic_block::BasicBlock<'ctx>,
+    /// Cached modulo states for unit-step loop induction variables.
+    modulo_states: Vec<LoopModuloState<'ctx>>,
+}
+
+#[derive(Clone)]
+struct LoopModuloState<'ctx> {
+    variable_name: String,
+    divisor: i64,
+    current_ptr: PointerValue<'ctx>,
+}
+
+struct StringBuilderLoopPattern<'a> {
+    target_name: &'a str,
+    index_name: &'a str,
+    bound_expr: &'a Expression,
+    append_bytes: &'a [u8],
+}
+
+struct PeriodicAccumLoopPattern<'a> {
+    accumulator_name: &'a str,
+    index_name: &'a str,
+    bound_expr: &'a Expression,
+    inclusive: bool,
+    period: i64,
+    contribution_expr: &'a Expression,
 }
 
 // Many fields are for removed functionality but kept for potential future use
@@ -481,6 +518,7 @@ struct LlvmCodeGenerator<'ctx> {
     string_index_fn: Option<FunctionValue<'ctx>>,
     list_concat_fn: Option<FunctionValue<'ctx>>,
     string_concat_fn: Option<FunctionValue<'ctx>>,
+    string_with_capacity_fn: Option<FunctionValue<'ctx>>,
     string_push_str_fn: Option<FunctionValue<'ctx>>,
     string_push_byte_fn: Option<FunctionValue<'ctx>>,
     string_push_int_fn: Option<FunctionValue<'ctx>>,
@@ -541,8 +579,12 @@ struct LlvmCodeGenerator<'ctx> {
     function_return_stack: Vec<ValueType>,
     function_can_throw_stack: Vec<bool>,
     loop_context: Option<LoopContext<'ctx>>,
+    simple_pure_functions: HashSet<String>,
+    manual_modulo_states: Vec<LoopModuloState<'ctx>>,
     list_len_ffi_fn: Option<FunctionValue<'ctx>>,
     string_len_ffi_fn: Option<FunctionValue<'ctx>>,
+    string_data_ptr_ffi_fn: Option<FunctionValue<'ctx>>,
+    string_set_len_ffi_fn: Option<FunctionValue<'ctx>>,
     dict_keys_fn: Option<FunctionValue<'ctx>>,
     dict_values_fn: Option<FunctionValue<'ctx>>,
     dict_entries_fn: Option<FunctionValue<'ctx>>,
@@ -1200,6 +1242,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             string_index_fn: None,
             list_concat_fn: None,
             string_concat_fn: None,
+            string_with_capacity_fn: None,
             string_push_str_fn: None,
             string_push_byte_fn: None,
             string_push_int_fn: None,
@@ -1261,8 +1304,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             function_can_throw_stack: Vec::new(),
             global_slots: HashMap::new(),
             loop_context: None,
+            simple_pure_functions: HashSet::new(),
+            manual_modulo_states: Vec::new(),
             list_len_ffi_fn: None,
             string_len_ffi_fn: None,
+            string_data_ptr_ffi_fn: None,
+            string_set_len_ffi_fn: None,
             dict_keys_fn: None,
             dict_values_fn: None,
             dict_entries_fn: None,
@@ -1428,9 +1475,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     fn add_loop_metadata(&self, instruction: inkwell::values::InstructionValue<'ctx>) {
         LoopMetadataBuilder::new(&self.context, self.bool_type())
             .with_bool("llvm.loop.vectorize.enable", true)
-            .with_i32("llvm.loop.vectorize.width", 4)
-            .with_bool("llvm.loop.vectorize.scalable.enable", false)
-            .with_i32("llvm.loop.interleave.count", 4)
             .with_bool("llvm.loop.unroll.enable", true)
             .attach_to(instruction);
     }
@@ -1654,6 +1698,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
     }
 
     fn compile(&mut self, module_ast: &AstModule) -> Result<()> {
+        self.simple_pure_functions = Self::collect_simple_pure_functions(module_ast);
         for statement in &module_ast.statements {
             if let Statement::Use(use_stmt) = statement {
                 self.register_use(use_stmt)?;
@@ -2470,6 +2515,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: None,
                         ty: param_type,
                         mutable: true,
+                        string_builder: None,
                     },
                 );
             } else {
@@ -2481,6 +2527,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: Some(arg),
                         ty: param_type,
                         mutable: false,
+                        string_builder: None,
                     },
                 );
             }
@@ -2592,7 +2639,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let return_type = ValueType::Int;
         self.push_function_return(return_type.clone());
         self.push_function_can_throw(false); // main doesn't throw
-        for statement in statements {
+        for (index, statement) in statements.iter().enumerate() {
             match statement {
                 Statement::Use(_)
                 | Statement::Function(_)
@@ -2603,6 +2650,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 }
                 Statement::Return(_) => bail!("return at top level not supported"),
                 _ => {
+                    if let Statement::Loop(loop_stmt) = statement {
+                        if self.try_compile_periodic_accumulating_loop(
+                            &statements[..index],
+                            loop_stmt,
+                            main_fn,
+                            &mut locals,
+                        )? {
+                            continue;
+                        }
+                    }
+                    let prepared_builders = match statement {
+                        Statement::Loop(loop_stmt) => self.prepare_string_builders_for_loop(
+                            &statements[..index],
+                            loop_stmt,
+                            main_fn,
+                            &mut locals,
+                        )?,
+                        _ => Vec::new(),
+                    };
                     let _ = self.compile_statement(
                         statement,
                         main_fn,
@@ -2610,6 +2676,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         &return_type,
                         false,
                     )?;
+                    for target in prepared_builders {
+                        self.finalize_string_builder(&target, &mut locals)?;
+                    }
                 }
             }
         }
@@ -2651,11 +2720,1123 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         for (index, statement) in statements.iter().enumerate() {
             let is_last = index + 1 == statements.len();
-            if self.compile_statement(statement, function, locals, return_type, is_last)? {
+            if let Statement::Loop(loop_stmt) = statement {
+                if self.try_compile_periodic_accumulating_loop(
+                    &statements[..index],
+                    loop_stmt,
+                    function,
+                    locals,
+                )? {
+                    continue;
+                }
+            }
+            let prepared_builders = match statement {
+                Statement::Loop(loop_stmt) => self.prepare_string_builders_for_loop(
+                    &statements[..index],
+                    loop_stmt,
+                    function,
+                    locals,
+                )?,
+                _ => Vec::new(),
+            };
+            let terminated =
+                self.compile_statement(statement, function, locals, return_type, is_last)?;
+            for target in prepared_builders {
+                self.finalize_string_builder(&target, locals)?;
+            }
+            if terminated {
                 return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    fn prepare_string_builders_for_loop(
+        &mut self,
+        prefix_statements: &[Statement],
+        loop_stmt: &LoopStatement,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<Vec<String>> {
+        let Some(pattern) = self.detect_string_builder_loop(loop_stmt) else {
+            return Ok(Vec::new());
+        };
+
+        if !self.has_trailing_empty_string_declaration(prefix_statements, pattern.target_name) {
+            return Ok(Vec::new());
+        }
+
+        let Some(target_var) = locals.get(pattern.target_name).cloned() else {
+            return Ok(Vec::new());
+        };
+        if !target_var.mutable || !matches!(target_var.ty, ValueType::String) {
+            return Ok(Vec::new());
+        }
+        let Some(target_ptr) = target_var.pointer else {
+            return Ok(Vec::new());
+        };
+
+        let Some(index_var) = locals.get(pattern.index_name).cloned() else {
+            return Ok(Vec::new());
+        };
+        let start_index = match self.load_local_variable(pattern.index_name, &index_var)? {
+            ExprValue::Int(value) => value,
+            _ => return Ok(Vec::new()),
+        };
+        let bound_value = self.compile_expression(pattern.bound_expr, function, locals)?;
+        let ExprValue::Int(bound_int) = bound_value else {
+            return Ok(Vec::new());
+        };
+
+        let zero = self.int_type().const_zero();
+        let has_iterations = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SGT,
+            bound_int,
+            start_index,
+            "builder_has_iterations",
+        ))?;
+        let raw_trip_count = map_builder_error(self.builder.build_int_sub(
+            bound_int,
+            start_index,
+            "trip_count",
+        ))?;
+        let trip_count = map_builder_error(self.builder.build_select(
+            has_iterations,
+            raw_trip_count,
+            zero,
+            "builder_trip_count",
+        ))?
+        .into_int_value();
+
+        let reserved_capacity = if pattern.append_bytes.len() == 1 {
+            trip_count
+        } else {
+            let append_len = self
+                .int_type()
+                .const_int(pattern.append_bytes.len() as u64, false);
+            map_builder_error(self.builder.build_int_mul(
+                trip_count,
+                append_len,
+                "builder_capacity",
+            ))?
+        };
+
+        let with_capacity_fn = self.ensure_string_with_capacity_fn();
+        let empty_c_string = self.create_c_string_constant("");
+        let reserved_string = self
+            .call_function(
+                with_capacity_fn,
+                &[empty_c_string.into(), zero.into(), reserved_capacity.into()],
+                "string_builder",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_with_capacity returned no value"))?
+            .into_pointer_value();
+        map_builder_error(self.builder.build_store(target_ptr, reserved_string))?;
+
+        let data_ptr_fn = self.ensure_string_data_ptr_ffi_fn();
+        let data_ptr = self
+            .call_function(
+                data_ptr_fn,
+                &[reserved_string.into()],
+                "string_builder_data",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_data_ptr_ffi returned no value"))?
+            .into_pointer_value();
+        let length_ptr = self.create_entry_alloca(
+            function,
+            &format!("{}_builder_len", pattern.target_name),
+            self.int_type().into(),
+        )?;
+        map_builder_error(self.builder.build_store(length_ptr, zero))?;
+
+        if let Some(variable) = locals.get_mut(pattern.target_name) {
+            variable.string_builder = Some(StringBuilderState {
+                data_ptr,
+                length_ptr,
+            });
+        }
+
+        Ok(vec![pattern.target_name.to_string()])
+    }
+
+    fn finalize_string_builder(
+        &mut self,
+        target_name: &str,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<()> {
+        let Some(variable) = locals.get_mut(target_name) else {
+            return Ok(());
+        };
+        let Some(builder) = variable.string_builder.take() else {
+            return Ok(());
+        };
+        let Some(string_ptr_slot) = variable.pointer else {
+            return Ok(());
+        };
+
+        let string_ptr = self
+            .load_from_pointer(string_ptr_slot, &ValueType::String, "builder_string")?
+            .into_string()?;
+        let current_len = map_builder_error(self.builder.build_load(
+            self.int_type(),
+            builder.length_ptr,
+            "builder_len",
+        ))?
+        .into_int_value();
+        let set_len_fn = self.ensure_string_set_len_ffi_fn();
+        self.call_function(
+            set_len_fn,
+            &[string_ptr.into(), current_len.into()],
+            "builder_set_len",
+        )?;
+        Ok(())
+    }
+
+    fn detect_string_builder_loop<'a>(
+        &self,
+        loop_stmt: &'a LoopStatement,
+    ) -> Option<StringBuilderLoopPattern<'a>> {
+        let LoopHeader::Condition(condition) = &loop_stmt.header else {
+            return None;
+        };
+        let ExpressionKind::Binary(cond_binary) = &condition.kind else {
+            return None;
+        };
+        if !matches!(cond_binary.operator, BinaryOperator::Less) {
+            return None;
+        }
+        let ExpressionKind::Identifier(index_ident) = &cond_binary.left.kind else {
+            return None;
+        };
+        if !matches!(
+            cond_binary.right.kind,
+            ExpressionKind::Identifier(_) | ExpressionKind::Literal(Literal::Integer(_))
+        ) {
+            return None;
+        }
+        if loop_stmt.body.statements.len() != 2 {
+            return None;
+        }
+
+        let mut target_name = None;
+        let mut append_bytes = None;
+        let mut saw_increment = false;
+
+        for statement in &loop_stmt.body.statements {
+            let Statement::Expression(expr_stmt) = statement else {
+                return None;
+            };
+            let ExpressionKind::Assignment(assign) = &expr_stmt.expression.kind else {
+                return None;
+            };
+            if let Some((target, bytes)) = Self::match_string_append_assignment(assign) {
+                if target_name.replace(target).is_some() || append_bytes.replace(bytes).is_some() {
+                    return None;
+                }
+                continue;
+            }
+            if Self::is_unit_increment_assignment(assign, &index_ident.name) {
+                saw_increment = true;
+                continue;
+            }
+            return None;
+        }
+
+        Some(StringBuilderLoopPattern {
+            target_name: target_name?,
+            index_name: &index_ident.name,
+            bound_expr: &cond_binary.right,
+            append_bytes: append_bytes?,
+        })
+        .filter(|_| saw_increment)
+    }
+
+    fn has_trailing_empty_string_declaration(
+        &self,
+        prefix_statements: &[Statement],
+        target_name: &str,
+    ) -> bool {
+        for statement in prefix_statements.iter().rev() {
+            let Statement::Var(var_stmt) = statement else {
+                break;
+            };
+            for binding in var_stmt.bindings.iter().rev() {
+                if binding.name != target_name {
+                    continue;
+                }
+                return !var_stmt.is_const
+                    && matches!(
+                        binding.initializer.as_ref().map(|expr| &expr.kind),
+                        Some(ExpressionKind::Literal(Literal::String(value))) if value.is_empty()
+                    );
+            }
+        }
+        false
+    }
+
+    fn has_trailing_zero_int_declaration(
+        &self,
+        prefix_statements: &[Statement],
+        target_name: &str,
+    ) -> bool {
+        for statement in prefix_statements.iter().rev() {
+            let Statement::Var(var_stmt) = statement else {
+                break;
+            };
+            for binding in var_stmt.bindings.iter().rev() {
+                if binding.name != target_name {
+                    continue;
+                }
+                return !var_stmt.is_const
+                    && matches!(
+                        binding.initializer.as_ref().map(|expr| &expr.kind),
+                        Some(ExpressionKind::Literal(Literal::Integer(0)))
+                    );
+            }
+        }
+        false
+    }
+
+    fn collect_simple_pure_functions(module_ast: &AstModule) -> HashSet<String> {
+        let mut functions = HashSet::new();
+        for statement in &module_ast.statements {
+            let Statement::Function(function) = statement else {
+                continue;
+            };
+            if Self::function_is_simple_pure(function) {
+                functions.insert(function.name.clone());
+            }
+        }
+        functions
+    }
+
+    fn function_is_simple_pure(function: &FunctionStatement) -> bool {
+        let mut locals = function
+            .parameters
+            .iter()
+            .map(|parameter| parameter.name.clone())
+            .collect::<HashSet<_>>();
+        for parameter in &function.parameters {
+            if parameter
+                .default_value
+                .as_ref()
+                .is_some_and(Self::expression_is_simple_pure)
+                || parameter.default_value.is_none()
+            {
+                continue;
+            }
+            return false;
+        }
+        Self::block_is_simple_pure(&function.body, &mut locals)
+    }
+
+    fn block_is_simple_pure(block: &crate::ast::Block, locals: &mut HashSet<String>) -> bool {
+        let mut scope_locals = locals.clone();
+        for statement in &block.statements {
+            if !Self::statement_is_simple_pure(statement, &mut scope_locals) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn statement_is_simple_pure(statement: &Statement, locals: &mut HashSet<String>) -> bool {
+        match statement {
+            Statement::Var(var_stmt) => {
+                for binding in &var_stmt.bindings {
+                    let Some(initializer) = binding.initializer.as_ref() else {
+                        return false;
+                    };
+                    if !Self::expression_is_simple_pure(initializer) {
+                        return false;
+                    }
+                    locals.insert(binding.name.clone());
+                }
+                true
+            }
+            Statement::Expression(expr_stmt) => {
+                Self::expression_is_simple_pure_with_locals(&expr_stmt.expression, locals)
+            }
+            Statement::Return(return_stmt) => return_stmt
+                .expression
+                .as_ref()
+                .is_none_or(Self::expression_is_simple_pure),
+            Statement::Conditional(cond) => {
+                Self::expression_is_simple_pure(&cond.condition)
+                    && Self::block_is_simple_pure(&cond.consequent, locals)
+                    && cond
+                        .alternative
+                        .as_ref()
+                        .is_none_or(|block| Self::block_is_simple_pure(block, locals))
+            }
+            Statement::Loop(loop_stmt) => match &loop_stmt.header {
+                LoopHeader::Condition(condition) => {
+                    Self::expression_is_simple_pure(condition)
+                        && Self::block_is_simple_pure(&loop_stmt.body, locals)
+                }
+                LoopHeader::For { .. } => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn expression_is_simple_pure(expression: &Expression) -> bool {
+        Self::expression_is_simple_pure_with_locals(expression, &mut HashSet::new())
+    }
+
+    fn expression_is_simple_pure_with_locals(
+        expression: &Expression,
+        locals: &mut HashSet<String>,
+    ) -> bool {
+        match &expression.kind {
+            ExpressionKind::Literal(_) | ExpressionKind::Identifier(_) => true,
+            ExpressionKind::Binary(binary) => {
+                Self::expression_is_simple_pure_with_locals(&binary.left, locals)
+                    && Self::expression_is_simple_pure_with_locals(&binary.right, locals)
+            }
+            ExpressionKind::Unary(unary) => {
+                Self::expression_is_simple_pure_with_locals(&unary.operand, locals)
+            }
+            ExpressionKind::Assignment(assign) => {
+                matches!(
+                    &assign.target.kind,
+                    ExpressionKind::Identifier(target_ident) if locals.contains(&target_ident.name)
+                ) && Self::expression_is_simple_pure_with_locals(&assign.value, locals)
+            }
+            ExpressionKind::Conditional(cond) => {
+                Self::expression_is_simple_pure_with_locals(&cond.condition, locals)
+                    && Self::expression_is_simple_pure_with_locals(&cond.consequent, locals)
+                    && Self::expression_is_simple_pure_with_locals(&cond.alternative, locals)
+            }
+            ExpressionKind::Grouping(expr) | ExpressionKind::Unwrap(expr) => {
+                Self::expression_is_simple_pure_with_locals(expr, locals)
+            }
+            ExpressionKind::Call(_)
+            | ExpressionKind::InterpolatedString(_)
+            | ExpressionKind::List(_)
+            | ExpressionKind::Dict(_)
+            | ExpressionKind::Member(_)
+            | ExpressionKind::Index(_)
+            | ExpressionKind::Lambda(_)
+            | ExpressionKind::Match(_)
+            | ExpressionKind::Try(_)
+            | ExpressionKind::Is(_)
+            | ExpressionKind::Range(_) => false,
+        }
+    }
+
+    fn detect_periodic_accumulating_loop<'a>(
+        &self,
+        prefix_statements: &[Statement],
+        loop_stmt: &'a LoopStatement,
+        locals: &HashMap<String, LocalVariable<'ctx>>,
+    ) -> Option<PeriodicAccumLoopPattern<'a>> {
+        let LoopHeader::Condition(condition) = &loop_stmt.header else {
+            return None;
+        };
+        let ExpressionKind::Binary(cond_binary) = &condition.kind else {
+            return None;
+        };
+        let inclusive = match cond_binary.operator {
+            BinaryOperator::Less => false,
+            BinaryOperator::LessEqual => true,
+            _ => return None,
+        };
+        let ExpressionKind::Identifier(index_ident) = &cond_binary.left.kind else {
+            return None;
+        };
+        let index_name = index_ident.name.as_str();
+        if !self.has_trailing_zero_int_declaration(prefix_statements, index_name) {
+            return None;
+        }
+        if loop_stmt.body.statements.len() != 2 {
+            return None;
+        }
+        let Statement::Expression(update_stmt) = &loop_stmt.body.statements[0] else {
+            return None;
+        };
+        let Statement::Expression(increment_stmt) = &loop_stmt.body.statements[1] else {
+            return None;
+        };
+        let ExpressionKind::Assignment(update_assign) = &update_stmt.expression.kind else {
+            return None;
+        };
+        let ExpressionKind::Assignment(increment_assign) = &increment_stmt.expression.kind else {
+            return None;
+        };
+        if !Self::is_unit_increment_assignment(increment_assign, index_name) {
+            return None;
+        }
+        let ExpressionKind::Identifier(acc_ident) = &update_assign.target.kind else {
+            return None;
+        };
+        if acc_ident.name == index_name {
+            return None;
+        }
+        let Some(acc_var) = locals.get(acc_ident.name.as_str()) else {
+            return None;
+        };
+        let Some(index_var) = locals.get(index_name) else {
+            return None;
+        };
+        if !matches!(acc_var.ty, ValueType::Int)
+            || !acc_var.mutable
+            || acc_var.pointer.is_none()
+            || !matches!(index_var.ty, ValueType::Int)
+            || !index_var.mutable
+            || index_var.pointer.is_none()
+        {
+            return None;
+        }
+        let ExpressionKind::Binary(update_binary) = &update_assign.value.kind else {
+            return None;
+        };
+        if !matches!(update_binary.operator, BinaryOperator::Add) {
+            return None;
+        }
+
+        let contribution_expr = match (&update_binary.left.kind, &update_binary.right.kind) {
+            (ExpressionKind::Identifier(left_ident), _) if left_ident.name == acc_ident.name => {
+                &update_binary.right
+            }
+            (_, ExpressionKind::Identifier(right_ident)) if right_ident.name == acc_ident.name => {
+                &update_binary.left
+            }
+            _ => return None,
+        };
+
+        let mut period = None;
+        if !self.expression_is_periodic_contribution(
+            contribution_expr,
+            index_name,
+            acc_ident.name.as_str(),
+            &mut period,
+        ) {
+            return None;
+        }
+        let period = period?;
+        if period > 32 {
+            return None;
+        }
+
+        Some(PeriodicAccumLoopPattern {
+            accumulator_name: acc_ident.name.as_str(),
+            index_name,
+            bound_expr: &cond_binary.right,
+            inclusive,
+            period,
+            contribution_expr,
+        })
+    }
+
+    fn expression_is_periodic_contribution(
+        &self,
+        expression: &Expression,
+        index_name: &str,
+        accumulator_name: &str,
+        period: &mut Option<i64>,
+    ) -> bool {
+        match &expression.kind {
+            ExpressionKind::Literal(_) => true,
+            ExpressionKind::Identifier(ident) => {
+                ident.name != index_name && ident.name != accumulator_name
+            }
+            ExpressionKind::Binary(binary) => {
+                if matches!(binary.operator, BinaryOperator::Modulo)
+                    && matches!(
+                        (&binary.left.kind, &binary.right.kind),
+                        (
+                            ExpressionKind::Identifier(left_ident),
+                            ExpressionKind::Literal(Literal::Integer(divisor))
+                        ) if left_ident.name == index_name && *divisor > 0
+                    )
+                {
+                    let ExpressionKind::Literal(Literal::Integer(divisor)) = &binary.right.kind
+                    else {
+                        unreachable!();
+                    };
+                    if let Some(existing) = *period {
+                        return existing == *divisor;
+                    }
+                    *period = Some(*divisor);
+                    return true;
+                }
+                self.expression_is_periodic_contribution(
+                    &binary.left,
+                    index_name,
+                    accumulator_name,
+                    period,
+                ) && self.expression_is_periodic_contribution(
+                    &binary.right,
+                    index_name,
+                    accumulator_name,
+                    period,
+                )
+            }
+            ExpressionKind::Unary(unary) => self.expression_is_periodic_contribution(
+                &unary.operand,
+                index_name,
+                accumulator_name,
+                period,
+            ),
+            ExpressionKind::Grouping(expr) | ExpressionKind::Unwrap(expr) => {
+                self.expression_is_periodic_contribution(expr, index_name, accumulator_name, period)
+            }
+            ExpressionKind::Call(call) => {
+                matches!(
+                    &call.callee.kind,
+                    ExpressionKind::Identifier(callee_ident)
+                        if self.simple_pure_functions.contains(callee_ident.name.as_str())
+                ) && call.arguments.iter().all(|argument| {
+                    self.expression_is_periodic_contribution(
+                        &argument.expression,
+                        index_name,
+                        accumulator_name,
+                        period,
+                    )
+                })
+            }
+            _ => false,
+        }
+    }
+
+    fn try_compile_periodic_accumulating_loop(
+        &mut self,
+        prefix_statements: &[Statement],
+        loop_stmt: &LoopStatement,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<bool> {
+        let Some(pattern) =
+            self.detect_periodic_accumulating_loop(prefix_statements, loop_stmt, locals)
+        else {
+            return Ok(false);
+        };
+        let accumulator_var = locals
+            .get(pattern.accumulator_name)
+            .cloned()
+            .ok_or_else(|| anyhow!("missing accumulator variable"))?;
+        let index_var = locals
+            .get(pattern.index_name)
+            .cloned()
+            .ok_or_else(|| anyhow!("missing loop index variable"))?;
+        let accumulator_ptr = accumulator_var
+            .pointer
+            .ok_or_else(|| anyhow!("periodic loop accumulator missing storage"))?;
+        let index_ptr = index_var
+            .pointer
+            .ok_or_else(|| anyhow!("periodic loop index missing storage"))?;
+
+        let mut trip_count = self
+            .compile_expression(pattern.bound_expr, function, locals)?
+            .into_int()?;
+        if pattern.inclusive {
+            trip_count = map_builder_error(self.builder.build_int_add(
+                trip_count,
+                self.int_type().const_int(1, false),
+                "periodic_trip_inc",
+            ))?;
+        }
+        let zero = self.int_type().const_zero();
+        let is_positive = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SGT,
+            trip_count,
+            zero,
+            "periodic_trip_positive",
+        ))?;
+        trip_count = map_builder_error(self.builder.build_select(
+            is_positive,
+            trip_count,
+            zero,
+            "periodic_trip_count",
+        ))?
+        .into_int_value();
+
+        let period_value = self.int_type().const_int(pattern.period as u64, false);
+        let full_cycles = map_builder_error(self.builder.build_int_unsigned_div(
+            trip_count,
+            period_value,
+            "periodic_cycles",
+        ))?;
+        let remainder = map_builder_error(self.builder.build_int_unsigned_rem(
+            trip_count,
+            period_value,
+            "periodic_remainder",
+        ))?;
+
+        let residue_ptr = self.create_entry_alloca(
+            function,
+            &format!("{}_periodic_mod", pattern.index_name),
+            self.int_type().into(),
+        )?;
+        let saved_manual_states = std::mem::take(&mut self.manual_modulo_states);
+        let compile_values = (|| -> Result<Vec<IntValue<'ctx>>> {
+            let state = LoopModuloState {
+                variable_name: pattern.index_name.to_string(),
+                divisor: pattern.period,
+                current_ptr: residue_ptr,
+            };
+            let mut values = Vec::with_capacity(pattern.period as usize);
+            for residue in 0..pattern.period {
+                map_builder_error(self.builder.build_store(
+                    residue_ptr,
+                    self.int_type().const_int(residue as u64, false),
+                ))?;
+                self.manual_modulo_states.clear();
+                self.manual_modulo_states.push(state.clone());
+                values.push(
+                    self.compile_expression(pattern.contribution_expr, function, locals)?
+                        .into_int()?,
+                );
+            }
+            Ok(values)
+        })();
+        self.manual_modulo_states = saved_manual_states;
+        let contribution_values = compile_values?;
+
+        let mut period_sum = zero;
+        let mut tail_sum = zero;
+        for (offset, contribution) in contribution_values.iter().enumerate() {
+            period_sum = map_builder_error(self.builder.build_int_add(
+                period_sum,
+                *contribution,
+                "periodic_period_sum",
+            ))?;
+            let include = map_builder_error(self.builder.build_int_compare(
+                IntPredicate::UGT,
+                remainder,
+                self.int_type().const_int(offset as u64, false),
+                "periodic_include_tail",
+            ))?;
+            let tail_term = map_builder_error(self.builder.build_select(
+                include,
+                *contribution,
+                zero,
+                "periodic_tail_term",
+            ))?
+            .into_int_value();
+            tail_sum = map_builder_error(self.builder.build_int_add(
+                tail_sum,
+                tail_term,
+                "periodic_tail_sum",
+            ))?;
+        }
+
+        let repeated_total = map_builder_error(self.builder.build_int_mul(
+            full_cycles,
+            period_sum,
+            "periodic_repeated_total",
+        ))?;
+        let total = map_builder_error(self.builder.build_int_add(
+            repeated_total,
+            tail_sum,
+            "periodic_total",
+        ))?;
+        let current_accumulator = self
+            .load_local_variable(pattern.accumulator_name, &accumulator_var)?
+            .into_int()?;
+        let updated_accumulator = map_builder_error(self.builder.build_int_add(
+            current_accumulator,
+            total,
+            "periodic_accumulator",
+        ))?;
+        map_builder_error(
+            self.builder
+                .build_store(accumulator_ptr, updated_accumulator),
+        )?;
+        map_builder_error(self.builder.build_store(index_ptr, trip_count))?;
+        Ok(true)
+    }
+
+    fn match_string_append_assignment<'a>(
+        assign: &'a crate::ast::AssignmentExpression,
+    ) -> Option<(&'a str, &'a [u8])> {
+        let ExpressionKind::Identifier(target_ident) = &assign.target.kind else {
+            return None;
+        };
+        let ExpressionKind::Binary(binary) = &assign.value.kind else {
+            return None;
+        };
+        if !matches!(binary.operator, BinaryOperator::Add) {
+            return None;
+        }
+        let ExpressionKind::Identifier(left_ident) = &binary.left.kind else {
+            return None;
+        };
+        if left_ident.name != target_ident.name {
+            return None;
+        }
+        let ExpressionKind::Literal(Literal::String(value)) = &binary.right.kind else {
+            return None;
+        };
+        if value.is_empty() {
+            return None;
+        }
+        Some((&target_ident.name, value.as_bytes()))
+    }
+
+    fn is_unit_increment_assignment(
+        assign: &crate::ast::AssignmentExpression,
+        index_name: &str,
+    ) -> bool {
+        let ExpressionKind::Identifier(target_ident) = &assign.target.kind else {
+            return false;
+        };
+        if target_ident.name != index_name {
+            return false;
+        }
+        let ExpressionKind::Binary(binary) = &assign.value.kind else {
+            return false;
+        };
+        if !matches!(binary.operator, BinaryOperator::Add) {
+            return false;
+        }
+        matches!(
+            (&binary.left.kind, &binary.right.kind),
+            (
+                ExpressionKind::Identifier(left_ident),
+                ExpressionKind::Literal(Literal::Integer(1))
+            ) if left_ident.name == index_name
+        )
+    }
+
+    fn prepare_loop_modulo_states(
+        &mut self,
+        statement: &LoopStatement,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<Vec<LoopModuloState<'ctx>>> {
+        let Some((last_stmt, body_prefix)) = statement.body.statements.split_last() else {
+            return Ok(Vec::new());
+        };
+        let Statement::Expression(last_expr) = last_stmt else {
+            return Ok(Vec::new());
+        };
+        let ExpressionKind::Assignment(increment_assign) = &last_expr.expression.kind else {
+            return Ok(Vec::new());
+        };
+        let ExpressionKind::Identifier(index_ident) = &increment_assign.target.kind else {
+            return Ok(Vec::new());
+        };
+        let index_name = index_ident.name.as_str();
+        if !Self::is_unit_increment_assignment(increment_assign, index_name) {
+            return Ok(Vec::new());
+        }
+        if !body_prefix
+            .iter()
+            .all(|statement| matches!(statement, Statement::Expression(_)))
+        {
+            return Ok(Vec::new());
+        }
+
+        let mut divisors = BTreeSet::new();
+        for statement in body_prefix {
+            let Statement::Expression(expr_stmt) = statement else {
+                return Ok(Vec::new());
+            };
+            if Self::expression_assigns_identifier(&expr_stmt.expression, index_name) {
+                return Ok(Vec::new());
+            }
+            Self::collect_loop_modulo_divisors(&expr_stmt.expression, index_name, &mut divisors);
+        }
+
+        if divisors.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let index_value = if let Some(variable) = locals.get(index_name) {
+            self.load_local_variable(index_name, variable)?.into_int()?
+        } else if let Some(slot) = self.global_slots.get(index_name).cloned() {
+            self.load_global_variable(index_name, slot)?.into_int()?
+        } else {
+            return Ok(Vec::new());
+        };
+
+        let mut states = Vec::with_capacity(divisors.len());
+        for divisor in divisors {
+            let state_ptr = self.create_entry_alloca(
+                function,
+                &format!("{index_name}_mod_{divisor}"),
+                self.int_type().into(),
+            )?;
+            let divisor_value = self.int_type().const_int(divisor as u64, true);
+            let initial = map_builder_error(self.builder.build_int_signed_rem(
+                index_value,
+                divisor_value,
+                "loop_mod_init",
+            ))?;
+            map_builder_error(self.builder.build_store(state_ptr, initial))?;
+            states.push(LoopModuloState {
+                variable_name: index_name.to_string(),
+                divisor,
+                current_ptr: state_ptr,
+            });
+        }
+
+        Ok(states)
+    }
+
+    fn update_loop_modulo_states(&mut self, states: &[LoopModuloState<'ctx>]) -> Result<()> {
+        for state in states {
+            let current = map_builder_error(self.builder.build_load(
+                self.int_type(),
+                state.current_ptr,
+                "loop_mod_cur",
+            ))?
+            .into_int_value();
+            let next = map_builder_error(self.builder.build_int_add(
+                current,
+                self.int_type().const_int(1, false),
+                "loop_mod_next",
+            ))?;
+            let divisor_value = self.int_type().const_int(state.divisor as u64, true);
+            let wraps = map_builder_error(self.builder.build_int_compare(
+                IntPredicate::EQ,
+                next,
+                divisor_value,
+                "loop_mod_wrap",
+            ))?;
+            let updated = map_builder_error(self.builder.build_select(
+                wraps,
+                self.int_type().const_zero(),
+                next,
+                "loop_mod_updated",
+            ))?
+            .into_int_value();
+            map_builder_error(self.builder.build_store(state.current_ptr, updated))?;
+        }
+        Ok(())
+    }
+
+    fn collect_loop_modulo_divisors(
+        expression: &Expression,
+        index_name: &str,
+        divisors: &mut BTreeSet<i64>,
+    ) {
+        match &expression.kind {
+            ExpressionKind::Binary(binary) => {
+                if matches!(
+                    (&binary.operator, &binary.left.kind, &binary.right.kind),
+                    (
+                        BinaryOperator::Modulo,
+                        ExpressionKind::Identifier(left_ident),
+                        ExpressionKind::Literal(Literal::Integer(divisor))
+                    ) if left_ident.name == index_name && *divisor > 0
+                ) {
+                    let ExpressionKind::Literal(Literal::Integer(divisor)) = &binary.right.kind
+                    else {
+                        unreachable!();
+                    };
+                    divisors.insert(*divisor);
+                }
+                Self::collect_loop_modulo_divisors(&binary.left, index_name, divisors);
+                Self::collect_loop_modulo_divisors(&binary.right, index_name, divisors);
+            }
+            ExpressionKind::Unary(unary) => {
+                Self::collect_loop_modulo_divisors(&unary.operand, index_name, divisors);
+            }
+            ExpressionKind::Assignment(assign) => {
+                Self::collect_loop_modulo_divisors(&assign.target, index_name, divisors);
+                Self::collect_loop_modulo_divisors(&assign.value, index_name, divisors);
+            }
+            ExpressionKind::Call(call) => {
+                Self::collect_loop_modulo_divisors(&call.callee, index_name, divisors);
+                for argument in &call.arguments {
+                    Self::collect_loop_modulo_divisors(&argument.expression, index_name, divisors);
+                }
+            }
+            ExpressionKind::Index(index) => {
+                Self::collect_loop_modulo_divisors(&index.object, index_name, divisors);
+                Self::collect_loop_modulo_divisors(&index.index, index_name, divisors);
+            }
+            ExpressionKind::Member(member) => {
+                Self::collect_loop_modulo_divisors(&member.object, index_name, divisors);
+            }
+            ExpressionKind::List(list) => {
+                for element in &list.elements {
+                    Self::collect_loop_modulo_divisors(element, index_name, divisors);
+                }
+            }
+            ExpressionKind::Dict(dict) => {
+                for entry in &dict.entries {
+                    Self::collect_loop_modulo_divisors(&entry.value, index_name, divisors);
+                }
+            }
+            ExpressionKind::InterpolatedString(template) => {
+                for part in &template.parts {
+                    if let InterpolatedStringPart::Expression(expr) = part {
+                        Self::collect_loop_modulo_divisors(expr, index_name, divisors);
+                    }
+                }
+            }
+            ExpressionKind::Lambda(lambda) => match &lambda.body {
+                LambdaBody::Expression(expr) => {
+                    Self::collect_loop_modulo_divisors(expr, index_name, divisors);
+                }
+                LambdaBody::Block(_) => {}
+            },
+            ExpressionKind::Conditional(cond) => {
+                Self::collect_loop_modulo_divisors(&cond.condition, index_name, divisors);
+                Self::collect_loop_modulo_divisors(&cond.consequent, index_name, divisors);
+                Self::collect_loop_modulo_divisors(&cond.alternative, index_name, divisors);
+            }
+            ExpressionKind::Try(try_expr) => {
+                Self::collect_loop_modulo_divisors(&try_expr.expression, index_name, divisors);
+                if let Some(catch) = &try_expr.catch {
+                    match &catch.kind {
+                        CatchKind::Fallback(expr) => {
+                            Self::collect_loop_modulo_divisors(expr, index_name, divisors);
+                        }
+                        CatchKind::Arms(arms) => {
+                            for arm in arms {
+                                if let CatchHandler::Expression(expr) = &arm.handler {
+                                    Self::collect_loop_modulo_divisors(expr, index_name, divisors);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ExpressionKind::Match(match_expr) => {
+                Self::collect_loop_modulo_divisors(&match_expr.scrutinee, index_name, divisors);
+                for arm in &match_expr.arms {
+                    Self::collect_loop_modulo_divisors(&arm.expression, index_name, divisors);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn expression_assigns_identifier(expression: &Expression, identifier: &str) -> bool {
+        match &expression.kind {
+            ExpressionKind::Assignment(assign) => {
+                matches!(
+                    &assign.target.kind,
+                    ExpressionKind::Identifier(target_ident) if target_ident.name == identifier
+                ) || Self::expression_assigns_identifier(&assign.value, identifier)
+            }
+            ExpressionKind::Binary(binary) => {
+                Self::expression_assigns_identifier(&binary.left, identifier)
+                    || Self::expression_assigns_identifier(&binary.right, identifier)
+            }
+            ExpressionKind::Unary(unary) => {
+                Self::expression_assigns_identifier(&unary.operand, identifier)
+            }
+            ExpressionKind::Call(call) => {
+                Self::expression_assigns_identifier(&call.callee, identifier)
+                    || call
+                        .arguments
+                        .iter()
+                        .any(|arg| Self::expression_assigns_identifier(&arg.expression, identifier))
+            }
+            ExpressionKind::Index(index) => {
+                Self::expression_assigns_identifier(&index.object, identifier)
+                    || Self::expression_assigns_identifier(&index.index, identifier)
+            }
+            ExpressionKind::Member(member) => {
+                Self::expression_assigns_identifier(&member.object, identifier)
+            }
+            ExpressionKind::List(list) => list
+                .elements
+                .iter()
+                .any(|element| Self::expression_assigns_identifier(element, identifier)),
+            ExpressionKind::Dict(dict) => dict
+                .entries
+                .iter()
+                .any(|entry| Self::expression_assigns_identifier(&entry.value, identifier)),
+            ExpressionKind::InterpolatedString(template) => template.parts.iter().any(|part| {
+                matches!(
+                    part,
+                    InterpolatedStringPart::Expression(expr)
+                        if Self::expression_assigns_identifier(expr, identifier)
+                )
+            }),
+            ExpressionKind::Lambda(lambda) => match &lambda.body {
+                LambdaBody::Expression(expr) => {
+                    Self::expression_assigns_identifier(expr, identifier)
+                }
+                LambdaBody::Block(_) => false,
+            },
+            ExpressionKind::Conditional(cond) => {
+                Self::expression_assigns_identifier(&cond.condition, identifier)
+                    || Self::expression_assigns_identifier(&cond.consequent, identifier)
+                    || Self::expression_assigns_identifier(&cond.alternative, identifier)
+            }
+            ExpressionKind::Try(try_expr) => {
+                Self::expression_assigns_identifier(&try_expr.expression, identifier)
+                    || try_expr
+                        .catch
+                        .as_ref()
+                        .is_some_and(|catch| match &catch.kind {
+                            CatchKind::Fallback(expr) => {
+                                Self::expression_assigns_identifier(expr, identifier)
+                            }
+                            CatchKind::Arms(arms) => arms.iter().any(|arm| match &arm.handler {
+                                CatchHandler::Expression(expr) => {
+                                    Self::expression_assigns_identifier(expr, identifier)
+                                }
+                                CatchHandler::Block(_) => false,
+                            }),
+                        })
+            }
+            ExpressionKind::Match(match_expr) => {
+                Self::expression_assigns_identifier(&match_expr.scrutinee, identifier)
+                    || match_expr
+                        .arms
+                        .iter()
+                        .any(|arm| Self::expression_assigns_identifier(&arm.expression, identifier))
+            }
+            _ => false,
+        }
+    }
+
+    fn try_compile_loop_modulo_state(
+        &self,
+        expression: &BinaryExpression,
+    ) -> Result<Option<ExprValue<'ctx>>> {
+        if !matches!(expression.operator, BinaryOperator::Modulo) {
+            return Ok(None);
+        }
+        let ExpressionKind::Identifier(left_ident) = &expression.left.kind else {
+            return Ok(None);
+        };
+        let ExpressionKind::Literal(Literal::Integer(divisor)) = &expression.right.kind else {
+            return Ok(None);
+        };
+        if let Some(state) = self
+            .manual_modulo_states
+            .iter()
+            .find(|state| state.variable_name == left_ident.name && state.divisor == *divisor)
+        {
+            let value = map_builder_error(self.builder.build_load(
+                self.int_type(),
+                state.current_ptr,
+                "manual_mod_value",
+            ))?
+            .into_int_value();
+            return Ok(Some(ExprValue::Int(value)));
+        }
+        let Some(loop_context) = &self.loop_context else {
+            return Ok(None);
+        };
+        let Some(state) = loop_context
+            .modulo_states
+            .iter()
+            .find(|state| state.variable_name == left_ident.name && state.divisor == *divisor)
+        else {
+            return Ok(None);
+        };
+        let value = map_builder_error(self.builder.build_load(
+            self.int_type(),
+            state.current_ptr,
+            "loop_mod_value",
+        ))?
+        .into_int_value();
+        Ok(Some(ExprValue::Int(value)))
     }
 
     fn compile_statement(
@@ -2797,6 +3978,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             value: Some(basic_value),
                             ty,
                             mutable: false,
+                            string_builder: None,
                         },
                     );
                 } else {
@@ -2808,6 +3990,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             value: None,
                             ty,
                             mutable: false,
+                            string_builder: None,
                         },
                     );
                 }
@@ -2820,6 +4003,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: None,
                         ty,
                         mutable: true,
+                        string_builder: None,
                     },
                 );
             }
@@ -2880,6 +4064,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             value: Some(basic_value),
                             ty,
                             mutable: false,
+                            string_builder: None,
                         },
                     );
                 } else {
@@ -2891,6 +4076,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             value: None,
                             ty,
                             mutable: false,
+                            string_builder: None,
                         },
                     );
                 }
@@ -2906,6 +4092,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: None,
                         ty,
                         mutable: true,
+                        string_builder: None,
                     },
                 );
             }
@@ -3126,6 +4313,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                                 value: None,
                                 ty: var.ty.clone(),
                                 mutable: true,
+                                string_builder: var.string_builder.clone(),
                             },
                         );
                     }
@@ -3152,11 +4340,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         self.builder.position_at_end(body_block);
 
+        let modulo_states = self.prepare_loop_modulo_states(statement, function, locals)?;
+
         // Set loop context for break/continue (continue goes to condition for while loops)
         let old_loop_context = self.loop_context.take();
         self.loop_context = Some(LoopContext {
             continue_block: cond_block,
             exit_block,
+            modulo_states,
         });
 
         // Compile loop body - since mutated variables now use allocas, no PHI tracking needed
@@ -3170,9 +4361,6 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
 
-        // Restore loop context
-        self.loop_context = old_loop_context;
-
         let body_terminated = self
             .builder
             .get_insert_block()
@@ -3181,11 +4369,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .is_some();
 
         if !body_terminated {
+            if let Some(modulo_states) = self
+                .loop_context
+                .as_ref()
+                .map(|loop_context| loop_context.modulo_states.clone())
+            {
+                self.update_loop_modulo_states(&modulo_states)?;
+            }
             let back_edge = map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
 
             // Add loop metadata for optimization hints
             self.add_loop_metadata(back_edge);
         }
+
+        // Restore loop context
+        self.loop_context = old_loop_context;
 
         self.builder.position_at_end(exit_block);
 
@@ -3288,6 +4486,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                                 value: None,
                                 ty: var.ty.clone(),
                                 mutable: true,
+                                string_builder: var.string_builder.clone(),
                             },
                         );
                     }
@@ -3372,6 +4571,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: Some(basic_value),
                         ty: element_type.clone(),
                         mutable: false,
+                        string_builder: None,
                     },
                 );
             }
@@ -3415,6 +4615,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: Some(key_ptr.into()),
                         ty: ValueType::String,
                         mutable: false,
+                        string_builder: None,
                     },
                 );
 
@@ -3426,6 +4627,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                         value: Some(value_basic),
                         ty: value_type,
                         mutable: false,
+                        string_builder: None,
                     },
                 );
             }
@@ -3436,6 +4638,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         self.loop_context = Some(LoopContext {
             continue_block: inc_block,
             exit_block,
+            modulo_states: Vec::new(),
         });
 
         // Compile loop body
@@ -3530,6 +4733,35 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_string_len_ffi", fn_type, Some(Linkage::External));
         self.string_len_ffi_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_data_ptr_ffi_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_data_ptr_ffi_fn {
+            return func;
+        }
+        let fn_type = self
+            .ptr_type
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_string_data_ptr_ffi", fn_type, Some(Linkage::External));
+        self.string_data_ptr_ffi_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_set_len_ffi_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_set_len_ffi_fn {
+            return func;
+        }
+        let fn_type = self.context.void_type().fn_type(
+            &[self.string_ptr_type().into(), self.int_type().into()],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_set_len_ffi", fn_type, Some(Linkage::External));
+        self.string_set_len_ffi_fn = Some(func);
         func
     }
 
@@ -3739,6 +4971,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                                 value: Some(new_basic_value),
                                 ty: var_ty,
                                 mutable: true,
+                                string_builder: None,
                             },
                         );
                     } else {
@@ -3813,7 +5046,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             return Ok(None);
                         };
 
-                        // Check if RHS is a single-character string literal for push_byte optimization
+                        if let (Some(builder), Some(bytes)) = (
+                            variable.string_builder.as_ref(),
+                            self.try_get_string_literal_bytes(&binary.right),
+                        ) {
+                            self.append_literal_to_builder(builder, bytes)?;
+                            return Ok(Some(ExprValue::Void));
+                        }
+
                         let new_ptr = if let Some(byte) =
                             self.try_get_single_byte_literal(&binary.right)
                         {
@@ -3838,6 +5078,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                                     value: Some(new_ptr.into()),
                                     ty: ValueType::String,
                                     mutable: true,
+                                    string_builder: None,
                                 },
                             );
                         }
@@ -3859,6 +5100,65 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
         }
         None
+    }
+
+    fn try_get_string_literal_bytes<'a>(&self, expr: &'a Expression) -> Option<&'a [u8]> {
+        let ExpressionKind::Literal(Literal::String(value)) = &expr.kind else {
+            return None;
+        };
+        (!value.is_empty()).then_some(value.as_bytes())
+    }
+
+    fn append_literal_to_builder(
+        &mut self,
+        builder: &StringBuilderState<'ctx>,
+        bytes: &[u8],
+    ) -> Result<()> {
+        let current_len = map_builder_error(self.builder.build_load(
+            self.int_type(),
+            builder.length_ptr,
+            "builder_len",
+        ))?
+        .into_int_value();
+
+        for (offset, byte) in bytes.iter().enumerate() {
+            let offset_value = self.int_type().const_int(offset as u64, false);
+            let write_index =
+                map_builder_error(self.builder.build_int_add(current_len, offset_value, "idx"))?;
+            let dst_ptr = unsafe {
+                map_builder_error(self.builder.build_in_bounds_gep(
+                    self.context.i8_type(),
+                    builder.data_ptr,
+                    &[write_index],
+                    "builder_dst",
+                ))?
+            };
+            map_builder_error(self.builder.build_store(
+                dst_ptr,
+                self.context.i8_type().const_int(*byte as u64, false),
+            ))?;
+        }
+
+        let append_len = self.int_type().const_int(bytes.len() as u64, false);
+        let new_len = map_builder_error(self.builder.build_int_add(
+            current_len,
+            append_len,
+            "builder_new_len",
+        ))?;
+        let null_ptr = unsafe {
+            map_builder_error(self.builder.build_in_bounds_gep(
+                self.context.i8_type(),
+                builder.data_ptr,
+                &[new_len],
+                "builder_null_ptr",
+            ))?
+        };
+        map_builder_error(
+            self.builder
+                .build_store(null_ptr, self.context.i8_type().const_zero()),
+        )?;
+        map_builder_error(self.builder.build_store(builder.length_ptr, new_len))?;
+        Ok(())
     }
 
     /// Push a single byte onto target string. Returns possibly reallocated target.
@@ -4915,6 +6215,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                             value: None,
                             ty: binding_value_type.clone(),
                             mutable: true,
+                            string_builder: None,
                         },
                     );
                     Some((binding.name.clone(), alloca, binding_value_type))
@@ -4951,6 +6252,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                                 value: None,
                                 ty: arm_binding_type.clone(),
                                 mutable: true,
+                                string_builder: None,
                             },
                         );
                         if let ValueType::Error {
@@ -5033,6 +6335,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 value: None,
                 ty: result_type.clone(),
                 mutable: true,
+                string_builder: None,
             };
             self.load_local_variable("try_result", &result_var)
         } else {
@@ -5262,6 +6565,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: None,
                     ty: capture_type.clone(),
                     mutable: true,
+                    string_builder: None,
                 },
             );
         }
@@ -5286,6 +6590,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: None,
                     ty: param_type.clone(),
                     mutable: true,
+                    string_builder: None,
                 },
             );
         }
@@ -5514,6 +6819,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         function: FunctionValue<'ctx>,
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
+        if let Some(value) = self.try_compile_loop_modulo_state(expression)? {
+            return Ok(value);
+        }
+
         match expression.operator {
             BinaryOperator::And => {
                 return self.build_logical_and(
@@ -12312,6 +13621,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     value: None,
                     ty: result_type.clone(),
                     mutable: true,
+                    string_builder: None,
                 };
                 self.load_local_variable("coalesce_tmp", &temp_var)
             }
@@ -13693,6 +15003,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_string_concat", fn_type, Some(Linkage::External));
         self.string_concat_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_with_capacity_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_with_capacity_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.ptr_type.into(),
+                self.int_type().into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_with_capacity", fn_type, Some(Linkage::External));
+        self.string_with_capacity_fn = Some(func);
         func
     }
 

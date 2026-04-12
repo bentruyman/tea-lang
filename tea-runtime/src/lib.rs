@@ -3202,6 +3202,41 @@ pub extern "C" fn tea_string_len_ffi(string: *const TeaString) -> c_longlong {
 }
 
 #[no_mangle]
+pub extern "C" fn tea_string_data_ptr_ffi(string: *const TeaString) -> *mut u8 {
+    if string.is_null() {
+        return ptr::null_mut();
+    }
+
+    unsafe {
+        let string_ref = &*string;
+        if string_ref.tag == 0 {
+            tea_string_data_ptr_mut(string_ref)
+        } else {
+            string_ref.data.as_ptr() as *mut u8
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_string_set_len_ffi(string: *mut TeaString, len: c_longlong) {
+    if string.is_null() {
+        return;
+    }
+
+    unsafe {
+        let len = len.max(0) as usize;
+        let string_ref = &mut *string;
+        if string_ref.tag == 0 {
+            tea_string_set_len(string_ref, len);
+            let data_ptr = tea_string_data_ptr_mut(string_ref);
+            *data_ptr.add(len) = 0;
+        } else {
+            string_ref.len = len.min(22) as u8;
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_io_read_line() -> TeaValue {
     let mut buffer = String::new();
     match std::io::stdin().read_line(&mut buffer) {

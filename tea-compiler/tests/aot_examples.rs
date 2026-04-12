@@ -58,6 +58,68 @@ fn llvm_backend_compiles_core_examples() {
     }
 }
 
+#[test]
+fn strings_benchmark_uses_reserved_builder_path() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().expect("workspace root");
+    let path = workspace_root.join("benchmarks/tea/strings.tea");
+    let contents = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+    let source = SourceFile::new(SourceId(0), path.clone(), contents);
+
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let compilation = compiler
+        .compile(&source)
+        .unwrap_or_else(|err| panic!("compile failed for {}: {err}", path.display()));
+
+    let ir = aot::compile_compilation_to_llvm_ir(&compilation)
+        .unwrap_or_else(|err| panic!("LLVM codegen failed for {}: {err}", path.display()));
+
+    assert!(
+        ir.contains("@tea_string_with_capacity"),
+        "expected reserved string builder allocation in IR:\n{ir}"
+    );
+    assert!(
+        ir.contains("@tea_string_set_len_ffi"),
+        "expected builder length finalization in IR:\n{ir}"
+    );
+    assert!(
+        !ir.contains("@tea_string_push_byte("),
+        "hot loop should avoid runtime byte pushes:\n{ir}"
+    );
+}
+
+#[test]
+fn loops_benchmark_collapses_periodic_accumulation() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_root = manifest_dir.parent().expect("workspace root");
+    let path = workspace_root.join("benchmarks/tea/loops.tea");
+    let contents = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+    let source = SourceFile::new(SourceId(0), path.clone(), contents);
+
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let compilation = compiler
+        .compile(&source)
+        .unwrap_or_else(|err| panic!("compile failed for {}: {err}", path.display()));
+
+    let ir = aot::compile_compilation_to_llvm_ir(&compilation)
+        .unwrap_or_else(|err| panic!("LLVM codegen failed for {}: {err}", path.display()));
+
+    assert!(
+        ir.contains("tail call void @tea_print_int(i64"),
+        "expected collapsed direct print in IR:\n{ir}"
+    );
+    assert!(
+        !ir.contains("vector.body"),
+        "periodic top-level loop should not remain after lowering:\n{ir}"
+    );
+    assert!(
+        !ir.contains("urem i64"),
+        "collapsed loop should avoid runtime modulo work:\n{ir}"
+    );
+}
+
 fn temporary_object_path(source: &Path) -> PathBuf {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -46,6 +46,12 @@ pub struct FunctionSignature<'ctx> {
 }
 
 #[derive(Clone)]
+pub struct StringBuilderState<'ctx> {
+    pub data_ptr: PointerValue<'ctx>,
+    pub length_ptr: PointerValue<'ctx>,
+}
+
+#[derive(Clone)]
 pub struct LocalVariable<'ctx> {
     /// For mutable variables: pointer to stack allocation
     /// For immutable parameters: None (use SSA value directly)
@@ -55,6 +61,7 @@ pub struct LocalVariable<'ctx> {
     pub value: Option<BasicValueEnum<'ctx>>,
     pub ty: ValueType,
     pub mutable: bool,
+    pub string_builder: Option<StringBuilderState<'ctx>>,
 }
 
 pub struct StructLowering<'ctx> {

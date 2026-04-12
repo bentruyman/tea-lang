@@ -606,15 +606,17 @@ fn run_build(cli: BuildCli) -> Result<()> {
     };
     let rustc_info = active_toolchain_info(rustc_path.as_deref());
 
+    let object_options = object_options_from_cli(&cli)?;
+
     let cache_entry = if cli.emit.is_empty() {
-        build_cache_entry(&cli, &contents, &rustc_info)?
+        build_cache_entry(&cli, &contents, &rustc_info, &object_options)?
     } else {
         None
     };
 
     if let Some(entry) = &cache_entry {
         if entry.path.exists() {
-            match reuse_cached_binary(entry, &output, &cli, &rustc_info) {
+            match reuse_cached_binary(entry, &output, &cli, &object_options, &rustc_info) {
                 Ok(()) => return Ok(()),
                 Err(err) => eprintln!("warning: failed to reuse cached binary: {err}"),
             }
@@ -655,6 +657,7 @@ fn run_build(cli: BuildCli) -> Result<()> {
         &output,
         rustc_path.as_deref(),
         &rustc_info,
+        &object_options,
     )?;
 
     if let Some(entry) = cache_entry {
@@ -666,43 +669,40 @@ fn run_build(cli: BuildCli) -> Result<()> {
     Ok(())
 }
 
-fn detect_native_cpu() -> Option<&'static str> {
-    // Detect the native CPU for optimal performance
+fn fallback_native_cpu() -> Option<String> {
     #[cfg(target_arch = "aarch64")]
     {
-        // Apple Silicon detection
-        // LLVM recognizes "apple-m1" (for M1/M2) and "apple-m2" (for M3/M4)
-        // as CPU targets with specific instruction set features
         if cfg!(target_os = "macos") {
-            // Try to detect specific Apple CPU
             if let Ok(output) = std::process::Command::new("sysctl")
                 .arg("-n")
                 .arg("machdep.cpu.brand_string")
                 .output()
             {
                 let brand = String::from_utf8_lossy(&output.stdout);
-                // M3 and M4 use similar microarchitecture, use apple-m2 as baseline
                 if brand.contains("M4") || brand.contains("M3") {
-                    return Some("apple-m2");
+                    return Some("apple-m2".to_string());
                 } else if brand.contains("M2") || brand.contains("M1") {
-                    return Some("apple-m1");
+                    return Some("apple-m1".to_string());
                 }
             }
-            // Default for Apple Silicon - use apple-m1 as safe baseline
-            return Some("apple-m1");
+            return Some("apple-m1".to_string());
         }
-        // Other ARM64 platforms
-        Some("generic")
+        Some("generic".to_string())
     }
     #[cfg(target_arch = "x86_64")]
     {
-        // x86-64 detection - use a baseline that works well
-        Some("x86-64-v3")
+        Some("x86-64-v3".to_string())
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        Some("generic")
+        Some("generic".to_string())
     }
+}
+
+fn default_host_codegen_settings() -> (Option<String>, Option<String>) {
+    let cpu = aot::host_cpu_name().or_else(fallback_native_cpu);
+    let features = aot::host_cpu_features();
+    (cpu, features)
 }
 
 fn build_with_llvm(
@@ -711,12 +711,10 @@ fn build_with_llvm(
     output: &Path,
     rustc_path: Option<&Path>,
     rustc_info: &RustcInfo,
+    object_options: &ObjectCompileOptions,
 ) -> Result<()> {
-    let object_options = object_options_from_cli(cli)?;
-
     let object_path = object_path_for_output(output);
-    if let Err(err) =
-        aot::compile_compilation_to_object(&compilation, &object_path, &object_options)
+    if let Err(err) = aot::compile_compilation_to_object(compilation, &object_path, object_options)
     {
         if err
             .to_string()
@@ -727,7 +725,10 @@ fn build_with_llvm(
 
 Install an LLVM toolchain with support for {} or re-run with `--target <triple>`.",
                 err,
-                object_options.triple.unwrap_or("the host target")
+                object_options
+                    .triple
+                    .as_deref()
+                    .unwrap_or("the host target")
             );
         } else {
             return Err(err);
@@ -735,7 +736,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
     }
 
     if cli.emit.contains(&Emit::LlvmIr) {
-        let ir = aot::compile_compilation_to_llvm_ir_with_options(&compilation, &object_options)?;
+        let ir = aot::compile_compilation_to_llvm_ir_with_options(compilation, object_options)?;
         println!("{ir}");
     }
 
@@ -767,7 +768,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
             &object_path,
             &runtime_rlib,
             output,
-            cli.target.as_deref(),
+            object_options,
             cli.linker.as_deref(),
             &cli.linker_args,
             cli.lto,
@@ -780,7 +781,7 @@ Install an LLVM toolchain with support for {} or re-run with `--target <triple>`
         let _ = fs::remove_file(&object_path);
     }
 
-    finalize_build_outputs(cli, output, &object_options, rustc_info)?;
+    finalize_build_outputs(cli, output, object_options, rustc_info)?;
     println!("Built {}", output.display());
     Ok(())
 }
@@ -790,10 +791,12 @@ fn build_temporary_executable(
     output: &Path,
     rustc_path: Option<&Path>,
 ) -> Result<()> {
+    let (cpu, features) = default_host_codegen_settings();
     let mut object_options = ObjectCompileOptions::default();
-    object_options.entry_symbol = Some("tea_main");
+    object_options.entry_symbol = Some("tea_main".to_string());
     object_options.triple = None;
-    object_options.cpu = detect_native_cpu();
+    object_options.cpu = cpu;
+    object_options.features = features;
 
     let mut object_path = output.to_path_buf();
     object_path.set_extension(object_extension());
@@ -815,7 +818,7 @@ fn build_temporary_executable(
             &object_path,
             &runtime_rlib,
             output,
-            None,
+            &object_options,
             None,
             &[],
             false,
@@ -828,15 +831,13 @@ fn build_temporary_executable(
     Ok(())
 }
 
-fn object_options_from_cli<'a>(cli: &'a BuildCli) -> Result<ObjectCompileOptions<'a>> {
+fn object_options_from_cli(cli: &BuildCli) -> Result<ObjectCompileOptions> {
+    let (default_cpu, default_features) = default_host_codegen_settings();
     let mut options = ObjectCompileOptions::default();
-    options.entry_symbol = Some("tea_main");
-    options.triple = cli.target.as_deref();
-    options.cpu = match cli.cpu.as_deref() {
-        Some(cpu) => Some(cpu),
-        None => detect_native_cpu(),
-    };
-    options.features = cli.features.as_deref();
+    options.entry_symbol = Some("tea_main".to_string());
+    options.triple = cli.target.clone();
+    options.cpu = cli.cpu.clone().or(default_cpu);
+    options.features = cli.features.clone().or(default_features);
     if let Some(level) = cli.opt_level.as_deref() {
         options.opt_level = parse_opt_level(level)?;
     }
@@ -846,7 +847,7 @@ fn object_options_from_cli<'a>(cli: &'a BuildCli) -> Result<ObjectCompileOptions
 fn finalize_build_outputs(
     cli: &BuildCli,
     output: &Path,
-    object_options: &ObjectCompileOptions<'_>,
+    object_options: &ObjectCompileOptions,
     rustc_info: &RustcInfo,
 ) -> Result<()> {
     let build_time = build_timestamp()?;
@@ -872,8 +873,8 @@ fn finalize_build_outputs(
         println!("Signature written to {}", signature_path.display());
     }
 
-    let target_label = cli
-        .target
+    let target_label = object_options
+        .triple
         .as_deref()
         .map(aot::normalize_target_triple)
         .or_else(|| rustc_info.host.as_deref().map(aot::normalize_target_triple))
@@ -892,8 +893,8 @@ fn finalize_build_outputs(
             output,
             &cli.input,
             &target_label,
-            cli.cpu.as_deref(),
-            cli.features.as_deref(),
+            object_options.cpu.as_deref(),
+            object_options.features.as_deref(),
             &opt_level_label,
             &build_time.iso,
             &sha256,
@@ -975,6 +976,7 @@ fn build_cache_entry(
     cli: &BuildCli,
     contents: &str,
     rustc_info: &RustcInfo,
+    object_options: &ObjectCompileOptions,
 ) -> Result<Option<CacheEntry>> {
     let cache_root = match cache_root_dir() {
         Some(dir) => dir,
@@ -1009,12 +1011,29 @@ fn build_cache_entry(
     let mut hasher = Sha256::new();
     hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
     hasher.update(contents.as_bytes());
-    hasher.update(cli.target.as_deref().unwrap_or("host").as_bytes());
-    hasher.update(cli.cpu.as_deref().unwrap_or("native").as_bytes());
-    hasher.update(cli.features.as_deref().unwrap_or("").as_bytes());
-    hasher.update(cli.opt_level.as_deref().unwrap_or("").as_bytes());
+    hasher.update(
+        object_options
+            .triple
+            .as_deref()
+            .unwrap_or("host")
+            .as_bytes(),
+    );
+    hasher.update(
+        object_options
+            .cpu
+            .as_deref()
+            .unwrap_or("generic")
+            .as_bytes(),
+    );
+    hasher.update(object_options.features.as_deref().unwrap_or("").as_bytes());
+    let opt_level_label = cli
+        .opt_level
+        .clone()
+        .unwrap_or_else(|| opt_level_to_string(object_options.opt_level));
+    hasher.update(opt_level_label.as_bytes());
     let lto_flag = if cli.lto { "lto" } else { "no-lto" };
     hasher.update(lto_flag.as_bytes());
+    hasher.update(current_profile().as_bytes());
     if let Some(version) = rustc_info.version.as_deref() {
         hasher.update(version.as_bytes());
     }
@@ -1037,6 +1056,7 @@ fn reuse_cached_binary(
     entry: &CacheEntry,
     output: &Path,
     cli: &BuildCli,
+    object_options: &ObjectCompileOptions,
     rustc_info: &RustcInfo,
 ) -> Result<()> {
     if let Some(parent) = output.parent() {
@@ -1046,8 +1066,7 @@ fn reuse_cached_binary(
     }
     fs::copy(&entry.path, output)
         .with_context(|| format!("failed to copy cached binary from {}", entry.path.display()))?;
-    let object_options = object_options_from_cli(cli)?;
-    finalize_build_outputs(cli, output, &object_options, rustc_info)?;
+    finalize_build_outputs(cli, output, object_options, rustc_info)?;
     println!("Built {} (from cache)", output.display());
     Ok(())
 }
@@ -1246,11 +1265,14 @@ fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>
     Ok(newest_match.map(|(_, path)| path))
 }
 
-fn build_runtime_archive(target_dir: &Path) -> Result<()> {
+fn build_runtime_archive(profile: &str, target_dir: &Path) -> Result<()> {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut cmd = Command::new(cargo);
     cmd.current_dir(workspace_root());
     cmd.arg("build").arg("-p").arg("tea-runtime");
+    if profile == "release" {
+        cmd.arg("--release");
+    }
     if std::env::var("TEA_TARGET_DIR").is_ok() {
         cmd.env("CARGO_TARGET_DIR", target_dir);
     }
@@ -1274,7 +1296,7 @@ fn build_runtime_archive(target_dir: &Path) -> Result<()> {
 
 fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     let target_dir = runtime_target_dir();
-    build_runtime_archive(&target_dir)?;
+    build_runtime_archive(profile, &target_dir)?;
 
     if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
         return Ok(path);
@@ -1388,7 +1410,7 @@ fn link_with_rustc(
     object_path: &Path,
     runtime_rlib: &Path,
     output: &Path,
-    target: Option<&str>,
+    object_options: &ObjectCompileOptions,
     linker: Option<&Path>,
     linker_args: &[String],
     lto: bool,
@@ -1429,10 +1451,22 @@ fn link_with_rustc(
     cmd.arg("-L")
         .arg(format!("dependency={}", deps_dir.display()));
     cmd.arg("--edition").arg("2021");
+    cmd.arg("-C").arg(format!(
+        "opt-level={}",
+        opt_level_to_string(object_options.opt_level)
+    ));
     cmd.arg(format!("-Clink-arg={}", object_path.to_string_lossy()));
     cmd.arg("-o").arg(output);
-    if let Some(target) = target {
+    if let Some(target) = object_options.triple.as_deref() {
         cmd.arg("--target").arg(target);
+    }
+    if let Some(cpu) = object_options.cpu.as_deref() {
+        cmd.arg("-C").arg(format!("target-cpu={cpu}"));
+    }
+    if let Some(features) = object_options.features.as_deref() {
+        if !features.trim().is_empty() {
+            cmd.arg("-C").arg(format!("target-feature={features}"));
+        }
     }
     if let Some(linker) = linker {
         cmd.arg(format!("-Clinker={}", linker.display()));
@@ -1748,4 +1782,39 @@ fn detect_rustc_info(rustc: &Path) -> RustcInfo {
         }
     }
     info
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn object_options_default_to_host_cpu_and_features() {
+        let cli = BuildCli {
+            input: PathBuf::from("sample.tea"),
+            output: None,
+            emit: Vec::new(),
+            target: None,
+            cpu: None,
+            features: None,
+            opt_level: None,
+            lto: false,
+            bundle: false,
+            bundle_output: None,
+            checksum: false,
+            checksum_output: None,
+            signature_key: None,
+            signature_output: None,
+            rustc: None,
+            linker: None,
+            linker_args: Vec::new(),
+        };
+
+        let options = object_options_from_cli(&cli).expect("resolve object options");
+        let (expected_cpu, expected_features) = default_host_codegen_settings();
+
+        assert_eq!(options.cpu, expected_cpu);
+        assert_eq!(options.features, expected_features);
+        assert_eq!(options.entry_symbol.as_deref(), Some("tea_main"));
+    }
 }

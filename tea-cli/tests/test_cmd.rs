@@ -15,6 +15,12 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+fn cargo_bin() -> PathBuf {
+    std::env::var_os("CARGO")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("cargo"))
+}
+
 #[test]
 fn test_lists_discovered_tests() {
     let tmp = tempdir().expect("tempdir");
@@ -163,6 +169,61 @@ main()
     assert!(binary_path.exists(), "binary should exist");
     assert!(bundle_path.exists(), "bundle should exist");
     assert!(checksum_path.exists(), "checksum should exist");
+}
+
+#[test]
+fn release_build_finds_and_builds_matching_runtime_archive() {
+    let tmp = tempdir().expect("tempdir");
+    let target_root = tmp.path().join("target");
+    fs::create_dir_all(&target_root).expect("create isolated target dir");
+
+    let source_path = tmp.path().join("release_runtime.tea");
+    fs::write(
+        &source_path,
+        r#"
+print("release runtime")
+"#,
+    )
+    .expect("write source");
+
+    let binary_path = tmp.path().join(if cfg!(windows) {
+        "release_runtime.exe"
+    } else {
+        "release_runtime"
+    });
+
+    let output = Command::new(cargo_bin())
+        .current_dir(workspace_root())
+        .env("TEA_TARGET_DIR", &target_root)
+        .args(["run", "--release", "-p", "tea-cli", "--", "build"])
+        .arg(&source_path)
+        .arg("--output")
+        .arg(&binary_path)
+        .output()
+        .expect("run release tea build");
+
+    assert!(
+        output.status.success(),
+        "release tea build should succeed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(binary_path.exists(), "binary should exist");
+
+    let release_deps = target_root.join("release").join("deps");
+    let runtime_rlib_exists = fs::read_dir(&release_deps)
+        .expect("read release deps")
+        .filter_map(Result::ok)
+        .any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("libtea_runtime") && name.ends_with(".rlib")
+        });
+    assert!(
+        runtime_rlib_exists,
+        "expected release tea-runtime rlib in {}",
+        release_deps.display()
+    );
 }
 
 #[test]

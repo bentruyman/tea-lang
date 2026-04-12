@@ -48,6 +48,46 @@ fi
 mkdir -p "${BIN_DIR}"
 mkdir -p "${RESULTS_DIR}"
 
+resolve_rust_toolchain() {
+    if command -v cargo &> /dev/null && command -v rustc &> /dev/null; then
+        CARGO_BIN="$(command -v cargo)"
+        RUSTC_BIN="$(command -v rustc)"
+        return 0
+    fi
+
+    if command -v proto &> /dev/null; then
+        local proto_cargo
+        proto_cargo="$(proto bin rust 2>/dev/null || true)"
+        if [ -n "${proto_cargo}" ] && [ -x "${proto_cargo}" ]; then
+            local proto_dir
+            proto_dir="$(dirname "${proto_cargo}")"
+            if [ -x "${proto_dir}/rustc" ]; then
+                CARGO_BIN="${proto_cargo}"
+                RUSTC_BIN="${proto_dir}/rustc"
+                return 0
+            fi
+        fi
+    fi
+
+    local rustup_cargo
+    rustup_cargo="$(find "${HOME}/.rustup/toolchains" -path '*/bin/cargo' -print -quit 2>/dev/null || true)"
+    if [ -n "${rustup_cargo}" ] && [ -x "${rustup_cargo}" ]; then
+        local rustup_dir
+        rustup_dir="$(dirname "${rustup_cargo}")"
+        if [ -x "${rustup_dir}/rustc" ]; then
+            CARGO_BIN="${rustup_cargo}"
+            RUSTC_BIN="${rustup_dir}/rustc"
+            return 0
+        fi
+    fi
+
+    echo -e "${RED}Error: unable to locate cargo/rustc${NC}" >&2
+    echo "Install Rust or expose it on PATH before running benchmarks" >&2
+    exit 1
+}
+
+resolve_rust_toolchain
+
 echo -e "${BLUE}Tea Language Compiler Benchmark Suite${NC}"
 echo "======================================"
 echo ""
@@ -82,7 +122,7 @@ build_tea() {
     
     echo -e "${YELLOW}Building ${name}.tea...${NC}" >&2
     
-    cargo run -p tea-cli --quiet --release -- build \
+    PATH="$(dirname "${CARGO_BIN}"):${PATH}" RUSTC="${RUSTC_BIN}" "${CARGO_BIN}" run -p tea-cli --quiet --release -- build \
         --output "${output}" \
         "${input}" 2>&1 | grep -v "^Compiling\|^Finished\|^Running" >&2 || true
     
@@ -107,7 +147,7 @@ build_rust() {
     
     echo -e "${YELLOW}Building ${name}.rs with Rust...${NC}" >&2
     
-    rustc -O -C target-cpu=native "${source}" -o "${output}" 2>&1 >&2
+    "${RUSTC_BIN}" -O -C target-cpu=native "${source}" -o "${output}" 2>&1 >&2
     
     if [ ! -f "${output}" ]; then
         echo -e "${RED}Failed to build ${name}${NC}" >&2

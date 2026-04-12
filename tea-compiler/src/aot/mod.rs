@@ -483,6 +483,7 @@ struct LlvmCodeGenerator<'ctx> {
     string_concat_fn: Option<FunctionValue<'ctx>>,
     string_push_str_fn: Option<FunctionValue<'ctx>>,
     string_push_byte_fn: Option<FunctionValue<'ctx>>,
+    string_push_byte_n_fn: Option<FunctionValue<'ctx>>,
     string_push_int_fn: Option<FunctionValue<'ctx>>,
     string_slice_fn: Option<FunctionValue<'ctx>>,
     list_slice_fn: Option<FunctionValue<'ctx>>,
@@ -1202,6 +1203,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             string_concat_fn: None,
             string_push_str_fn: None,
             string_push_byte_fn: None,
+            string_push_byte_n_fn: None,
             string_push_int_fn: None,
             string_slice_fn: None,
             list_slice_fn: None,
@@ -3091,6 +3093,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
         return_type: &ValueType,
     ) -> Result<bool> {
+        if let Some(optimized) =
+            self.try_compile_repeated_byte_loop(statement, cond_expr, function, locals)?
+        {
+            return Ok(optimized);
+        }
+
         let current_block = self
             .builder
             .get_insert_block()
@@ -3785,6 +3793,205 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         }
     }
 
+    fn try_compile_repeated_byte_loop(
+        &mut self,
+        statement: &LoopStatement,
+        cond_expr: &Expression,
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<Option<bool>> {
+        let ExpressionKind::Binary(cond_binary) = &cond_expr.kind else {
+            return Ok(None);
+        };
+        if !matches!(cond_binary.operator, BinaryOperator::Less) {
+            return Ok(None);
+        }
+
+        let ExpressionKind::Identifier(counter_ident) = &cond_binary.left.kind else {
+            return Ok(None);
+        };
+        if !Self::is_simple_loop_bound_expression(&cond_binary.right) {
+            return Ok(None);
+        }
+
+        if statement.body.statements.len() != 2 {
+            return Ok(None);
+        }
+
+        let first_append = self.match_repeated_byte_append_statement(&statement.body.statements[0]);
+        let second_append =
+            self.match_repeated_byte_append_statement(&statement.body.statements[1]);
+        let first_increment = self.match_counter_increment_statement(&statement.body.statements[0]);
+        let second_increment =
+            self.match_counter_increment_statement(&statement.body.statements[1]);
+
+        let (string_name, byte, increment_name) = match (
+            first_append,
+            second_append,
+            first_increment,
+            second_increment,
+        ) {
+            (Some((name, byte)), None, None, Some(increment_name)) => (name, byte, increment_name),
+            (None, Some((name, byte)), Some(increment_name), None) => (name, byte, increment_name),
+            _ => return Ok(None),
+        };
+
+        if increment_name != counter_ident.name {
+            return Ok(None);
+        }
+
+        let string_var = match locals.get(&string_name).cloned() {
+            Some(var) if var.mutable && matches!(var.ty, ValueType::String) => var,
+            _ => return Ok(None),
+        };
+        let counter_var = match locals.get(counter_ident.name.as_str()).cloned() {
+            Some(var) if var.mutable && matches!(var.ty, ValueType::Int) => var,
+            _ => return Ok(None),
+        };
+
+        let current_string = if let Some(pointer) = string_var.pointer {
+            self.load_from_pointer(pointer, &ValueType::String, "repeat_loop_string")?
+                .into_string()?
+        } else if let Some(value) = string_var.value {
+            value.into_pointer_value()
+        } else {
+            return Ok(None);
+        };
+
+        let current_counter = if let Some(pointer) = counter_var.pointer {
+            self.load_from_pointer(pointer, &ValueType::Int, "repeat_loop_counter")?
+                .into_int()?
+        } else if let Some(value) = counter_var.value {
+            value.into_int_value()
+        } else {
+            return Ok(None);
+        };
+
+        let loop_bound = self
+            .compile_expression(&cond_binary.right, function, locals)?
+            .into_int()?;
+        let zero = self.int_type().const_zero();
+        let should_run = map_builder_error(self.builder.build_int_compare(
+            IntPredicate::SLT,
+            current_counter,
+            loop_bound,
+            "repeat_loop_has_work",
+        ))?;
+        let remaining_raw = map_builder_error(self.builder.build_int_sub(
+            loop_bound,
+            current_counter,
+            "repeat_loop_remaining_raw",
+        ))?;
+        let append_count = map_builder_error(self.builder.build_select(
+            should_run,
+            remaining_raw,
+            zero,
+            "repeat_loop_remaining",
+        ))?
+        .into_int_value();
+        let updated_counter = map_builder_error(self.builder.build_select(
+            should_run,
+            loop_bound,
+            current_counter,
+            "repeat_loop_counter_next",
+        ))?
+        .into_int_value();
+
+        let new_string = self.push_repeated_byte_value(current_string, byte, append_count)?;
+
+        if let Some(pointer) = string_var.pointer {
+            map_builder_error(self.builder.build_store(pointer, new_string))?;
+        } else {
+            locals.insert(
+                string_name,
+                LocalVariable {
+                    pointer: None,
+                    value: Some(new_string.into()),
+                    ty: ValueType::String,
+                    mutable: true,
+                },
+            );
+        }
+
+        if let Some(pointer) = counter_var.pointer {
+            map_builder_error(self.builder.build_store(pointer, updated_counter))?;
+        } else {
+            locals.insert(
+                counter_ident.name.clone(),
+                LocalVariable {
+                    pointer: None,
+                    value: Some(updated_counter.into()),
+                    ty: ValueType::Int,
+                    mutable: true,
+                },
+            );
+        }
+
+        Ok(Some(false))
+    }
+
+    fn match_repeated_byte_append_statement(&self, statement: &Statement) -> Option<(String, u8)> {
+        let Statement::Expression(expr_stmt) = statement else {
+            return None;
+        };
+        let ExpressionKind::Assignment(assignment) = &expr_stmt.expression.kind else {
+            return None;
+        };
+        let ExpressionKind::Identifier(target_ident) = &assignment.target.kind else {
+            return None;
+        };
+        let ExpressionKind::Binary(binary) = &assignment.value.kind else {
+            return None;
+        };
+        if !matches!(binary.operator, BinaryOperator::Add) {
+            return None;
+        }
+        let ExpressionKind::Identifier(left_ident) = &binary.left.kind else {
+            return None;
+        };
+        if left_ident.name != target_ident.name {
+            return None;
+        }
+        self.try_get_single_byte_literal(&binary.right)
+            .map(|byte| (target_ident.name.clone(), byte))
+    }
+
+    fn match_counter_increment_statement(&self, statement: &Statement) -> Option<String> {
+        let Statement::Expression(expr_stmt) = statement else {
+            return None;
+        };
+        let ExpressionKind::Assignment(assignment) = &expr_stmt.expression.kind else {
+            return None;
+        };
+        let ExpressionKind::Identifier(target_ident) = &assignment.target.kind else {
+            return None;
+        };
+        let ExpressionKind::Binary(binary) = &assignment.value.kind else {
+            return None;
+        };
+        if !matches!(binary.operator, BinaryOperator::Add) {
+            return None;
+        }
+        let ExpressionKind::Identifier(left_ident) = &binary.left.kind else {
+            return None;
+        };
+        if left_ident.name != target_ident.name {
+            return None;
+        }
+        match &binary.right.kind {
+            ExpressionKind::Literal(Literal::Integer(1)) => Some(target_ident.name.clone()),
+            _ => None,
+        }
+    }
+
+    fn is_simple_loop_bound_expression(expr: &Expression) -> bool {
+        match &expr.kind {
+            ExpressionKind::Identifier(_) | ExpressionKind::Literal(Literal::Integer(_)) => true,
+            ExpressionKind::Grouping(inner) => Self::is_simple_loop_bound_expression(inner),
+            _ => false,
+        }
+    }
+
     /// Try to optimize `var = var + expr` into a push_str/push_byte operation for strings.
     /// Returns Some(ExprValue::Void) if the optimization was applied, None otherwise.
     fn try_compile_string_push_assignment(
@@ -3874,6 +4081,27 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .try_as_basic_value()
             .left()
             .ok_or_else(|| anyhow!("tea_string_push_byte returned no value"))?
+            .into_pointer_value();
+        Ok(result)
+    }
+
+    fn push_repeated_byte_value(
+        &mut self,
+        target: PointerValue<'ctx>,
+        byte: u8,
+        count: IntValue<'ctx>,
+    ) -> Result<PointerValue<'ctx>> {
+        let push_fn = self.ensure_string_push_byte_n_fn();
+        let byte_val = self.context.i8_type().const_int(byte as u64, false);
+        let result = self
+            .call_function(
+                push_fn,
+                &[target.into(), byte_val.into(), count.into()],
+                "push_byte_n",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_string_push_byte_n returned no value"))?
             .into_pointer_value();
         Ok(result)
     }
@@ -13725,6 +13953,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_string_push_byte", fn_type, Some(Linkage::External));
         self.string_push_byte_fn = Some(func);
+        func
+    }
+
+    fn ensure_string_push_byte_n_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.string_push_byte_n_fn {
+            return func;
+        }
+        let fn_type = self.string_ptr_type().fn_type(
+            &[
+                self.string_ptr_type().into(),
+                self.context.i8_type().into(),
+                self.int_type().into(),
+            ],
+            false,
+        );
+        let func =
+            self.module
+                .add_function("tea_string_push_byte_n", fn_type, Some(Linkage::External));
+        self.string_push_byte_n_fn = Some(func);
         func
     }
 

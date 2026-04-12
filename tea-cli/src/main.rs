@@ -1246,11 +1246,14 @@ fn find_runtime_rlib(profile: &str, target_dir: &Path) -> Result<Option<PathBuf>
     Ok(newest_match.map(|(_, path)| path))
 }
 
-fn build_runtime_archive(target_dir: &Path) -> Result<()> {
+fn build_runtime_archive(profile: &str, target_dir: &Path) -> Result<()> {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut cmd = Command::new(cargo);
     cmd.current_dir(workspace_root());
     cmd.arg("build").arg("-p").arg("tea-runtime");
+    if profile == "release" {
+        cmd.arg("--release");
+    }
     if std::env::var("TEA_TARGET_DIR").is_ok() {
         cmd.env("CARGO_TARGET_DIR", target_dir);
     }
@@ -1274,7 +1277,7 @@ fn build_runtime_archive(target_dir: &Path) -> Result<()> {
 
 fn locate_runtime_rlib(profile: &str) -> Result<PathBuf> {
     let target_dir = runtime_target_dir();
-    build_runtime_archive(&target_dir)?;
+    build_runtime_archive(profile, &target_dir)?;
 
     if let Some(path) = find_runtime_rlib(profile, &target_dir)? {
         return Ok(path);

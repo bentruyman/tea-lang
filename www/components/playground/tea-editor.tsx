@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useDeferredValue,
   useEffect,
   useId,
@@ -29,6 +30,7 @@ const FONT_STYLE_BOLD = 2;
 const FONT_STYLE_UNDERLINE = 4;
 const FONT_STYLE_STRIKETHROUGH = 8;
 const EDITOR_LINE_HEIGHT = "1.35";
+const EDITOR_TEXT_CLASS = "px-4 py-3.5 font-mono text-[0.95rem] [tab-size:2]";
 
 const highlightCache = new Map<string, ThemedToken[][]>();
 const EDITOR_HIGHLIGHT_THEME = getDocsHighlightTheme("dark");
@@ -78,7 +80,7 @@ function getTokenStyle(token: ThemedToken): CSSProperties {
 export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
   const editorId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
   const deferredValue = useDeferredValue(value);
   const [lines, setLines] = useState<ThemedToken[][]>(fallbackTokens(value));
 
@@ -181,23 +183,21 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
-          <div
+          <pre
             ref={highlightRef}
-            className="px-4 py-3.5 font-mono text-[0.95rem] [tab-size:2] will-change-transform"
+            className={cn(
+              EDITOR_TEXT_CLASS,
+              "m-0 min-h-[32rem] whitespace-pre-wrap break-words will-change-transform",
+            )}
             style={{
               color: "var(--code-foreground)",
               lineHeight: EDITOR_LINE_HEIGHT,
             }}
           >
-            <div className="min-h-[calc(32rem-2rem)] whitespace-pre-wrap break-words">
-              {lines.map((line, lineIndex) => (
-                <div
-                  key={`line-${lineIndex}`}
-                  className="min-h-[1.35em]"
-                  style={{ lineHeight: EDITOR_LINE_HEIGHT }}
-                >
-                  {line.length > 0 ? (
-                    line.map((token, tokenIndex) => (
+            {lines.map((line, lineIndex) => (
+              <Fragment key={`line-${lineIndex}`}>
+                {line.length > 0
+                  ? line.map((token, tokenIndex) => (
                       <span
                         key={`token-${lineIndex}-${tokenIndex}-${token.offset}`}
                         style={getTokenStyle(token)}
@@ -205,13 +205,11 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
                         {token.content}
                       </span>
                     ))
-                  ) : (
-                    <span className="select-none opacity-0"> </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+                  : " "}
+                {lineIndex < lines.length - 1 ? "\n" : null}
+              </Fragment>
+            ))}
+          </pre>
         </div>
 
         <textarea
@@ -222,7 +220,10 @@ export function TeaEditor({ value, onChange, className }: TeaEditorProps) {
           onKeyDown={handleKeyDown}
           onScroll={(event) => syncHighlightScroll(event.currentTarget)}
           spellCheck={false}
-          className="min-h-[32rem] w-full resize-none border-0 bg-transparent px-4 py-3.5 font-mono text-[0.95rem] text-transparent outline-none selection:bg-emerald-500/16 [tab-size:2]"
+          className={cn(
+            EDITOR_TEXT_CLASS,
+            "min-h-[32rem] w-full resize-none border-0 bg-transparent text-transparent outline-none selection:bg-emerald-500/16",
+          )}
           style={{
             caretColor: "var(--code-foreground)",
             lineHeight: EDITOR_LINE_HEIGHT,

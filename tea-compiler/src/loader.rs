@@ -46,6 +46,30 @@ fn browser_stdlib_path(module_path: &str) -> Option<PathBuf> {
     }
 }
 
+// Bundled installs do not have a repo-local `stdlib/` tree to import from.
+fn embedded_source_stdlib_path(module_path: &str) -> Option<PathBuf> {
+    let module_name = module_path.strip_prefix("std.")?;
+    match module_name {
+        "args" | "env" | "fs" | "path" | "process" | "regex" | "string" => Some(PathBuf::from(
+            format!("/__tea_stdlib/{module_name}/mod.tea"),
+        )),
+        _ => None,
+    }
+}
+
+fn embedded_source_stdlib_contents(path: &Path) -> Option<&'static str> {
+    match path.to_str()? {
+        "/__tea_stdlib/args/mod.tea" => Some(include_str!("../../stdlib/args/mod.tea")),
+        "/__tea_stdlib/env/mod.tea" => Some(include_str!("../../stdlib/env/mod.tea")),
+        "/__tea_stdlib/fs/mod.tea" => Some(include_str!("../../stdlib/fs/mod.tea")),
+        "/__tea_stdlib/path/mod.tea" => Some(include_str!("../../stdlib/path/mod.tea")),
+        "/__tea_stdlib/process/mod.tea" => Some(include_str!("../../stdlib/process/mod.tea")),
+        "/__tea_stdlib/regex/mod.tea" => Some(include_str!("../../stdlib/regex/mod.tea")),
+        "/__tea_stdlib/string/mod.tea" => Some(include_str!("../../stdlib/string/mod.tea")),
+        _ => None,
+    }
+}
+
 pub struct InMemoryModuleLoader {
     files: HashMap<PathBuf, String>,
 }
@@ -135,7 +159,7 @@ impl NativeModuleLoader {
             }
         }
 
-        None
+        embedded_source_stdlib_path(module_path)
     }
 }
 
@@ -154,10 +178,19 @@ impl ModuleLoader for NativeModuleLoader {
     }
 
     fn canonicalize(&self, path: &Path) -> Result<PathBuf> {
+        if embedded_source_stdlib_contents(path).is_some() {
+            return Ok(normalized_path(path));
+        }
+
         Ok(path.canonicalize()?)
     }
 
     fn load_module(&self, path: &Path) -> Result<String> {
+        let path = normalized_path(path);
+        if let Some(source) = embedded_source_stdlib_contents(&path) {
+            return Ok(source.to_string());
+        }
+
         Ok(std::fs::read_to_string(path)?)
     }
 }

@@ -121,6 +121,44 @@ end
 }
 
 #[test]
+fn test_compiles_source_stdlib_outside_workspace() {
+    let tmp = tempdir().expect("tempdir");
+    let source_path = tmp.path().join("stdlib.tea");
+    fs::write(
+        &source_path,
+        r#"
+use assert = "std.assert"
+use string = "std.string"
+
+test "source stdlib helpers compile"
+  assert.eq(string.to_upper("tea"), "TEA")
+  assert.eq(string.repeat("ha", 2), "haha")
+end
+"#,
+    )
+    .expect("write source stdlib sample");
+
+    let output = Command::new(tea_cli_binary())
+        .current_dir(tmp.path())
+        .arg("test")
+        .arg(&source_path)
+        .output()
+        .expect("run tea test outside workspace");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "tea test should succeed outside the repo checkout\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("compiled successfully"),
+        "expected compilation success message: {stdout}"
+    );
+}
+
+#[test]
 #[ignore = "Test execution via AOT not yet implemented"]
 fn test_runs_tests_and_reports_failures() {
     let tmp = tempdir().expect("tempdir");

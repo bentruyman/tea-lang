@@ -2,7 +2,7 @@
 Basics
 ================================================================================
 
-use debug = "std.debug"
+use debug from "std.debug"
 
 var count = 0
 if count == 0
@@ -27,6 +27,28 @@ end
           left: (identifier)
           right: (number)))) 
     "end"))
+
+================================================================================
+Public Declarations
+================================================================================
+
+pub const limit = 10
+
+pub struct Box {
+  value: Int
+}
+--------------------------------------------------------------------------------
+(source_file
+  (const_declaration
+    "pub"
+    name: (identifier)
+    value: (number))
+  (struct_definition
+    "pub"
+    name: (identifier)
+    body: (struct_field
+      name: (identifier)
+      type: (type_annotation (identifier)))))
 
 ================================================================================
 Loops

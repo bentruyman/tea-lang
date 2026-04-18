@@ -28,7 +28,7 @@ fn run_code(code: &str) -> anyhow::Result<()> {
 #[test]
 fn test_plus_equal_int() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 5
 x += 3
@@ -40,7 +40,7 @@ assert.eq(x, 8)
 #[test]
 fn test_plus_equal_float() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 5.5
 x += 2.5
@@ -52,7 +52,7 @@ assert.eq(x, 8.0)
 #[test]
 fn test_minus_equal_int() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 10
 x -= 3
@@ -64,7 +64,7 @@ assert.eq(x, 7)
 #[test]
 fn test_minus_equal_float() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 10.5
 x -= 2.5
@@ -76,7 +76,7 @@ assert.eq(x, 8.0)
 #[test]
 fn test_star_equal_int() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 5
 x *= 3
@@ -88,7 +88,7 @@ assert.eq(x, 15)
 #[test]
 fn test_star_equal_float() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 2.5
 x *= 4.0
@@ -100,7 +100,7 @@ assert.eq(x, 10.0)
 #[test]
 fn test_multiple_compound_assignments() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 10
 x += 5
@@ -114,7 +114,7 @@ assert.eq(x, 24)
 #[test]
 fn test_compound_assignment_with_expression() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var x = 5
 var y = 3
@@ -127,7 +127,7 @@ assert.eq(x, 10)
 #[test]
 fn test_compound_assignment_in_function() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 def increment(n: Int) -> Int
   var result = n
@@ -143,7 +143,7 @@ assert.eq(increment(5), 6)
 #[test]
 fn test_compound_assignment_in_loop() -> anyhow::Result<()> {
     let code = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 var sum = 0
 for i in [1, 2, 3, 4, 5]

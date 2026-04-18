@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 #[test]
 fn for_loop_dict_key_value() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop iterates over dict with key and value"
   var point = { x: 3, y: 4 }
@@ -49,7 +49,7 @@ end
 #[test]
 fn for_loop_dict_empty() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop with empty dict"
   var empty = {}
@@ -93,7 +93,7 @@ end
 #[test]
 fn for_loop_dict_keys_accessible() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop can access dict keys"
   var scores = { "alice": 10, "bob": 8 }
@@ -138,7 +138,7 @@ end
 #[test]
 fn for_loop_dict_with_break() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop dict with break"
   var numbers = { "a": 1, "b": 2, "c": 3 }
@@ -187,7 +187,7 @@ end
 #[test]
 fn for_loop_dict_with_continue() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop dict with continue"
   var numbers = { "a": 1, "b": 2, "c": 3 }

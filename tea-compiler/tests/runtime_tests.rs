@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 #[test]
 fn runtime_executes_test_blocks_with_results() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "passing assertion"
   assert.eq(1, 1)

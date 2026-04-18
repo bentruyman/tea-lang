@@ -1,9 +1,9 @@
 # Comprehensive test of Tea-native stdlib modules
 # Tests all migrated modules: env, fs, path
 
-use env = "std.env"
-use fs = "std.fs"
-use path = "std.path"
+use env from "std.env"
+use fs from "std.fs"
+use path from "std.path"
 
 pub def test_env() -> Void
   @println("=== Testing std.env ===")

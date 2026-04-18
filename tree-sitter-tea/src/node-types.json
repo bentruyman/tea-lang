@@ -3584,10 +3584,6 @@
           {
             "type": "string",
             "named": true
-          },
-          {
-            "type": "template_string",
-            "named": true
           }
         ]
       }
@@ -3957,6 +3953,10 @@
   },
   {
     "type": "for",
+    "named": false
+  },
+  {
+    "type": "from",
     "named": false
   },
   {

@@ -7,12 +7,12 @@ Tea's standard library provides modules for common tasks: filesystem operations,
 Import stdlib modules using the `use` keyword:
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use env = "std.env"
+use fs from "std.fs"
+use path from "std.path"
+use env from "std.env"
 ```
 
-The syntax is: `use alias = "module.path"`
+The syntax is: `use alias from "module.path"`
 
 ## Quick Reference
 
@@ -34,7 +34,7 @@ The syntax is: `use alias = "module.path"`
 Assertions for testing and runtime validation.
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 ```
 
 ### `ok(value: Bool) -> Void`
@@ -89,7 +89,7 @@ Snapshots are saved in `__snapshots__/` by default.
 **Example Test:**
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "calculator operations"
   assert.eq(add(2, 3), 5)
@@ -104,7 +104,7 @@ end
 Environment variable access and working directory management.
 
 ```tea
-use env = "std.env"
+use env from "std.env"
 ```
 
 ### `get(name: String) -> String`
@@ -146,8 +146,8 @@ var all_vars = env.vars()
 **Example Usage:**
 
 ```tea
-use env = "std.env"
-use path = "std.path"
+use env from "std.env"
+use path from "std.path"
 
 var root = env.cwd()
 var config_path = path.join([root, "config.json"])
@@ -164,7 +164,7 @@ end
 Filesystem operations for reading, writing, and managing files and directories.
 
 ```tea
-use fs = "std.fs"
+use fs from "std.fs"
 ```
 
 ### `read_file(path: String) -> String`
@@ -284,9 +284,9 @@ fs.remove("old_folder")  # Removes directory and all contents
 **Example: Process Text Files:**
 
 ```tea
-use fs = "std.fs"
-use string = "std.string"
-use path = "std.path"
+use fs from "std.fs"
+use string from "std.string"
+use path from "std.path"
 
 var files = fs.read_dir("docs")
 
@@ -304,7 +304,7 @@ end
 Path manipulation utilities for working with file paths.
 
 ```tea
-use path = "std.path"
+use path from "std.path"
 ```
 
 ### `join(parts: List[String]) -> String`
@@ -360,8 +360,8 @@ path.extension("file")         # ""
 **Example: Build Output Path:**
 
 ```tea
-use path = "std.path"
-use env = "std.env"
+use path from "std.path"
+use env from "std.env"
 
 var source_file = "src/main.tea"
 var filename = path.basename(source_file)  # "main.tea"
@@ -380,7 +380,7 @@ var output_file = path.join([output_dir, name_only])
 String manipulation utilities for common text operations.
 
 ```tea
-use string = "std.string"
+use string from "std.string"
 ```
 
 ### `starts_with(text: String, prefix: String) -> Bool`
@@ -465,8 +465,8 @@ string.reverse("Tea")    # "aeT"
 **Example: File Filtering:**
 
 ```tea
-use fs = "std.fs"
-use string = "std.string"
+use fs from "std.fs"
+use string from "std.string"
 
 var files = fs.read_dir(".")
 
@@ -486,9 +486,9 @@ end
 ### File Processor
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use string = "std.string"
+use fs from "std.fs"
+use path from "std.path"
+use string from "std.string"
 
 def process_directory(dir: String)
   var entries = fs.read_dir(dir)
@@ -514,8 +514,8 @@ process_directory("src")
 ### Testing Utilities
 
 ```tea
-use assert = "std.assert"
-use string = "std.string"
+use assert from "std.assert"
+use string from "std.string"
 
 test "string operations"
   var text = "  Hello, Tea!  "

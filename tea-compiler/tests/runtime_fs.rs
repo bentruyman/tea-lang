@@ -30,8 +30,8 @@ fn fs_roundtrip_through_runtime() -> anyhow::Result<()> {
 
     let source = format!(
         r#"
-use assert = "std.assert"
-use fs = "std.fs"
+use assert from "std.assert"
+use fs from "std.fs"
 
 fs.create_dir("{dir}")
 fs.mkdir_p("{backups}")
@@ -80,7 +80,7 @@ fn fs_read_text_reports_consistent_error() -> anyhow::Result<()> {
 
     let source = format!(
         r#"
-use fs = "std.fs"
+use fs from "std.fs"
 
 fs.read_file("{path}")
 "#,

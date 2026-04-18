@@ -202,7 +202,7 @@ impl ErrorTag {
     }
 
     fn matches(&self, other: &ErrorTag) -> bool {
-        self.name == other.name
+        TypeChecker::same_nominal_name(&self.name, &other.name)
             && (self.variant.is_none() || other.variant.is_none() || self.variant == other.variant)
     }
 }
@@ -359,6 +359,7 @@ impl TypeChecker {
         self.populate_unions();
         self.populate_errors();
         self.check_statements(&module.statements);
+        self.validate_public_declarations(&module.statements);
     }
 
     pub fn into_diagnostics(self) -> Diagnostics {
@@ -399,6 +400,10 @@ impl TypeChecker {
         self.structs.clone()
     }
 
+    pub(crate) fn union_definitions(&self) -> HashMap<String, UnionDefinition> {
+        self.unions.clone()
+    }
+
     pub(crate) fn enum_definitions(&self) -> HashMap<String, EnumDefinition> {
         self.enums.clone()
     }
@@ -428,6 +433,524 @@ impl TypeChecker {
     fn report_warning<S: Into<String>>(&mut self, message: S, span: Option<SourceSpan>) {
         self.diagnostics
             .push_warning_with_span(message.into(), span);
+    }
+
+    fn span_from_token(token: &Token) -> SourceSpan {
+        let len = token.lexeme.chars().count().max(1);
+        SourceSpan::new(
+            token.line,
+            token.column,
+            token.line,
+            token.column + len.saturating_sub(1),
+        )
+    }
+
+    fn span_from_type_expression(type_expr: &TypeExpression) -> Option<SourceSpan> {
+        let mut tokens = type_expr.tokens.iter();
+        let first = tokens.next()?;
+        let mut span = Self::span_from_token(first);
+        for token in tokens {
+            span = SourceSpan::union(&span, &Self::span_from_token(token));
+        }
+        Some(span)
+    }
+
+    fn collect_module_alias_names(statements: &[Statement]) -> Vec<String> {
+        let mut aliases: Vec<String> = statements
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::Use(use_stmt) => Some(use_stmt.alias.name.clone()),
+                _ => None,
+            })
+            .collect();
+        aliases.sort_by(|left, right| right.len().cmp(&left.len()).then_with(|| left.cmp(right)));
+        aliases.dedup();
+        aliases
+    }
+
+    fn split_public_api_name<'a>(name: &'a str, aliases: &[String]) -> (String, &'a str) {
+        for alias in aliases {
+            let prefix = format!("__module_{alias}_");
+            if let Some(rest) = name.strip_prefix(&prefix) {
+                return (alias.clone(), rest);
+            }
+        }
+
+        (String::new(), name)
+    }
+
+    fn collect_exported_type_names(
+        statements: &[Statement],
+        aliases: &[String],
+    ) -> (
+        HashMap<String, HashSet<String>>,
+        HashMap<String, HashSet<String>>,
+        HashMap<String, HashSet<String>>,
+        HashMap<String, HashSet<String>>,
+    ) {
+        let mut exported_structs: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut exported_unions: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut exported_enums: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut exported_errors: HashMap<String, HashSet<String>> = HashMap::new();
+
+        for statement in statements {
+            match statement {
+                Statement::Struct(struct_stmt) if struct_stmt.is_public => {
+                    let (owner, local_name) =
+                        Self::split_public_api_name(&struct_stmt.name, aliases);
+                    if !local_name.starts_with("__module_") {
+                        exported_structs
+                            .entry(owner)
+                            .or_default()
+                            .insert(struct_stmt.name.clone());
+                    }
+                }
+                Statement::Union(union_stmt) if union_stmt.is_public => {
+                    let (owner, local_name) =
+                        Self::split_public_api_name(&union_stmt.name, aliases);
+                    if !local_name.starts_with("__module_") {
+                        exported_unions
+                            .entry(owner)
+                            .or_default()
+                            .insert(union_stmt.name.clone());
+                    }
+                }
+                Statement::Enum(enum_stmt) if enum_stmt.is_public => {
+                    let (owner, local_name) = Self::split_public_api_name(&enum_stmt.name, aliases);
+                    if !local_name.starts_with("__module_") {
+                        exported_enums
+                            .entry(owner)
+                            .or_default()
+                            .insert(enum_stmt.name.clone());
+                    }
+                }
+                Statement::Error(error_stmt) if error_stmt.is_public => {
+                    let (owner, local_name) =
+                        Self::split_public_api_name(&error_stmt.name, aliases);
+                    if !local_name.starts_with("__module_") {
+                        exported_errors
+                            .entry(owner)
+                            .or_default()
+                            .insert(error_stmt.name.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (
+            exported_structs,
+            exported_unions,
+            exported_enums,
+            exported_errors,
+        )
+    }
+
+    fn collect_declared_struct_names(statements: &[Statement]) -> HashSet<String> {
+        statements
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::Struct(struct_stmt) => Some(struct_stmt.name.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn collect_globally_visible_struct_names(&self, statements: &[Statement]) -> HashSet<String> {
+        let declared_structs = Self::collect_declared_struct_names(statements);
+        self.structs
+            .keys()
+            .filter(|name| !declared_structs.contains(*name) && !name.starts_with("__module_"))
+            .cloned()
+            .collect()
+    }
+
+    fn display_public_api_name(name: &str, aliases: &[String]) -> String {
+        for alias in aliases {
+            let prefix = format!("__module_{alias}_");
+            if let Some(rest) = name.strip_prefix(&prefix) {
+                return format!("{}.{}", alias, Self::display_public_api_name(rest, aliases));
+            }
+        }
+        name.to_string()
+    }
+
+    fn canonical_nominal_name(name: &str) -> &str {
+        let mut canonical = name;
+        loop {
+            let Some(rest) = canonical.strip_prefix("__module_") else {
+                break;
+            };
+            let Some(separator) = rest.find('_') else {
+                break;
+            };
+            let remainder = &rest[separator + 1..];
+            if remainder.starts_with("__module_") {
+                canonical = remainder;
+            } else {
+                break;
+            }
+        }
+        canonical
+    }
+
+    fn same_nominal_name(left: &str, right: &str) -> bool {
+        Self::canonical_nominal_name(left) == Self::canonical_nominal_name(right)
+    }
+
+    fn local_public_api_name<'a>(name: &'a str, owner: &str) -> &'a str {
+        if owner.is_empty() {
+            return name;
+        }
+
+        let prefix = format!("__module_{owner}_");
+        name.strip_prefix(&prefix).unwrap_or(name)
+    }
+
+    fn is_directly_exported_name(
+        owner: &str,
+        name: &str,
+        exported_names: &HashMap<String, HashSet<String>>,
+    ) -> bool {
+        exported_names
+            .get(owner)
+            .map(|names| names.contains(name))
+            .unwrap_or(false)
+    }
+
+    fn is_imported_public_name(name: &str, owner: &str) -> bool {
+        Self::local_public_api_name(name, owner).starts_with("__module_")
+    }
+
+    fn first_unexported_type_name<'a>(
+        ty: &'a Type,
+        owner: &str,
+        globally_visible_structs: &HashSet<String>,
+        exported_structs: &HashMap<String, HashSet<String>>,
+        exported_unions: &HashMap<String, HashSet<String>>,
+        exported_enums: &HashMap<String, HashSet<String>>,
+        exported_errors: &HashMap<String, HashSet<String>>,
+    ) -> Option<&'a str> {
+        match ty {
+            Type::Optional(inner) | Type::List(inner) | Type::Dict(inner) => {
+                Self::first_unexported_type_name(
+                    inner,
+                    owner,
+                    globally_visible_structs,
+                    exported_structs,
+                    exported_unions,
+                    exported_enums,
+                    exported_errors,
+                )
+            }
+            Type::Function(params, return_type) => params
+                .iter()
+                .find_map(|param| {
+                    Self::first_unexported_type_name(
+                        param,
+                        owner,
+                        globally_visible_structs,
+                        exported_structs,
+                        exported_unions,
+                        exported_enums,
+                        exported_errors,
+                    )
+                })
+                .or_else(|| {
+                    Self::first_unexported_type_name(
+                        return_type,
+                        owner,
+                        globally_visible_structs,
+                        exported_structs,
+                        exported_unions,
+                        exported_enums,
+                        exported_errors,
+                    )
+                }),
+            Type::Struct(struct_type) => {
+                if globally_visible_structs.contains(&struct_type.name) {
+                    return struct_type.type_arguments.iter().find_map(|type_argument| {
+                        Self::first_unexported_type_name(
+                            type_argument,
+                            owner,
+                            globally_visible_structs,
+                            exported_structs,
+                            exported_unions,
+                            exported_enums,
+                            exported_errors,
+                        )
+                    });
+                }
+
+                if !Self::is_directly_exported_name(owner, &struct_type.name, exported_structs)
+                    && !Self::is_imported_public_name(&struct_type.name, owner)
+                {
+                    Some(struct_type.name.as_str())
+                } else {
+                    struct_type.type_arguments.iter().find_map(|type_argument| {
+                        Self::first_unexported_type_name(
+                            type_argument,
+                            owner,
+                            globally_visible_structs,
+                            exported_structs,
+                            exported_unions,
+                            exported_enums,
+                            exported_errors,
+                        )
+                    })
+                }
+            }
+            Type::Union(union_type) => {
+                if !Self::is_directly_exported_name(owner, &union_type.name, exported_unions)
+                    && !Self::is_imported_public_name(&union_type.name, owner)
+                {
+                    Some(union_type.name.as_str())
+                } else {
+                    None
+                }
+            }
+            Type::Enum(enum_type) => {
+                if !Self::is_directly_exported_name(owner, &enum_type.name, exported_enums)
+                    && !Self::is_imported_public_name(&enum_type.name, owner)
+                {
+                    Some(enum_type.name.as_str())
+                } else {
+                    None
+                }
+            }
+            Type::Error(error_type) => {
+                if !Self::is_directly_exported_name(owner, &error_type.name, exported_errors)
+                    && !Self::is_imported_public_name(&error_type.name, owner)
+                {
+                    Some(error_type.name.as_str())
+                } else {
+                    None
+                }
+            }
+            Type::Bool
+            | Type::Int
+            | Type::Float
+            | Type::String
+            | Type::Nil
+            | Type::Void
+            | Type::GenericParameter(_)
+            | Type::Unknown => None,
+        }
+    }
+
+    fn report_public_type_leak(
+        &mut self,
+        subject: String,
+        ty: &Type,
+        span: Option<SourceSpan>,
+        owner: &str,
+        globally_visible_structs: &HashSet<String>,
+        exported_structs: &HashMap<String, HashSet<String>>,
+        exported_unions: &HashMap<String, HashSet<String>>,
+        exported_enums: &HashMap<String, HashSet<String>>,
+        exported_errors: &HashMap<String, HashSet<String>>,
+        aliases: &[String],
+    ) {
+        if let Some(private_name) = Self::first_unexported_type_name(
+            ty,
+            owner,
+            globally_visible_structs,
+            exported_structs,
+            exported_unions,
+            exported_enums,
+            exported_errors,
+        ) {
+            let display = Self::display_public_api_name(private_name, aliases);
+            self.report_error(
+                format!("{subject} cannot expose private type '{display}'"),
+                span,
+            );
+        }
+    }
+
+    fn validate_public_declarations(&mut self, statements: &[Statement]) {
+        let aliases = Self::collect_module_alias_names(statements);
+        let globally_visible_structs = self.collect_globally_visible_struct_names(statements);
+        let (exported_structs, exported_unions, exported_enums, exported_errors) =
+            Self::collect_exported_type_names(statements, &aliases);
+
+        for statement in statements {
+            match statement {
+                Statement::Var(var_stmt) if var_stmt.is_public && var_stmt.is_const => {
+                    for binding in &var_stmt.bindings {
+                        let (owner, _) = Self::split_public_api_name(&binding.name, &aliases);
+                        let ty = self
+                            .binding_types
+                            .get(&binding.span)
+                            .cloned()
+                            .or_else(|| {
+                                binding
+                                    .type_annotation
+                                    .as_ref()
+                                    .and_then(|annotation| self.parse_type(annotation))
+                            })
+                            .unwrap_or(Type::Unknown);
+                        self.report_public_type_leak(
+                            format!("public const '{}'", binding.name),
+                            &ty,
+                            Some(binding.span),
+                            owner.as_str(),
+                            &globally_visible_structs,
+                            &exported_structs,
+                            &exported_unions,
+                            &exported_enums,
+                            &exported_errors,
+                            &aliases,
+                        );
+                    }
+                }
+                Statement::Function(function) if function.is_public => {
+                    let (owner, _) = Self::split_public_api_name(&function.name, &aliases);
+                    self.push_type_parameters(&function.type_parameters);
+
+                    for parameter in &function.parameters {
+                        let ty = parameter
+                            .type_annotation
+                            .as_ref()
+                            .and_then(|annotation| self.parse_type(annotation))
+                            .unwrap_or(Type::Unknown);
+                        self.report_public_type_leak(
+                            format!(
+                                "parameter '{}' of public function '{}'",
+                                parameter.name, function.name
+                            ),
+                            &ty,
+                            Some(parameter.span),
+                            owner.as_str(),
+                            &globally_visible_structs,
+                            &exported_structs,
+                            &exported_unions,
+                            &exported_enums,
+                            &exported_errors,
+                            &aliases,
+                        );
+                    }
+
+                    if let Some(return_type) = &function.return_type {
+                        let ty = self.parse_type(return_type).unwrap_or(Type::Unknown);
+                        self.report_public_type_leak(
+                            format!("return type of public function '{}'", function.name),
+                            &ty,
+                            Self::span_from_type_expression(return_type)
+                                .or(Some(function.name_span)),
+                            owner.as_str(),
+                            &globally_visible_structs,
+                            &exported_structs,
+                            &exported_unions,
+                            &exported_enums,
+                            &exported_errors,
+                            &aliases,
+                        );
+                    }
+
+                    if let Some(annotation) = &function.error_annotation {
+                        for specifier in &annotation.types {
+                            if let Some(error_name) = specifier.path.first() {
+                                if !Self::is_directly_exported_name(
+                                    owner.as_str(),
+                                    error_name,
+                                    &exported_errors,
+                                ) && !Self::is_imported_public_name(error_name, owner.as_str())
+                                {
+                                    let display =
+                                        Self::display_public_api_name(error_name, &aliases);
+                                    self.report_error(
+                                        format!(
+                                            "error annotation of public function '{}' cannot expose private error '{}'",
+                                            function.name, display
+                                        ),
+                                        Some(specifier.span),
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    self.pop_type_parameters();
+                }
+                Statement::Struct(struct_stmt) if struct_stmt.is_public => {
+                    let (owner, _) = Self::split_public_api_name(&struct_stmt.name, &aliases);
+                    self.push_type_parameters(&struct_stmt.type_parameters);
+
+                    for field in &struct_stmt.fields {
+                        let ty = self
+                            .parse_type(&field.type_annotation)
+                            .unwrap_or(Type::Unknown);
+                        self.report_public_type_leak(
+                            format!(
+                                "field '{}' of public struct '{}'",
+                                field.name, struct_stmt.name
+                            ),
+                            &ty,
+                            Self::span_from_type_expression(&field.type_annotation)
+                                .or(Some(field.span)),
+                            owner.as_str(),
+                            &globally_visible_structs,
+                            &exported_structs,
+                            &exported_unions,
+                            &exported_enums,
+                            &exported_errors,
+                            &aliases,
+                        );
+                    }
+
+                    self.pop_type_parameters();
+                }
+                Statement::Union(union_stmt) if union_stmt.is_public => {
+                    let (owner, _) = Self::split_public_api_name(&union_stmt.name, &aliases);
+                    for member in &union_stmt.members {
+                        let ty = self
+                            .parse_type(&member.type_expression)
+                            .unwrap_or(Type::Unknown);
+                        self.report_public_type_leak(
+                            format!("member of public union '{}'", union_stmt.name),
+                            &ty,
+                            Self::span_from_type_expression(&member.type_expression)
+                                .or(Some(member.span)),
+                            owner.as_str(),
+                            &globally_visible_structs,
+                            &exported_structs,
+                            &exported_unions,
+                            &exported_enums,
+                            &exported_errors,
+                            &aliases,
+                        );
+                    }
+                }
+                Statement::Error(error_stmt) if error_stmt.is_public => {
+                    let (owner, _) = Self::split_public_api_name(&error_stmt.name, &aliases);
+                    for variant in &error_stmt.variants {
+                        for field in &variant.fields {
+                            let ty = self
+                                .parse_type(&field.type_annotation)
+                                .unwrap_or(Type::Unknown);
+                            self.report_public_type_leak(
+                                format!(
+                                    "field '{}' of public error '{}.{}'",
+                                    field.name, error_stmt.name, variant.name
+                                ),
+                                &ty,
+                                Self::span_from_type_expression(&field.type_annotation)
+                                    .or(Some(field.name_span)),
+                                owner.as_str(),
+                                &globally_visible_structs,
+                                &exported_structs,
+                                &exported_unions,
+                                &exported_enums,
+                                &exported_errors,
+                                &aliases,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     fn register_builtin_structs(&mut self) {
@@ -1557,7 +2080,10 @@ impl TypeChecker {
                                         if let ExpressionKind::Identifier(identifier) =
                                             &member.object.kind
                                         {
-                                            if identifier.name == enum_type.name {
+                                            if Self::same_nominal_name(
+                                                &identifier.name,
+                                                &enum_type.name,
+                                            ) {
                                                 Some(member.property.clone())
                                             } else {
                                                 None
@@ -2051,8 +2577,66 @@ impl TypeChecker {
             (Type::Dict(expected_inner), Type::Dict(actual_inner)) => {
                 self.ensure_compatible(expected_inner, actual_inner, context, span)
             }
+            (Type::Struct(expected_struct), Type::Struct(actual_struct)) => {
+                if !Self::same_nominal_name(&expected_struct.name, &actual_struct.name) {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    return false;
+                }
+
+                if expected_struct.type_arguments.len() != actual_struct.type_arguments.len() {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    return false;
+                }
+
+                let mut compatible = true;
+                for (index, (expected_arg, actual_arg)) in expected_struct
+                    .type_arguments
+                    .iter()
+                    .zip(actual_struct.type_arguments.iter())
+                    .enumerate()
+                {
+                    let arg_context = format!("{} type argument {}", context, index + 1);
+                    if !self.ensure_compatible(expected_arg, actual_arg, &arg_context, span) {
+                        compatible = false;
+                    }
+                }
+
+                compatible
+            }
+            (Type::Enum(expected_enum), Type::Enum(actual_enum)) => {
+                if Self::same_nominal_name(&expected_enum.name, &actual_enum.name) {
+                    true
+                } else {
+                    self.report_error(
+                        format!(
+                            "{}: expected {}, found {}",
+                            context,
+                            expected.describe(),
+                            actual.describe()
+                        ),
+                        span,
+                    );
+                    false
+                }
+            }
             (Type::Union(expected_union), Type::Union(actual_union)) => {
-                if expected_union.name == actual_union.name
+                if Self::same_nominal_name(&expected_union.name, &actual_union.name)
                     || self.union_is_subset(&actual_union.name, &expected_union.name)
                 {
                     true
@@ -2103,7 +2687,7 @@ impl TypeChecker {
                 }
             }
             (Type::Error(expected_error), Type::Error(actual_error)) => {
-                if expected_error.name == actual_error.name {
+                if Self::same_nominal_name(&expected_error.name, &actual_error.name) {
                     if expected_error.variant.is_none()
                         || expected_error.variant == actual_error.variant
                     {
@@ -2239,7 +2823,7 @@ impl TypeChecker {
                     let ty = self.parse_type(type_expr).unwrap_or(Type::Unknown);
                     if let Type::Error(pattern_error) = ty {
                         if let Some(existing) = &mut result {
-                            if existing.name != pattern_error.name {
+                            if !Self::same_nominal_name(&existing.name, &pattern_error.name) {
                                 return None;
                             }
                             if existing.variant != pattern_error.variant {
@@ -2421,7 +3005,7 @@ impl TypeChecker {
             }
             Type::Struct(expected_struct) => {
                 if let Type::Struct(actual_struct) = actual {
-                    if expected_struct.name != actual_struct.name {
+                    if !Self::same_nominal_name(&expected_struct.name, &actual_struct.name) {
                         return self.ensure_compatible(expected, actual, context, span);
                     }
 
@@ -3052,7 +3636,10 @@ impl TypeChecker {
                                         if let ExpressionKind::Identifier(identifier) =
                                             &member.object.kind
                                         {
-                                            if identifier.name == enum_type.name {
+                                            if Self::same_nominal_name(
+                                                &identifier.name,
+                                                &enum_type.name,
+                                            ) {
                                                 Some(member.property.clone())
                                             } else {
                                                 None
@@ -3512,7 +4099,7 @@ impl TypeChecker {
             }
             Type::Enum(ref enum_type) => {
                 if let ExpressionKind::Identifier(identifier) = &member.object.kind {
-                    if identifier.name == enum_type.name {
+                    if Self::same_nominal_name(&identifier.name, &enum_type.name) {
                         if let Some(definition) = self.enums.get(&enum_type.name) {
                             if let Some(_variant) = definition.variant(&member.property) {
                                 return Type::Enum(enum_type.clone());

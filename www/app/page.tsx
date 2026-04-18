@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { referenceItems } from "@/lib/reference";
 import { docItems, exampleItems } from "@/lib/site";
 
-const homeSample = `use string = "std.string"
+const homeSample = `use string from "std.string"
 
 struct User {
   name: String

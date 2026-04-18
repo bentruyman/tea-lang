@@ -47,8 +47,8 @@ fn path_builtins_roundtrip_through_runtime() -> anyhow::Result<()> {
 
     let source = format!(
         r#"
-use assert = "std.assert"
-use path = "std.path"
+use assert from "std.assert"
+use path from "std.path"
 
 var joined = path.join(["foo", "bar", "baz"])
 assert.eq(joined, "{joined}")

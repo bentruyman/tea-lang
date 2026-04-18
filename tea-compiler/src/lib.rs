@@ -42,7 +42,7 @@ pub use crate::reference::{
     build_reference_manifest, ReferenceEntry, ReferenceEntryKind, ReferenceFunction,
     ReferenceManifest, BUILTIN_REFERENCE_SUMMARY,
 };
-pub use crate::resolver::{ModuleAliasBinding, Resolver, ResolverOutput};
+pub use crate::resolver::{ModuleAliasBinding, ModuleExportKind, Resolver, ResolverOutput};
 pub use crate::source::{SourceFile, SourceId};
 pub use crate::stdlib::{
     find_module as stdlib_find_module, StdFunction, StdModule, StdType, BUILTINS as STDLIB_BUILTINS,

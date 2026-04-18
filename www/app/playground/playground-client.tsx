@@ -62,7 +62,7 @@ end
     title: "String Tools",
     summary:
       "Pure Tea stdlib code expanded in-browser from the checked-in stdlib source.",
-    source: `use string = "std.string"
+    source: `use string from "std.string"
 
 var headline = "tea in the browser"
 
@@ -74,7 +74,7 @@ var headline = "tea in the browser"
     title: "JSON Decode",
     summary:
       "Runs the browser-safe JSON intrinsic path without touching the filesystem.",
-    source: `use json = "std.json"
+    source: `use json from "std.json"
 
 var payload = json.decode("{\\"name\\":\\"Tea\\",\\"scores\\":[1,2,3]}")
 

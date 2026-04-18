@@ -8,6 +8,7 @@ pub = { semantic = "keyword" }
 var = { semantic = "keyword" }
 const = { semantic = "keyword" }
 use = { semantic = "keyword" }
+from = { semantic = "keyword", context = "use_statement" }
 
 # Type definition keywords
 struct = { semantic = "keyword", context = "struct_definition" }

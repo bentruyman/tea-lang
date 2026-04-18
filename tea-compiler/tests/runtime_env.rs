@@ -22,8 +22,8 @@ fn env_helpers_operate_through_runtime() -> anyhow::Result<()> {
     let cwd_str = canonical_cwd.to_string_lossy();
     let source = format!(
         r#"
-use assert = "std.assert"
-use env = "std.env"
+use assert from "std.assert"
+use env from "std.env"
 
 assert.eq(env.get("TEA_LANG_TEST_VAR"), "")
 assert.eq(env.get_or("TEA_LANG_TEST_FALLBACK", "fallback"), "fallback")

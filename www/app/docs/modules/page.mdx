@@ -1,9 +1,9 @@
 <ContentPage
   eyebrow="Language"
   title="Modules"
-  description='Tea uses `use alias = "module.path"` imports for stdlib modules and relative Tea files.'
+  description='Tea uses `use alias from "module.path"` imports for stdlib modules and relative Tea files.'
 >
-  Modules let you split code across files and control which functions are part of the public API. In Tea, you import modules with `use alias = "path"` and call exported members through that alias.
+  Modules let you split code across files and control which functions are part of the public API. In Tea, you import modules with `use alias from "path"` and call exported members through that alias.
 
 ## Export from a local file
 
@@ -24,14 +24,14 @@ end
 Relative imports point to nearby Tea files. Bind the import to an alias, then access exported members through that name.
 
 ```tea
-use helpers = "./helpers"
+use helpers from "./helpers"
 
 @println(helpers.triple(5))
 ```
 
 <NoteCard title="Stdlib imports">
-  Checked-in examples use imports like <code>use args = "std.args"</code>,{" "}
-  <code>use fs = "std.fs"</code>, and <code>use regex = "std.regex"</code>. Each
+  Checked-in examples use imports like <code>use args from "std.args"</code>,{" "}
+  <code>use fs from "std.fs"</code>, and <code>use regex from "std.regex"</code>. Each
   stdlib module exposes its public API from a <code>mod.tea</code> entrypoint.
 </NoteCard>
 

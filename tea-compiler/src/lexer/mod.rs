@@ -1324,4 +1324,19 @@ mod tests {
         assert!(matches!(tokens[1].kind, TokenKind::Identifier));
         assert_eq!(tokens[1].lexeme, "of");
     }
+
+    #[test]
+    fn test_from_is_identifier_outside_use_statement() {
+        let source = SourceFile::new(
+            SourceId(0),
+            PathBuf::from("test.tea"),
+            "var from = 1".to_string(),
+        );
+        let mut lexer = Lexer::new(&source).unwrap();
+        let tokens = lexer.tokenize().unwrap();
+
+        assert!(matches!(tokens[0].kind, TokenKind::Keyword(Keyword::Var)));
+        assert!(matches!(tokens[1].kind, TokenKind::Identifier));
+        assert_eq!(tokens[1].lexeme, "from");
+    }
 }

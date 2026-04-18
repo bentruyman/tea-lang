@@ -3,9 +3,9 @@ mod support;
 #[test]
 fn args_helpers_execute_with_cli_parser() -> anyhow::Result<()> {
     let source = r#"
-use args = "std.args"
-use assert = "std.assert"
-use intrinsics = "std.intrinsics"
+use args from "std.args"
+use assert from "std.assert"
+use intrinsics from "std.intrinsics"
 
 def verify() -> Void
   var spec = intrinsics.json_decode("{\"name\":\"todo\",\"description\":\"Task manager\",\"options\":[{\"name\":\"verbose\",\"aliases\":[\"-v\",\"--verbose\"],\"kind\":\"flag\"},{\"name\":\"count\",\"aliases\":[\"-c\",\"--count\"],\"kind\":\"option\",\"type\":\"int\"},{\"name\":\"tag\",\"aliases\":[\"-t\",\"--tag\"],\"kind\":\"option\",\"type\":\"string\",\"multiple\":true}],\"positionals\":[{\"name\":\"file\",\"type\":\"string\"}]}")
@@ -30,9 +30,9 @@ verify()
 #[test]
 fn args_helpers_execute_with_subcommands() -> anyhow::Result<()> {
     let source = r#"
-use args = "std.args"
-use assert = "std.assert"
-use intrinsics = "std.intrinsics"
+use args from "std.args"
+use assert from "std.assert"
+use intrinsics from "std.intrinsics"
 
 def verify() -> Void
   var spec = intrinsics.json_decode("{\"name\":\"todo\",\"subcommands\":[{\"name\":\"done\",\"positionals\":[{\"name\":\"id\",\"type\":\"string\"}]}]}")

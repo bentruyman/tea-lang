@@ -173,7 +173,7 @@ tea build script.tea
 Access command-line arguments via `@args()` or `std.args`:
 
 ```tea
-use args = "std.args"
+use args from "std.args"
 
 var argv = args.all()
 if @len(argv) > 0
@@ -256,8 +256,8 @@ See [Basics - Types](guide/basics.md#types) for more on type safety.
 Use absolute paths or ensure you're running from the correct directory:
 
 ```tea
-use env = "std.env"
-use path = "std.path"
+use env from "std.env"
+use path from "std.path"
 
 var current = env.cwd()
 var file_path = path.join([current, "file.txt"])
@@ -325,8 +325,8 @@ See the [Standard Library Reference](reference/standard-library.md) for details.
 Use the `std.json` module:
 
 ```tea
-use json = "std.json"
-use fs = "std.fs"
+use json from "std.json"
+use fs from "std.fs"
 
 # Read and parse
 var json_str = fs.read_file("data.json")
@@ -343,7 +343,7 @@ fs.write_file("output.json", json_out)
 Use the `std.path` module:
 
 ```tea
-use path = "std.path"
+use path from "std.path"
 
 var parts = ["usr", "local", "bin"]
 var full_path = path.join(parts)  # "usr/local/bin"
@@ -359,7 +359,7 @@ var directory = path.dirname("/usr/local/bin/tea")  # "/usr/local/bin"
 Use `test` blocks with assertions:
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 def add(a: Int, b: Int) -> Int
   a + b

@@ -27,9 +27,9 @@ statement = use_statement
 
 (* ===== Declarations ===== *)
 
-use_statement = "use" identifier "=" ( string | template_string ) ;
+use_statement = "use" identifier "from" string ;
 
-const_declaration = "const" identifier [ ":" type_annotation ] "=" expression ;
+const_declaration = [ "pub" ] "const" identifier [ ":" type_annotation ] "=" expression ;
 
 var_declaration = "var" identifier [ ":" type_annotation ] "=" expression ;
 
@@ -42,7 +42,7 @@ function_definition = [ "pub" ] "def" identifier
                       "end"
                       ;
 
-struct_definition = "struct" identifier
+struct_definition = [ "pub" ] "struct" identifier
                     [ type_parameters ]
                     "{"
                     { struct_field }
@@ -51,7 +51,7 @@ struct_definition = "struct" identifier
 
 struct_field = identifier ":" type_annotation ;
 
-union_definition = "union" identifier
+union_definition = [ "pub" ] "union" identifier
                    "{"
                    { union_member }
                    "}"
@@ -59,7 +59,7 @@ union_definition = "union" identifier
 
 union_member = type_annotation ;
 
-enum_definition = "enum" identifier
+enum_definition = [ "pub" ] "enum" identifier
                   [ type_parameters ]
                   "{"
                   { enum_variant }
@@ -68,7 +68,7 @@ enum_definition = "enum" identifier
 
 enum_variant = identifier ;
 
-error_definition = "error" identifier [ error_variant_block ] ;
+error_definition = [ "pub" ] "error" identifier [ error_variant_block ] ;
 
 error_variant_block = "{" { error_variant } "}" ;
 

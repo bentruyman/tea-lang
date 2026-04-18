@@ -30,7 +30,7 @@ fn test_lists_discovered_tests() {
     fs::write(
         &test_path,
         r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "one"
   assert.eq(1, 1)
@@ -72,7 +72,7 @@ fn test_runs_tests_and_reports_failures() {
     fs::write(
         &pass_path,
         r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "passing"
   assert.eq(3, 3)
@@ -101,7 +101,7 @@ end
     fs::write(
         &fail_path,
         r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "failing"
   assert.eq(1, "wrong type")  # This will fail type checking

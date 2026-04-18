@@ -57,6 +57,80 @@ fn requires_alias_for_use_statement() {
 }
 
 #[test]
+fn rejects_legacy_use_syntax() {
+    let source = "use assert = \"std.assert\"\nassert.ok(true)\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("legacy_use.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_err(),
+        "expected parser to reject legacy import syntax"
+    );
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|msg| msg.contains("module imports use `from`")),
+        "expected legacy import diagnostic, found {:?}",
+        messages
+    );
+}
+
+#[test]
+fn allows_from_as_identifier_outside_imports() {
+    let source = "var from = 1\nvar value = from\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("from_identifier.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(
+        result.is_ok(),
+        "expected contextual `from` to remain a valid identifier"
+    );
+    assert!(
+        compiler.diagnostics().is_empty(),
+        "expected no diagnostics, found {:?}",
+        compiler.diagnostics()
+    );
+}
+
+#[test]
+fn rejects_public_var_declaration() {
+    let source = "pub var counter = 0\n";
+    let mut compiler = Compiler::new(CompileOptions::default());
+    let source_file = SourceFile::new(
+        SourceId(0),
+        PathBuf::from("public_var.tea"),
+        source.to_string(),
+    );
+    let result = compiler.compile(&source_file);
+    assert!(result.is_err(), "expected parser to reject `pub var`");
+    let messages: Vec<_> = compiler
+        .diagnostics()
+        .entries()
+        .iter()
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        messages.iter().any(|msg| msg.contains("cannot be public")),
+        "expected public var diagnostic, found {:?}",
+        messages
+    );
+}
+
+#[test]
 fn rejects_return_type_mismatch() {
     let source = "def foo() -> Int\n  return true\nend\n";
     let mut compiler = Compiler::new(CompileOptions::default());

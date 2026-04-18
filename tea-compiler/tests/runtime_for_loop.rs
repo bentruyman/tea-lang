@@ -5,7 +5,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 #[test]
 fn for_loop_iterates_list() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop iterates over list"
   var sum = 0
@@ -49,7 +49,7 @@ end
 #[test]
 fn for_loop_with_empty_list() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop with empty list"
   var count = 0
@@ -93,7 +93,7 @@ end
 #[test]
 fn for_loop_with_strings() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop with string list"
   var count = 0
@@ -137,7 +137,7 @@ end
 #[test]
 fn for_loop_nested() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "nested for loops"
   var result = 0
@@ -185,7 +185,7 @@ end
 #[test]
 fn for_loop_with_break() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop with break"
   var sum = 0
@@ -232,7 +232,7 @@ end
 #[test]
 fn for_loop_with_continue() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "for loop with continue"
   var sum = 0

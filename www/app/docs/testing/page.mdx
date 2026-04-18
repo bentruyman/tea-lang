@@ -10,7 +10,7 @@
 A test block gives a named test case a small body of executable Tea code. Inside it, use assertion helpers to check expectations and fail fast when behavior changes.
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "list length stays stable"
   var words = ["tea", "lang"]
@@ -26,7 +26,7 @@ end
 The standard assertion module covers the common cases: truthy checks, equality checks, inequality checks, and snapshot helpers when you want to compare output against stored expectations.
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "basic assertions"
   assert.ok(1 + 1 == 2)

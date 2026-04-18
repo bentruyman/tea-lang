@@ -18,8 +18,8 @@ This guide demonstrates practical Tea patterns and real-world examples. Use thes
 ### Read and Process Text Files
 
 ```tea
-use fs = "std.fs"
-use string = "std.string"
+use fs from "std.fs"
+use string from "std.string"
 
 def count_lines(file_path: String) -> Int
   var content = fs.read_file(file_path)
@@ -48,9 +48,9 @@ process_log_file("app.log")
 ### Batch File Conversion
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use string = "std.string"
+use fs from "std.fs"
+use path from "std.path"
+use string from "std.string"
 
 def convert_all_files(input_dir: String, output_dir: String)
   var files = fs.read_dir(input_dir)
@@ -84,9 +84,9 @@ convert_all_files("input", "output")
 ### Directory Tree Walker
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use string = "std.string"
+use fs from "std.fs"
+use path from "std.path"
+use string from "std.string"
 
 def walk_directory(dir: String, extension: String) -> List[String]
   var results: List[String] = []
@@ -113,8 +113,8 @@ walk_directory("src", ".tea")
 ### Simple CLI Tool
 
 ```tea
-use args = "std.args"
-use fs = "std.fs"
+use args from "std.args"
+use fs from "std.fs"
 
 def main()
   var argv = args.all()
@@ -141,9 +141,9 @@ main()
 ### File Statistics Tool
 
 ```tea
-use fs = "std.fs"
-use string = "std.string"
-use path = "std.path"
+use fs from "std.fs"
+use string from "std.string"
+use path from "std.path"
 
 struct FileStats {
   path: String
@@ -279,10 +279,10 @@ var items = total_quantity(sales)
 ### JSON Configuration
 
 ```tea
-use fs = "std.fs"
-use json = "std.json"
-use path = "std.path"
-use env = "std.env"
+use fs from "std.fs"
+use json from "std.json"
+use path from "std.path"
+use env from "std.env"
 
 struct Config {
   host: String
@@ -339,7 +339,7 @@ end
 ### Environment-Based Configuration
 
 ```tea
-use env = "std.env"
+use env from "std.env"
 
 struct AppConfig {
   environment: String
@@ -371,7 +371,7 @@ var config = load_from_env()
 ### Unit Tests with Assertions
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 def add(a: Int, b: Int) -> Int
   a + b
@@ -397,8 +397,8 @@ end
 ### Testing String Functions
 
 ```tea
-use assert = "std.assert"
-use string = "std.string"
+use assert from "std.assert"
+use string from "std.string"
 
 def normalize_whitespace(text: String) -> String
   var trimmed = string.trim(text)
@@ -419,7 +419,7 @@ end
 ### Snapshot Testing
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 struct Report {
   title: String
@@ -455,7 +455,7 @@ end
 ### Safe File Operations
 
 ```tea
-use fs = "std.fs"
+use fs from "std.fs"
 
 error FileOperationError {
   NotFound(path: String)

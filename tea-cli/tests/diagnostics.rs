@@ -18,7 +18,7 @@ fn workspace_root() -> std::path::PathBuf {
 fn reports_missing_module_with_span() {
     let tmp = tempdir().expect("tempdir");
     let script_path = tmp.path().join("missing_module.tea");
-    fs::write(&script_path, "use missing = \"./not_there.tea\"\n").expect("write script");
+    fs::write(&script_path, "use missing from \"./not_there.tea\"\n").expect("write script");
 
     let output = Command::new(tea_cli_binary())
         .current_dir(workspace_root())
@@ -41,7 +41,7 @@ fn reports_missing_module_with_span() {
         "expected span reference in diagnostics: {stderr}"
     );
     assert!(
-        stderr.contains("use missing = \"./not_there.tea\""),
+        stderr.contains("use missing from \"./not_there.tea\""),
         "expected source line in diagnostics: {stderr}"
     );
 }
@@ -53,7 +53,7 @@ fn highlights_argument_type_mismatch() {
     fs::write(
         &script_path,
         r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 def double(x: Int) -> Int
   x + x
@@ -110,7 +110,7 @@ end
     fs::write(
         &script_path,
         r#"
-use hello = "./hello.tea"
+use hello from "./hello.tea"
 
 @println(hello.greet())
 "#,

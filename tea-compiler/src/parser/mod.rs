@@ -123,17 +123,19 @@ impl<'a> Parser<'a> {
         let docstring = self.consume_doc_comments();
         match self.peek_kind() {
             TokenKind::Keyword(Keyword::Use) => self.parse_use(),
-            TokenKind::Keyword(Keyword::Var) => self.parse_binding(Keyword::Var, docstring.clone()),
+            TokenKind::Keyword(Keyword::Var) => {
+                self.parse_binding(Keyword::Var, docstring.clone(), false)
+            }
             TokenKind::Keyword(Keyword::Const) => {
-                self.parse_binding(Keyword::Const, docstring.clone())
+                self.parse_binding(Keyword::Const, docstring.clone(), false)
             }
             TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring.clone(), false),
             TokenKind::Keyword(Keyword::Pub) => self.parse_public_statement(docstring.clone()),
             TokenKind::Keyword(Keyword::Test) => self.parse_test(docstring.clone()),
-            TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring),
-            TokenKind::Keyword(Keyword::Union) => self.parse_union(docstring),
-            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring),
-            TokenKind::Keyword(Keyword::Error) => self.parse_error(docstring),
+            TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring, false),
+            TokenKind::Keyword(Keyword::Union) => self.parse_union(docstring, false),
+            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring, false),
+            TokenKind::Keyword(Keyword::Error) => self.parse_error(docstring, false),
             TokenKind::Keyword(Keyword::If) => self.parse_conditional(ConditionalKind::If),
             TokenKind::Keyword(Keyword::For) => self.parse_for_loop(),
             TokenKind::Keyword(Keyword::While) => self.parse_loop(LoopKind::While),
@@ -153,11 +155,26 @@ impl<'a> Parser<'a> {
 
         match self.peek_kind() {
             TokenKind::Keyword(Keyword::Def) => self.parse_function(docstring, true),
+            TokenKind::Keyword(Keyword::Const) => {
+                self.parse_binding(Keyword::Const, docstring, true)
+            }
+            TokenKind::Keyword(Keyword::Struct) => self.parse_struct(docstring, true),
+            TokenKind::Keyword(Keyword::Union) => self.parse_union(docstring, true),
+            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(docstring, true),
+            TokenKind::Keyword(Keyword::Error) => self.parse_error(docstring, true),
+            TokenKind::Keyword(Keyword::Var) => {
+                let span = Self::span_from_token(&pub_token);
+                self.diagnostics.push_error_with_span(
+                    "mutable module state cannot be public; use `pub const` or a `pub def` accessor instead",
+                    Some(span),
+                );
+                bail!("invalid public variable declaration");
+            }
             other => {
                 let span = Self::span_from_token(&pub_token);
                 self.diagnostics.push_error_with_span(
                     format!(
-                        "unexpected {:?} after 'pub', only functions can be declared public",
+                        "unexpected {:?} after 'pub'; only const, def, struct, union, enum, and error declarations can be public",
                         other
                     ),
                     Some(span),
@@ -177,20 +194,36 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let alias_span = Self::span_from_token(&alias_token);
                 let alias_name = alias_token.lexeme;
-                if !matches!(self.peek_kind(), TokenKind::Equal) {
-                    self.diagnostics.push_with_location(
-                        "expected '=' after module alias",
-                        alias_token.line,
-                        alias_token.column,
-                    );
-                    bail!(
-                        "expected '=' after module alias at line {}, column {}",
-                        alias_token.line,
-                        alias_token.column
-                    );
+                match self.peek_kind() {
+                    TokenKind::Identifier if self.peek().lexeme == "from" => {
+                        self.advance(); // consume 'from'
+                        self.skip_newlines();
+                    }
+                    TokenKind::Equal => {
+                        self.diagnostics.push_with_location(
+                            "module imports use `from` (e.g. `use fs from \"std.fs\"`)",
+                            alias_token.line,
+                            alias_token.column,
+                        );
+                        bail!(
+                            "module imports use `from` (e.g. `use fs from \"std.fs\"`) at line {}, column {}",
+                            alias_token.line,
+                            alias_token.column
+                        );
+                    }
+                    _ => {
+                        self.diagnostics.push_with_location(
+                            "expected 'from' after module alias",
+                            alias_token.line,
+                            alias_token.column,
+                        );
+                        bail!(
+                            "expected 'from' after module alias at line {}, column {}",
+                            alias_token.line,
+                            alias_token.column
+                        );
+                    }
                 }
-                self.advance(); // consume '='
-                self.skip_newlines();
                 UseAlias {
                     name: alias_name,
                     span: alias_span,
@@ -198,12 +231,12 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 self.diagnostics.push_with_location(
-                    "module imports must specify an alias (e.g. `use fs = \"std.fs\"`)",
+                    "module imports must specify an alias (e.g. `use fs from \"std.fs\"`)",
                     alias_token.line,
                     alias_token.column,
                 );
                 bail!(
-                    "module imports must specify an alias (e.g. `use fs = \"std.fs\"`) at line {}, column {}",
+                    "module imports must specify an alias (e.g. `use fs from \"std.fs\"`) at line {}, column {}",
                     alias_token.line,
                     alias_token.column
                 );
@@ -220,7 +253,10 @@ impl<'a> Parser<'a> {
             other => {
                 let span = Self::span_from_token(&module_token);
                 self.diagnostics.push_error_with_span(
-                    format!("expected module path string after 'use', found {:?}", other),
+                    format!(
+                        "expected static module path string after 'from', found {:?}",
+                        other
+                    ),
                     Some(span),
                 );
                 bail!("unexpected token after 'use'");
@@ -239,7 +275,12 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_binding(&mut self, keyword: Keyword, docstring: Option<String>) -> Result<Statement> {
+    fn parse_binding(
+        &mut self,
+        keyword: Keyword,
+        docstring: Option<String>,
+        is_public: bool,
+    ) -> Result<Statement> {
         let is_const = matches!(keyword, Keyword::Const);
         self.advance(); // consume keyword
         let mut bindings = Vec::new();
@@ -311,6 +352,7 @@ impl<'a> Parser<'a> {
         self.expect_newline("expected newline after variable declaration")?;
 
         Ok(Statement::Var(VarStatement {
+            is_public,
             is_const,
             bindings,
             docstring,
@@ -582,7 +624,7 @@ impl<'a> Parser<'a> {
         Ok(params)
     }
 
-    fn parse_struct(&mut self, docstring: Option<String>) -> Result<Statement> {
+    fn parse_struct(&mut self, docstring: Option<String>, is_public: bool) -> Result<Statement> {
         self.advance(); // consume 'struct'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -667,6 +709,7 @@ impl<'a> Parser<'a> {
         self.expect_newline("expected newline after struct declaration")?;
 
         Ok(Statement::Struct(StructStatement {
+            is_public,
             name,
             name_span,
             type_parameters,
@@ -675,7 +718,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_union(&mut self, docstring: Option<String>) -> Result<Statement> {
+    fn parse_union(&mut self, docstring: Option<String>, is_public: bool) -> Result<Statement> {
         self.advance(); // consume 'union'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -740,6 +783,7 @@ impl<'a> Parser<'a> {
         self.expect_newline("expected newline after union declaration")?;
 
         Ok(Statement::Union(UnionStatement {
+            is_public,
             name,
             name_span,
             members,
@@ -747,7 +791,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_enum(&mut self, docstring: Option<String>) -> Result<Statement> {
+    fn parse_enum(&mut self, docstring: Option<String>, is_public: bool) -> Result<Statement> {
         self.advance(); // consume 'enum'
         let name_token = self.peek().clone();
         let name_span = Self::span_from_token(&name_token);
@@ -821,6 +865,7 @@ impl<'a> Parser<'a> {
         self.expect_newline("expected newline after enum declaration")?;
 
         Ok(Statement::Enum(EnumStatement {
+            is_public,
             name,
             name_span,
             variants,
@@ -828,7 +873,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_error(&mut self, docstring: Option<String>) -> Result<Statement> {
+    fn parse_error(&mut self, docstring: Option<String>, is_public: bool) -> Result<Statement> {
         let keyword_token = self.advance().clone();
         let keyword_span = Self::span_from_token(&keyword_token);
 
@@ -907,6 +952,7 @@ impl<'a> Parser<'a> {
         };
 
         Ok(Statement::Error(ErrorStatement {
+            is_public,
             name,
             name_span,
             variants,

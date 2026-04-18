@@ -5,11 +5,12 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{
-    Block, CatchHandler, CatchKind, Expression, ExpressionKind, Identifier, InterpolatedStringPart,
-    LambdaBody, LoopHeader, MatchPattern, Module, Statement, TypeExpression,
+    Block, CatchHandler, CatchKind, ErrorAnnotation, ErrorTypeSpecifier, Expression,
+    ExpressionKind, Identifier, InterpolatedStringPart, LambdaBody, LoopHeader, MatchPattern,
+    Module, SourceSpan, Statement, TypeExpression,
 };
 use crate::diagnostics::Diagnostics;
-use crate::lexer::{Lexer, TokenKind};
+use crate::lexer::{Lexer, Token, TokenKind};
 use crate::loader::ModuleLoader;
 use crate::parser::Parser;
 use crate::source::{SourceFile, SourceId};
@@ -214,7 +215,7 @@ impl ModuleExpander {
                 Statement::Function(function) => {
                     let renamed = format!("__module_{}_{}", alias, function.name);
                     all_renames.insert(function.name.clone(), renamed.clone());
-                    if function.is_public {
+                    if function.is_public && !function.name.starts_with("__module_") {
                         export_renames.insert(function.name.clone(), renamed);
                         if let Some(doc) = function.docstring.as_ref() {
                             if !doc.is_empty() {
@@ -227,10 +228,15 @@ impl ModuleExpander {
                     for binding in &var_stmt.bindings {
                         let renamed = format!("__module_{}_{}", alias, binding.name);
                         all_renames.insert(binding.name.clone(), renamed.clone());
-                        export_renames.insert(binding.name.clone(), renamed);
-                        if let Some(doc) = var_stmt.docstring.as_ref() {
-                            if !doc.is_empty() {
-                                docstrings.insert(binding.name.clone(), doc.clone());
+                        if var_stmt.is_public
+                            && var_stmt.is_const
+                            && !binding.name.starts_with("__module_")
+                        {
+                            export_renames.insert(binding.name.clone(), renamed);
+                            if let Some(doc) = var_stmt.docstring.as_ref() {
+                                if !doc.is_empty() {
+                                    docstrings.insert(binding.name.clone(), doc.clone());
+                                }
                             }
                         }
                     }
@@ -238,30 +244,48 @@ impl ModuleExpander {
                 Statement::Struct(struct_stmt) => {
                     let renamed = format!("__module_{}_{}", alias, struct_stmt.name);
                     all_renames.insert(struct_stmt.name.clone(), renamed.clone());
-                    export_renames.insert(struct_stmt.name.clone(), renamed);
-                    if let Some(doc) = struct_stmt.docstring.as_ref() {
-                        if !doc.is_empty() {
-                            docstrings.insert(struct_stmt.name.clone(), doc.clone());
+                    if struct_stmt.is_public && !struct_stmt.name.starts_with("__module_") {
+                        export_renames.insert(struct_stmt.name.clone(), renamed);
+                        if let Some(doc) = struct_stmt.docstring.as_ref() {
+                            if !doc.is_empty() {
+                                docstrings.insert(struct_stmt.name.clone(), doc.clone());
+                            }
                         }
                     }
                 }
                 Statement::Union(union_stmt) => {
                     let renamed = format!("__module_{}_{}", alias, union_stmt.name);
                     all_renames.insert(union_stmt.name.clone(), renamed.clone());
-                    export_renames.insert(union_stmt.name.clone(), renamed);
-                    if let Some(doc) = union_stmt.docstring.as_ref() {
-                        if !doc.is_empty() {
-                            docstrings.insert(union_stmt.name.clone(), doc.clone());
+                    if union_stmt.is_public && !union_stmt.name.starts_with("__module_") {
+                        export_renames.insert(union_stmt.name.clone(), renamed);
+                        if let Some(doc) = union_stmt.docstring.as_ref() {
+                            if !doc.is_empty() {
+                                docstrings.insert(union_stmt.name.clone(), doc.clone());
+                            }
                         }
                     }
                 }
                 Statement::Enum(enum_stmt) => {
                     let renamed = format!("__module_{}_{}", alias, enum_stmt.name);
                     all_renames.insert(enum_stmt.name.clone(), renamed.clone());
-                    export_renames.insert(enum_stmt.name.clone(), renamed);
-                    if let Some(doc) = enum_stmt.docstring.clone() {
-                        if !doc.is_empty() {
-                            docstrings.insert(enum_stmt.name.clone(), doc);
+                    if enum_stmt.is_public && !enum_stmt.name.starts_with("__module_") {
+                        export_renames.insert(enum_stmt.name.clone(), renamed);
+                        if let Some(doc) = enum_stmt.docstring.clone() {
+                            if !doc.is_empty() {
+                                docstrings.insert(enum_stmt.name.clone(), doc);
+                            }
+                        }
+                    }
+                }
+                Statement::Error(error_stmt) => {
+                    let renamed = format!("__module_{}_{}", alias, error_stmt.name);
+                    all_renames.insert(error_stmt.name.clone(), renamed.clone());
+                    if error_stmt.is_public && !error_stmt.name.starts_with("__module_") {
+                        export_renames.insert(error_stmt.name.clone(), renamed);
+                        if let Some(doc) = error_stmt.docstring.as_ref() {
+                            if !doc.is_empty() {
+                                docstrings.insert(error_stmt.name.clone(), doc.clone());
+                            }
                         }
                     }
                 }
@@ -273,30 +297,62 @@ impl ModuleExpander {
         for mut statement in module.statements {
             match &mut statement {
                 Statement::Function(function) => {
+                    let was_nested_import = function.name.starts_with("__module_");
                     if let Some(new_name) = all_renames.get(&function.name).cloned() {
                         function.name = new_name;
                     }
+                    if was_nested_import {
+                        function.is_public = false;
+                    }
                 }
                 Statement::Var(var_stmt) => {
+                    let was_nested_import = var_stmt
+                        .bindings
+                        .iter()
+                        .all(|binding| binding.name.starts_with("__module_"));
                     for binding in &mut var_stmt.bindings {
                         if let Some(new_name) = all_renames.get(&binding.name).cloned() {
                             binding.name = new_name;
                         }
                     }
+                    if was_nested_import {
+                        var_stmt.is_public = false;
+                    }
                 }
                 Statement::Struct(struct_stmt) => {
+                    let was_nested_import = struct_stmt.name.starts_with("__module_");
                     if let Some(new_name) = all_renames.get(&struct_stmt.name).cloned() {
                         struct_stmt.name = new_name;
                     }
+                    if was_nested_import {
+                        struct_stmt.is_public = false;
+                    }
                 }
                 Statement::Union(union_stmt) => {
+                    let was_nested_import = union_stmt.name.starts_with("__module_");
                     if let Some(new_name) = all_renames.get(&union_stmt.name).cloned() {
                         union_stmt.name = new_name;
                     }
+                    if was_nested_import {
+                        union_stmt.is_public = false;
+                    }
                 }
                 Statement::Enum(enum_stmt) => {
+                    let was_nested_import = enum_stmt.name.starts_with("__module_");
                     if let Some(new_name) = all_renames.get(&enum_stmt.name).cloned() {
                         enum_stmt.name = new_name;
+                    }
+                    if was_nested_import {
+                        enum_stmt.is_public = false;
+                    }
+                }
+                Statement::Error(error_stmt) => {
+                    let was_nested_import = error_stmt.name.starts_with("__module_");
+                    if let Some(new_name) = all_renames.get(&error_stmt.name).cloned() {
+                        error_stmt.name = new_name;
+                    }
+                    if was_nested_import {
+                        error_stmt.is_public = false;
                     }
                 }
                 _ => {}
@@ -334,6 +390,29 @@ impl ModuleExpander {
         }
     }
 
+    fn span_from_token(token: &Token) -> SourceSpan {
+        let len = token.lexeme.chars().count().max(1);
+        SourceSpan::new(
+            token.line,
+            token.column,
+            token.line,
+            token.column + len.saturating_sub(1),
+        )
+    }
+
+    fn span_from_tokens(tokens: &[Token]) -> SourceSpan {
+        let mut iter = tokens.iter();
+        let Some(first) = iter.next() else {
+            return SourceSpan::default();
+        };
+
+        let mut span = Self::span_from_token(first);
+        for token in iter {
+            span = SourceSpan::union(&span, &Self::span_from_token(token));
+        }
+        span
+    }
+
     fn rewrite_type_expression_identifiers(
         &self,
         type_expression: &mut TypeExpression,
@@ -349,7 +428,7 @@ impl ModuleExpander {
     }
 
     fn rewrite_type_expression_alias(
-        &self,
+        &mut self,
         type_expression: &mut TypeExpression,
         alias_maps: &HashMap<String, HashMap<String, String>>,
     ) {
@@ -368,12 +447,25 @@ impl ModuleExpander {
                 && matches!(third.kind, TokenKind::Identifier)
             {
                 if let Some(map) = alias_maps.get(&first.lexeme) {
-                    if let Some(replacement) = map.get(&third.lexeme) {
-                        type_expression.tokens[index].lexeme = replacement.clone();
-                        type_expression.tokens[index].kind = TokenKind::Identifier;
-                        type_expression.tokens.remove(index + 2);
-                        type_expression.tokens.remove(index + 1);
-                        continue;
+                    match map.get(&third.lexeme) {
+                        Some(replacement) => {
+                            type_expression.tokens[index].lexeme = replacement.clone();
+                            type_expression.tokens[index].kind = TokenKind::Identifier;
+                            type_expression.tokens.remove(index + 2);
+                            type_expression.tokens.remove(index + 1);
+                            continue;
+                        }
+                        None => {
+                            let span =
+                                Self::span_from_tokens(&type_expression.tokens[index..index + 3]);
+                            self.diagnostics.push_error_with_span(
+                                format!(
+                                    "module '{}' has no export named '{}'",
+                                    first.lexeme, third.lexeme
+                                ),
+                                Some(span),
+                            );
+                        }
                     }
                 }
             }
@@ -402,6 +494,9 @@ impl ModuleExpander {
             Statement::Function(function_stmt) => {
                 if let Some(return_type) = &mut function_stmt.return_type {
                     self.rewrite_type_expression_identifiers(return_type, rename_map);
+                }
+                if let Some(error_annotation) = &mut function_stmt.error_annotation {
+                    self.rewrite_error_annotation_identifiers(error_annotation, rename_map);
                 }
                 for parameter in &mut function_stmt.parameters {
                     if let Some(type_annotation) = &mut parameter.type_annotation {
@@ -433,7 +528,16 @@ impl ModuleExpander {
                 }
             }
             Statement::Enum(_) => {}
-            Statement::Error(_) => {}
+            Statement::Error(error_stmt) => {
+                for variant in &mut error_stmt.variants {
+                    for field in &mut variant.fields {
+                        self.rewrite_type_expression_identifiers(
+                            &mut field.type_annotation,
+                            rename_map,
+                        );
+                    }
+                }
+            }
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_identifiers(&mut cond_stmt.condition, rename_map);
                 self.rewrite_block_identifiers(&mut cond_stmt.consequent, rename_map);
@@ -465,8 +569,14 @@ impl ModuleExpander {
                 self.rewrite_expression_identifiers(&mut match_stmt.scrutinee, rename_map);
                 for arm in &mut match_stmt.arms {
                     for pattern in &mut arm.patterns {
-                        if let MatchPattern::Expression(pattern_expr) = pattern {
-                            self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                        match pattern {
+                            MatchPattern::Expression(pattern_expr) => {
+                                self.rewrite_expression_identifiers(pattern_expr, rename_map);
+                            }
+                            MatchPattern::Type(type_expr, _) => {
+                                self.rewrite_type_expression_identifiers(type_expr, rename_map);
+                            }
+                            MatchPattern::Wildcard { .. } => {}
                         }
                     }
                     self.rewrite_block_identifiers(&mut arm.block, rename_map);
@@ -579,11 +689,19 @@ impl ModuleExpander {
                         CatchKind::Arms(arms) => {
                             for arm in arms {
                                 for pattern in &mut arm.patterns {
-                                    if let MatchPattern::Expression(pattern_expr) = pattern {
-                                        self.rewrite_expression_identifiers(
-                                            pattern_expr,
-                                            rename_map,
-                                        );
+                                    match pattern {
+                                        MatchPattern::Expression(pattern_expr) => {
+                                            self.rewrite_expression_identifiers(
+                                                pattern_expr,
+                                                rename_map,
+                                            );
+                                        }
+                                        MatchPattern::Type(type_expr, _) => {
+                                            self.rewrite_type_expression_identifiers(
+                                                type_expr, rename_map,
+                                            );
+                                        }
+                                        MatchPattern::Wildcard { .. } => {}
                                     }
                                 }
                                 match &mut arm.handler {
@@ -629,6 +747,9 @@ impl ModuleExpander {
                 if let Some(return_type) = &mut function_stmt.return_type {
                     self.rewrite_type_expression_alias(return_type, alias_maps);
                 }
+                if let Some(error_annotation) = &mut function_stmt.error_annotation {
+                    self.rewrite_error_annotation_alias(error_annotation, alias_maps);
+                }
                 for parameter in &mut function_stmt.parameters {
                     if let Some(type_annotation) = &mut parameter.type_annotation {
                         self.rewrite_type_expression_alias(type_annotation, alias_maps);
@@ -653,7 +774,13 @@ impl ModuleExpander {
                 }
             }
             Statement::Enum(_) => {}
-            Statement::Error(_) => {}
+            Statement::Error(error_stmt) => {
+                for variant in &mut error_stmt.variants {
+                    for field in &mut variant.fields {
+                        self.rewrite_type_expression_alias(&mut field.type_annotation, alias_maps);
+                    }
+                }
+            }
             Statement::Conditional(cond_stmt) => {
                 self.rewrite_expression_alias(&mut cond_stmt.condition, alias_maps);
                 self.rewrite_block_alias(&mut cond_stmt.consequent, alias_maps);
@@ -685,8 +812,14 @@ impl ModuleExpander {
                 self.rewrite_expression_alias(&mut match_stmt.scrutinee, alias_maps);
                 for arm in &mut match_stmt.arms {
                     for pattern in &mut arm.patterns {
-                        if let MatchPattern::Expression(pattern_expr) = pattern {
-                            self.rewrite_expression_alias(pattern_expr, alias_maps);
+                        match pattern {
+                            MatchPattern::Expression(pattern_expr) => {
+                                self.rewrite_expression_alias(pattern_expr, alias_maps);
+                            }
+                            MatchPattern::Type(type_expr, _) => {
+                                self.rewrite_type_expression_alias(type_expr, alias_maps);
+                            }
+                            MatchPattern::Wildcard { .. } => {}
                         }
                     }
                     self.rewrite_block_alias(&mut arm.block, alias_maps);
@@ -705,6 +838,69 @@ impl ModuleExpander {
     ) {
         for statement in &mut block.statements {
             self.rewrite_statement_alias(statement, alias_maps);
+        }
+    }
+
+    fn rewrite_error_annotation_identifiers(
+        &self,
+        annotation: &mut ErrorAnnotation,
+        rename_map: &HashMap<String, String>,
+    ) {
+        for specifier in &mut annotation.types {
+            self.rewrite_error_specifier_identifiers(specifier, rename_map);
+        }
+    }
+
+    fn rewrite_error_specifier_identifiers(
+        &self,
+        specifier: &mut ErrorTypeSpecifier,
+        rename_map: &HashMap<String, String>,
+    ) {
+        if let Some(first) = specifier.path.first_mut() {
+            if let Some(new_name) = rename_map.get(first) {
+                *first = new_name.clone();
+            }
+        }
+    }
+
+    fn rewrite_error_annotation_alias(
+        &mut self,
+        annotation: &mut ErrorAnnotation,
+        alias_maps: &HashMap<String, HashMap<String, String>>,
+    ) {
+        for specifier in &mut annotation.types {
+            self.rewrite_error_specifier_alias(specifier, alias_maps);
+        }
+    }
+
+    fn rewrite_error_specifier_alias(
+        &mut self,
+        specifier: &mut ErrorTypeSpecifier,
+        alias_maps: &HashMap<String, HashMap<String, String>>,
+    ) {
+        if specifier.path.len() < 2 {
+            return;
+        }
+
+        let Some(map) = alias_maps.get(&specifier.path[0]) else {
+            return;
+        };
+
+        let alias = specifier.path[0].clone();
+        let export = specifier.path[1].clone();
+        match map.get(&export) {
+            Some(replacement) => {
+                let mut rewritten = Vec::with_capacity(specifier.path.len() - 1);
+                rewritten.push(replacement.clone());
+                rewritten.extend(specifier.path.iter().skip(2).cloned());
+                specifier.path = rewritten;
+            }
+            None => {
+                self.diagnostics.push_error_with_span(
+                    format!("module '{}' has no export named '{}'", alias, export),
+                    Some(specifier.span),
+                );
+            }
         }
     }
 
@@ -821,8 +1017,16 @@ impl ModuleExpander {
                         CatchKind::Arms(arms) => {
                             for arm in arms {
                                 for pattern in &mut arm.patterns {
-                                    if let MatchPattern::Expression(pattern_expr) = pattern {
-                                        self.rewrite_expression_alias(pattern_expr, alias_maps);
+                                    match pattern {
+                                        MatchPattern::Expression(pattern_expr) => {
+                                            self.rewrite_expression_alias(pattern_expr, alias_maps);
+                                        }
+                                        MatchPattern::Type(type_expr, _) => {
+                                            self.rewrite_type_expression_alias(
+                                                type_expr, alias_maps,
+                                            );
+                                        }
+                                        MatchPattern::Wildcard { .. } => {}
                                     }
                                 }
                                 match &mut arm.handler {

@@ -97,6 +97,8 @@ nodes:
     description: Variable or constant declaration
     derives: ["Debug", "Clone"]
     fields:
+      is_public:
+        type: bool
       is_const:
         type: bool
         description: Whether this is a const declaration
@@ -209,6 +211,8 @@ nodes:
     description: Struct type declaration
     derives: ["Debug", "Clone"]
     fields:
+      is_public:
+        type: bool
       name:
         type: String
       name_span:
@@ -237,6 +241,8 @@ nodes:
     description: Union type declaration
     derives: ["Debug", "Clone"]
     fields:
+      is_public:
+        type: bool
       name:
         type: String
       name_span:
@@ -259,6 +265,8 @@ nodes:
     description: Error type declaration
     derives: ["Debug", "Clone"]
     fields:
+      is_public:
+        type: bool
       name:
         type: String
       name_span:
@@ -298,6 +306,8 @@ nodes:
     description: Enumeration type declaration
     derives: ["Debug", "Clone"]
     fields:
+      is_public:
+        type: bool
       name:
         type: String
       name_span:

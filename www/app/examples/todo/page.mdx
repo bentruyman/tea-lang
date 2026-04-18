@@ -29,10 +29,10 @@ A persistent todo list application that stores tasks in a text file. It supports
 **`todo/main.tea`**
 
 ```tea
-use args = "std.args"
-use env = "std.env"
-use fs = "std.fs"
-use path = "std.path"
+use args from "std.args"
+use env from "std.env"
+use fs from "std.fs"
+use path from "std.path"
 
 def char_to_digit(c: String) -> Int
   if c == "0"

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::ast::SourceSpan;
-use crate::resolver::ModuleAliasBinding;
+use crate::resolver::{ModuleAliasBinding, ModuleExportKind};
 use crate::stdlib::{self, StdFunction, StdType};
 use crate::typechecker::{
     EnumDefinition, ErrorDefinition, FunctionInstance, StructDefinition, StructInstance, Type,
-    TypeChecker,
+    TypeChecker, UnionDefinition,
 };
 
 fn describe_std_type(ty: StdType) -> String {
@@ -41,6 +41,13 @@ fn describe_std_function(function: &StdFunction) -> String {
     )
 }
 
+fn export_kind_from_type(ty: &Type) -> ModuleExportKind {
+    match ty {
+        Type::Function(_, _) => ModuleExportKind::Function,
+        _ => ModuleExportKind::Const,
+    }
+}
+
 fn enrich_module_aliases(
     module_aliases: &mut HashMap<String, ModuleAliasBinding>,
     alias_exports: &HashMap<String, Vec<String>>,
@@ -49,10 +56,13 @@ fn enrich_module_aliases(
     global_binding_types: &HashMap<String, Type>,
     enum_definitions: &HashMap<String, EnumDefinition>,
     struct_definitions: &HashMap<String, StructDefinition>,
+    union_definitions: &HashMap<String, UnionDefinition>,
+    error_definitions: &HashMap<String, ErrorDefinition>,
 ) {
     for (alias, exports) in alias_exports {
         if let Some(binding) = module_aliases.get_mut(alias) {
             binding.exports = exports.clone();
+            binding.export_kinds.clear();
             binding.export_types.clear();
             binding.export_docs.clear();
 
@@ -60,12 +70,35 @@ fn enrich_module_aliases(
                 for export in &binding.exports {
                     if let Some(renamed) = renames.get(export) {
                         if let Some(ty) = global_binding_types.get(renamed) {
+                            binding
+                                .export_kinds
+                                .insert(export.clone(), export_kind_from_type(ty));
                             binding.export_types.insert(export.clone(), ty.describe());
+                        } else if error_definitions.contains_key(renamed) {
+                            binding
+                                .export_kinds
+                                .insert(export.clone(), ModuleExportKind::Error);
+                            binding
+                                .export_types
+                                .insert(export.clone(), "Error".to_string());
+                        } else if union_definitions.contains_key(renamed) {
+                            binding
+                                .export_kinds
+                                .insert(export.clone(), ModuleExportKind::Union);
+                            binding
+                                .export_types
+                                .insert(export.clone(), "Union".to_string());
                         } else if enum_definitions.contains_key(renamed) {
+                            binding
+                                .export_kinds
+                                .insert(export.clone(), ModuleExportKind::Enum);
                             binding
                                 .export_types
                                 .insert(export.clone(), "Enum".to_string());
                         } else if struct_definitions.contains_key(renamed) {
+                            binding
+                                .export_kinds
+                                .insert(export.clone(), ModuleExportKind::Struct);
                             binding
                                 .export_types
                                 .insert(export.clone(), "Struct".to_string());
@@ -95,6 +128,11 @@ fn enrich_module_aliases(
                     .functions
                     .iter()
                     .map(|func| func.name.to_string())
+                    .collect();
+                binding.export_kinds = std_module
+                    .functions
+                    .iter()
+                    .map(|func| (func.name.to_string(), ModuleExportKind::Function))
                     .collect();
                 binding.export_types = std_module
                     .functions
@@ -145,7 +183,9 @@ impl SemanticAnalysis {
         let binding_types = type_checker.binding_types().clone();
         let argument_expected_types = type_checker.argument_expected_types().clone();
         let struct_definitions = type_checker.struct_definitions();
+        let union_definitions = type_checker.union_definitions();
         let enum_definitions = type_checker.enum_definitions();
+        let error_definitions = type_checker.error_definitions();
         let global_binding_types = type_checker.global_binding_types();
 
         enrich_module_aliases(
@@ -156,6 +196,8 @@ impl SemanticAnalysis {
             &global_binding_types,
             &enum_definitions,
             &struct_definitions,
+            &union_definitions,
+            &error_definitions,
         );
 
         let binding_type_descriptions = binding_types
@@ -181,7 +223,7 @@ impl SemanticAnalysis {
             binding_types,
             type_test_metadata: type_checker.type_test_metadata().clone(),
             struct_definitions,
-            error_definitions: type_checker.error_definitions(),
+            error_definitions,
         }
     }
 

@@ -494,6 +494,17 @@ end
 }
 
 #[test]
+fn rewrites_legacy_use_syntax() {
+    let input = r#"
+use fs = "std.fs"
+"#;
+
+    let expected = ["use fs from \"std.fs\""];
+
+    assert_lines(&format_source(input), &expected);
+}
+
+#[test]
 fn indents_public_function_body() {
     let input = r#"
 pub def hello(name: String) -> String
@@ -506,6 +517,19 @@ end
         "  `Hello ${name}!`",
         "end",
     ];
+
+    assert_lines(&format_source(input), &expected);
+}
+
+#[test]
+fn normalizes_public_struct_spacing() {
+    let input = r#"
+pub struct Box{
+value: Int
+}
+"#;
+
+    let expected = ["pub struct Box {", "  value: Int", "}"];
 
     assert_lines(&format_source(input), &expected);
 }

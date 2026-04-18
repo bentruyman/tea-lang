@@ -18,7 +18,7 @@
 #   - `(...)` creates a capture group
 #
 # Examples:
-#   use regex = "std.regex"
+#   use regex from "std.regex"
 #
 #   const re = regex.compile("\\d+")
 #   if regex.is_match(re, "abc123def")
@@ -27,7 +27,7 @@
 #
 #   const matches = regex.find_all(re, "foo42bar7baz")
 #   # matches = ["42", "7"]
-use intrinsics = "std.intrinsics"
+use intrinsics from "std.intrinsics"
 
 ## Compile a regex pattern and return a handle.
 ##

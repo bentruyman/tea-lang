@@ -3,8 +3,8 @@ mod support;
 #[test]
 fn process_helpers_execute_with_checked_wrappers() -> anyhow::Result<()> {
     let source = r#"
-use process = "std.process"
-use assert = "std.assert"
+use process from "std.process"
+use assert from "std.assert"
 
 var result = process.run_checked("echo", ["hello"])
 assert.ok(result.success)

@@ -41,10 +41,10 @@ end
 Most Tea scripts compose stdlib helpers to automate builds, tooling, and ops without sacrificing native performance.
 
 ```tea
-use env = "std.env"
-use fs = "std.fs"
-use path = "std.path"
-use string = "std.string"
+use env from "std.env"
+use fs from "std.fs"
+use path from "std.path"
+use string from "std.string"
 
 var root = env.cwd()
 var entries = fs.read_dir(root)

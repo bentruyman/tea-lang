@@ -2,10 +2,10 @@
 #
 # This module provides a Tea-native interface to filesystem operations,
 # delegating to low-level intrinsics and providing higher-level helpers.
-use intrinsics = "std.intrinsics"
-use string = "std.string"
+use intrinsics from "std.intrinsics"
+use string from "std.string"
 
-struct FileMetadata {
+pub struct FileMetadata {
   path: String
   is_dir: Bool
   is_file: Bool

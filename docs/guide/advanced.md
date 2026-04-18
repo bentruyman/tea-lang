@@ -100,9 +100,9 @@ Modules help organize code into reusable units and manage namespaces.
 Import stdlib modules with `use`:
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use env = "std.env"
+use fs from "std.fs"
+use path from "std.path"
+use env from "std.env"
 
 var current_dir = env.cwd()
 var files = fs.read_dir(current_dir)
@@ -113,7 +113,7 @@ for file in files
 end
 ```
 
-The syntax is: `use alias = "module.path"`
+The syntax is: `use alias from "module.path"`
 
 ### Common Standard Library Modules
 
@@ -144,14 +144,14 @@ pub def triple(x: Int) -> Int
 end
 ```
 
-Only functions marked `pub` are visible to other modules.
+Only declarations marked `pub` are visible to other modules.
 
 ### Using Custom Modules
 
 Import your own modules:
 
 ```tea
-use helpers = "./helpers"
+use helpers from "./helpers"
 
 var result = helpers.double(5)
 @println(result)  # Output: 10
@@ -175,8 +175,8 @@ project/
 Import from subdirectories:
 
 ```tea
-use geometry = "./math/geometry"
-use stats = "./math/stats"
+use geometry from "./math/geometry"
+use stats from "./math/stats"
 ```
 
 ## Lambdas
@@ -386,7 +386,7 @@ end
 For more assertions, use the `std.assert` module:
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 test "using assert module"
   assert.eq(5, 5)
@@ -423,7 +423,7 @@ Run it before committing code to maintain consistency.
 ### Generic Data Structure with Tests
 
 ```tea
-use assert = "std.assert"
+use assert from "std.assert"
 
 struct Stack[T] {
   items: List[T]
@@ -460,7 +460,7 @@ end
 **main.tea:**
 
 ```tea
-use calc = "./math/calculator"
+use calc from "./math/calculator"
 
 var sum = calc.add(5, 3)
 var product = calc.multiply(4, 7)
@@ -496,7 +496,7 @@ struct Name[T] { field: T }
 **Modules:**
 
 ```tea
-use alias = "module.path"
+use alias from "module.path"
 pub def exported() { }
 ```
 

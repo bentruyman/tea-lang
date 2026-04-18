@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tea_compiler::{
     CatchKind, CompileOptions, Compiler, Diagnostic as CompilerDiagnostic, DiagnosticLevel,
-    InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module, ModuleAliasBinding, SourceFile,
-    SourceId, Statement, TokenKind,
+    InterpolatedStringPart, Keyword, Lexer, MatchPattern, Module, ModuleAliasBinding,
+    ModuleExportKind, SourceFile, SourceId, Statement, TokenKind,
 };
 use tokio::{
     sync::Mutex,
@@ -110,7 +110,9 @@ struct FieldInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tea_compiler::{Compilation, CompileOptions, Compiler, SourceFile, SourceId};
+    use tea_compiler::{
+        Compilation, CompileOptions, Compiler, ModuleExportKind, SourceFile, SourceId,
+    };
 
     fn compile_source(contents: &str) -> Compilation {
         let mut compiler = Compiler::new(CompileOptions::default());
@@ -122,7 +124,7 @@ mod tests {
     fn std_module_member_contains_docstring() {
         let compilation = compile_source(
             r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 def main() -> Void
   assert.ok(true)
@@ -161,7 +163,7 @@ end
     fn source_backed_std_module_member_contains_docstring() {
         let compilation = compile_source(
             r#"
-use string = "std.string"
+use string from "std.string"
 
 def main() -> Bool
   string.starts_with("tea", "te")
@@ -184,6 +186,27 @@ end
         assert!(
             export_doc.starts_with("Check if a string starts with a given prefix."),
             "unexpected starts_with docstring: {export_doc}"
+        );
+    }
+
+    #[test]
+    fn source_backed_std_module_type_export_is_classified() {
+        let compilation = compile_source(
+            r#"
+use fs from "std.fs"
+"#,
+        );
+
+        let analysis = collect_symbols(&compilation.module, &compilation.analysis);
+
+        let fs_binding = analysis
+            .module_aliases
+            .get("fs")
+            .expect("fs alias to be present");
+
+        assert_eq!(
+            fs_binding.export_kinds.get("FileMetadata"),
+            Some(&ModuleExportKind::Struct),
         );
     }
 
@@ -392,7 +415,9 @@ struct BlockingCompileOutput {
 enum SymbolKind {
     ModuleAlias,
     Struct,
+    Union,
     Enum,
+    Error,
     Function,
     Const,
     Variable,
@@ -406,7 +431,9 @@ impl SymbolKind {
         match self {
             SymbolKind::ModuleAlias => "module",
             SymbolKind::Struct => "struct",
+            SymbolKind::Union => "union",
             SymbolKind::Enum => "enum",
+            SymbolKind::Error => "error",
             SymbolKind::Function => "function",
             SymbolKind::Const => "const",
             SymbolKind::Variable => "variable",
@@ -420,7 +447,9 @@ impl SymbolKind {
         match self {
             SymbolKind::ModuleAlias => CompletionItemKind::MODULE,
             SymbolKind::Struct => CompletionItemKind::STRUCT,
+            SymbolKind::Union => CompletionItemKind::STRUCT,
             SymbolKind::Enum => CompletionItemKind::ENUM,
+            SymbolKind::Error => CompletionItemKind::CLASS,
             SymbolKind::Function => CompletionItemKind::FUNCTION,
             SymbolKind::Const => CompletionItemKind::CONSTANT,
             SymbolKind::Variable => CompletionItemKind::VARIABLE,
@@ -429,6 +458,41 @@ impl SymbolKind {
             SymbolKind::EnumVariant => CompletionItemKind::ENUM_MEMBER,
         }
     }
+}
+
+impl SymbolKind {
+    fn from_module_export_kind(kind: ModuleExportKind) -> Self {
+        match kind {
+            ModuleExportKind::Function => SymbolKind::Function,
+            ModuleExportKind::Const => SymbolKind::Const,
+            ModuleExportKind::Struct => SymbolKind::Struct,
+            ModuleExportKind::Union => SymbolKind::Union,
+            ModuleExportKind::Enum => SymbolKind::Enum,
+            ModuleExportKind::Error => SymbolKind::Error,
+        }
+    }
+}
+
+fn infer_export_symbol_kind(type_desc: Option<&str>) -> SymbolKind {
+    match type_desc {
+        Some(ty) if ty.starts_with("Func") => SymbolKind::Function,
+        Some("Struct") => SymbolKind::Struct,
+        Some("Union") => SymbolKind::Union,
+        Some("Enum") => SymbolKind::Enum,
+        Some("Error") => SymbolKind::Error,
+        _ => SymbolKind::Variable,
+    }
+}
+
+fn module_export_symbol_kind(binding: &ModuleAliasBinding, export: &str) -> SymbolKind {
+    binding
+        .export_kinds
+        .get(export)
+        .copied()
+        .map(SymbolKind::from_module_export_kind)
+        .unwrap_or_else(|| {
+            infer_export_symbol_kind(binding.export_types.get(export).map(String::as_str))
+        })
 }
 
 impl ServerState {
@@ -934,7 +998,7 @@ fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -
                     self.symbols.push(SymbolInfo {
                         name: union_stmt.name.clone(),
                         range,
-                        kind: SymbolKind::Struct,
+                        kind: SymbolKind::Union,
                         type_desc: None,
                         docstring: union_stmt.docstring.clone(),
                     });
@@ -959,7 +1023,16 @@ fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -
                         });
                     }
                 }
-                Statement::Error(_) => {}
+                Statement::Error(error_stmt) => {
+                    let range = range_from_span!(&error_stmt.name_span);
+                    self.symbols.push(SymbolInfo {
+                        name: error_stmt.name.clone(),
+                        range,
+                        kind: SymbolKind::Error,
+                        type_desc: None,
+                        docstring: error_stmt.docstring.clone(),
+                    });
+                }
                 Statement::Conditional(cond_stmt) => {
                     self.visit_expression(&cond_stmt.condition);
                     self.visit_statements(&cond_stmt.consequent.statements);
@@ -1093,7 +1166,7 @@ fn collect_symbols(module: &Module, analysis: &tea_compiler::SemanticAnalysis) -
                             self.symbols.push(SymbolInfo {
                                 name: expr.property.clone(),
                                 range,
-                                kind: SymbolKind::Function,
+                                kind: module_export_symbol_kind(binding, &expr.property),
                                 type_desc,
                                 docstring,
                             });
@@ -1571,16 +1644,8 @@ impl LanguageServer for TeaLanguageServer {
 
         if let Some((alias, member)) = member_at_position(&doc.text, &position) {
             if let Some(binding) = analysis.module_aliases.get(&alias) {
-                let mut label = "symbol";
-                if let Some(ty) = binding.export_types.get(&member) {
-                    if ty.starts_with("Func") {
-                        label = "function";
-                    } else if ty == "Struct" {
-                        label = "struct";
-                    }
-                }
-
-                let mut value = format!("{} `{}.{}`", label, alias, member);
+                let export_kind = module_export_symbol_kind(binding, &member);
+                let mut value = format!("{} `{}.{}`", export_kind.label(), alias, member);
                 if let Some(ty) = binding.export_types.get(&member) {
                     value.push_str(&format!(" : {}", ty));
                 }
@@ -1727,12 +1792,8 @@ impl LanguageServer for TeaLanguageServer {
                         let type_detail = binding.export_types.get(export);
                         let mut item =
                             CompletionItem::new_simple(export.clone(), format!("module {alias}"));
-                        item.kind = Some(match type_detail {
-                            Some(ty) if ty.starts_with("Func") => CompletionItemKind::FUNCTION,
-                            Some(ty) if ty == "Struct" => CompletionItemKind::STRUCT,
-                            Some(ty) if ty == "Enum" => CompletionItemKind::ENUM,
-                            _ => CompletionItemKind::VARIABLE,
-                        });
+                        item.kind =
+                            Some(module_export_symbol_kind(binding, export).completion_kind());
                         if let Some(ty) = type_detail {
                             item.detail = Some(ty.clone());
                         }
@@ -1936,7 +1997,9 @@ impl LanguageServer for TeaLanguageServer {
             | SymbolKind::Parameter
             | SymbolKind::Function
             | SymbolKind::Struct
+            | SymbolKind::Union
             | SymbolKind::Enum
+            | SymbolKind::Error
             | SymbolKind::Field
             | SymbolKind::EnumVariant => {}
             SymbolKind::ModuleAlias => {
@@ -2015,7 +2078,11 @@ impl LanguageServer for TeaLanguageServer {
         // For functions, structs, enums - also check dependent files
         if matches!(
             symbol_kind,
-            SymbolKind::Function | SymbolKind::Struct | SymbolKind::Enum
+            SymbolKind::Function
+                | SymbolKind::Struct
+                | SymbolKind::Union
+                | SymbolKind::Enum
+                | SymbolKind::Error
         ) {
             // Get files that depend on this file
             let dependents = {

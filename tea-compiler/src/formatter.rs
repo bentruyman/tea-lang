@@ -262,11 +262,14 @@ fn normalize_line(line: &str) -> Cow<'_, str> {
     }
 
     apply_normalizer!(normalize_def_signature_spacing);
+    apply_normalizer!(normalize_use_statement_spacing);
     apply_normalizer!(normalize_control_keyword_spacing);
     apply_normalizer!(normalize_expression_spacing);
     apply_normalizer!(normalize_case_arrow_spacing);
     apply_normalizer!(normalize_struct_declaration_spacing);
     apply_normalizer!(normalize_enum_declaration_spacing);
+    apply_normalizer!(normalize_union_declaration_spacing);
+    apply_normalizer!(normalize_error_declaration_spacing);
     apply_normalizer!(normalize_comparison_operator_spacing);
 
     let mut result = String::with_capacity(line.len());
@@ -459,6 +462,64 @@ fn normalize_def_signature_spacing(line: &str) -> Cow<'_, str> {
         normalized.push(' ');
         normalized.push_str(rest_after);
     }
+
+    if normalized == line {
+        Cow::Borrowed(line)
+    } else {
+        Cow::Owned(normalized)
+    }
+}
+
+fn normalize_use_statement_spacing(line: &str) -> Cow<'_, str> {
+    let trimmed = line.trim_start();
+    if !line_starts_with_keyword(trimmed, "use") {
+        return Cow::Borrowed(line);
+    }
+
+    let leading_len = line.len() - trimmed.len();
+    let leading_ws = &line[..leading_len];
+    let mut rest = trimmed["use".len()..].trim_start();
+    if rest.is_empty() {
+        return Cow::Borrowed(line);
+    }
+
+    let alias_end = rest
+        .char_indices()
+        .find_map(|(idx, ch)| (!is_identifier_char(ch)).then_some(idx))
+        .unwrap_or(rest.len());
+    let alias = &rest[..alias_end];
+    if alias.is_empty() {
+        return Cow::Borrowed(line);
+    }
+
+    rest = rest[alias_end..].trim_start();
+    if let Some(after_from) = rest.strip_prefix("from") {
+        if after_from
+            .chars()
+            .next()
+            .map(|ch| ch.is_whitespace())
+            .unwrap_or(false)
+        {
+            rest = after_from.trim_start();
+        } else {
+            return Cow::Borrowed(line);
+        }
+    } else if let Some(after_equal) = rest.strip_prefix('=') {
+        rest = after_equal.trim_start();
+    } else {
+        return Cow::Borrowed(line);
+    }
+
+    if !rest.starts_with('"') {
+        return Cow::Borrowed(line);
+    }
+
+    let mut normalized = String::with_capacity(line.len());
+    normalized.push_str(leading_ws);
+    normalized.push_str("use ");
+    normalized.push_str(alias);
+    normalized.push_str(" from ");
+    normalized.push_str(rest);
 
     if normalized == line {
         Cow::Borrowed(line)
@@ -1252,16 +1313,34 @@ fn normalize_case_arrow_spacing(line: &str) -> Cow<'_, str> {
     }
 }
 
-fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
+fn normalize_braced_declaration_spacing<'a>(
+    line: &'a str,
+    keyword: &str,
+    supports_generics: bool,
+) -> Cow<'a, str> {
     let trimmed = line.trim_start();
-    if !trimmed.starts_with("struct") {
+    let leading_len = line.len() - trimmed.len();
+    let leading_ws = &line[..leading_len];
+    let mut rest = trimmed;
+    let mut is_public = false;
+
+    if let Some(after_pub) = rest.strip_prefix("pub") {
+        if after_pub
+            .chars()
+            .next()
+            .map(|c| c.is_whitespace())
+            .unwrap_or(false)
+        {
+            is_public = true;
+            rest = after_pub.trim_start();
+        }
+    }
+
+    if !rest.starts_with(keyword) {
         return Cow::Borrowed(line);
     }
 
-    let leading_len = line.len() - trimmed.len();
-    let leading_ws = &line[..leading_len];
-
-    let mut rest = &trimmed["struct".len()..];
+    rest = &rest[keyword.len()..];
     if !rest
         .chars()
         .next()
@@ -1275,7 +1354,6 @@ fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
         return Cow::Borrowed(line);
     }
 
-    // Parse identifier
     let mut name_end = rest.len();
     for (idx, ch) in rest.char_indices() {
         if ch.is_whitespace() || matches!(ch, '[' | '{') {
@@ -1297,9 +1375,8 @@ fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
         }
     }
 
-    // Optional generics
     let mut generics = String::new();
-    if idx < rest.len() && rest[idx..].starts_with('[') {
+    if supports_generics && idx < rest.len() && rest[idx..].starts_with('[') {
         let mut depth = 0i32;
         let mut closing = None;
         for (offset, ch) in rest[idx..].char_indices() {
@@ -1342,7 +1419,11 @@ fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
 
     let mut normalized = String::with_capacity(line.len());
     normalized.push_str(leading_ws);
-    normalized.push_str("struct ");
+    if is_public {
+        normalized.push_str("pub ");
+    }
+    normalized.push_str(keyword);
+    normalized.push(' ');
     normalized.push_str(name);
     normalized.push_str(&generics);
 
@@ -1375,82 +1456,20 @@ fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
     }
 }
 
+fn normalize_struct_declaration_spacing(line: &str) -> Cow<'_, str> {
+    normalize_braced_declaration_spacing(line, "struct", true)
+}
+
 fn normalize_enum_declaration_spacing(line: &str) -> Cow<'_, str> {
-    let trimmed = line.trim_start();
-    if !trimmed.starts_with("enum") {
-        return Cow::Borrowed(line);
-    }
+    normalize_braced_declaration_spacing(line, "enum", true)
+}
 
-    let leading_len = line.len() - trimmed.len();
-    let leading_ws = &line[..leading_len];
+fn normalize_union_declaration_spacing(line: &str) -> Cow<'_, str> {
+    normalize_braced_declaration_spacing(line, "union", false)
+}
 
-    let mut rest = &trimmed["enum".len()..];
-    if !rest
-        .chars()
-        .next()
-        .map(|c| c.is_whitespace())
-        .unwrap_or(false)
-    {
-        return Cow::Borrowed(line);
-    }
-    rest = rest.trim_start();
-    if rest.is_empty() {
-        return Cow::Borrowed(line);
-    }
-
-    let mut name_end = rest.len();
-    for (idx, ch) in rest.char_indices() {
-        if ch.is_whitespace() || ch == '{' {
-            name_end = idx;
-            break;
-        }
-    }
-    let name = &rest[..name_end];
-    if name.is_empty() {
-        return Cow::Borrowed(line);
-    }
-    let mut idx = name_end;
-    while idx < rest.len() {
-        let ch = rest[idx..].chars().next().unwrap();
-        if ch.is_whitespace() {
-            idx += ch.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    let mut normalized = String::with_capacity(line.len());
-    normalized.push_str(leading_ws);
-    normalized.push_str("enum ");
-    normalized.push_str(name);
-
-    let remainder = &rest[idx..];
-    let mut did_change = false;
-
-    if let Some(after_brace) = remainder.strip_prefix('{') {
-        normalized.push_str(" {");
-        let trimmed_after = after_brace.trim_start_matches([' ', '\t']);
-        if trimmed_after.len() != after_brace.len() {
-            did_change = true;
-        }
-        if !trimmed_after.is_empty()
-            && !matches!(trimmed_after.chars().next(), Some('\n' | '\r' | '}'))
-        {
-            normalized.push(' ');
-        }
-        normalized.push_str(trimmed_after);
-    } else if !remainder.is_empty() {
-        if !matches!(remainder.chars().next(), Some('\n' | '\r')) {
-            normalized.push(' ');
-        }
-        normalized.push_str(remainder);
-    }
-
-    if did_change || normalized != line {
-        Cow::Owned(normalized)
-    } else {
-        Cow::Borrowed(line)
-    }
+fn normalize_error_declaration_spacing(line: &str) -> Cow<'_, str> {
+    normalize_braced_declaration_spacing(line, "error", false)
 }
 
 fn finalize_comparison_operator(
@@ -1620,10 +1639,7 @@ fn opens_block(code: &str) -> bool {
 
     if line_starts_with_keyword(code, "pub") {
         let rest = code["pub".len()..].trim_start();
-        const PUB_KEYWORDS: &[&str] = &["def", "struct"];
-        return PUB_KEYWORDS
-            .iter()
-            .any(|kw| line_starts_with_keyword(rest, kw));
+        return line_starts_with_keyword(rest, "def");
     }
 
     false

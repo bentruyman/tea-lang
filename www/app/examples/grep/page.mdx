@@ -29,9 +29,9 @@ A simplified implementation of Unix `grep` in Tea. It searches for a regular exp
 **`grep/main.tea`**
 
 ```tea
-use args = "std.args"
-use fs = "std.fs"
-use regex = "std.regex"
+use args from "std.args"
+use fs from "std.fs"
+use regex from "std.regex"
 
 def print_usage() -> Void
   @println("Usage: grep [OPTIONS] PATTERN FILE...")

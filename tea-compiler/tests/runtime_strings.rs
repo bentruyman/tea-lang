@@ -7,7 +7,7 @@ mod support;
 #[test]
 fn interpolated_strings_emit_concat_instruction_and_execute() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 def greet(name: String) -> String
   `Hello, ${name}!`
@@ -48,7 +48,7 @@ end
 #[test]
 fn string_concatenation_with_plus_operator() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 def concat(a: String, b: String) -> String
   a + b
@@ -112,8 +112,8 @@ end
 #[test]
 fn string_helpers_execute_with_collection_utilities() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
-use string = "std.string"
+use assert from "std.assert"
+use string from "std.string"
 
 assert.eq(string.index_of("hello", "ll"), 2)
 assert.ok(string.contains("hello", "ell"))

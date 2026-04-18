@@ -133,7 +133,7 @@ fn suggests_import_for_std_function() {
         diagnostics.iter().any(|diagnostic| {
             diagnostic
                 .message
-                .contains("add `use intrinsics = \"std.intrinsics\"` to import it")
+                .contains("add `use intrinsics from \"std.intrinsics\"` to import it")
         }),
         "expected suggestion to import std.intrinsics, found {:?}",
         diagnostics

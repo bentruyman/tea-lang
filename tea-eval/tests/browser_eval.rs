@@ -31,7 +31,7 @@ fn compile_browser_source(source: &str) -> tea_compiler::Compilation {
 fn browser_eval_runs_structs_loops_and_stdlib() {
     let compilation = compile_browser_source(
         r#"
-use string = "std.string"
+use string from "std.string"
 
 struct User {
   name: String
@@ -59,7 +59,7 @@ end
 fn browser_eval_handles_json_decode_and_fuel_limits() {
     let compilation = compile_browser_source(
         r#"
-use json = "std.json"
+use json from "std.json"
 
 @println(json.encode([1, 2, 3]))
 "#,

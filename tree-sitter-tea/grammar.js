@@ -57,12 +57,13 @@ module.exports = grammar({
       seq(
         "use",
         field("alias", $.identifier),
-        "=",
-        field("module", choice($.string, $.template_string)),
+        "from",
+        field("module", $.string),
       ),
 
     const_declaration: ($) =>
       seq(
+        optional("pub"),
         "const",
         field("name", $.identifier),
         optional(seq(":", field("type", $.type_annotation))),
@@ -94,6 +95,7 @@ module.exports = grammar({
 
     struct_definition: ($) =>
       seq(
+        optional("pub"),
         "struct",
         field("name", $.identifier),
         optional(field("type_parameters", $.type_parameters)),
@@ -107,6 +109,7 @@ module.exports = grammar({
 
     union_definition: ($) =>
       seq(
+        optional("pub"),
         "union",
         field("name", $.identifier),
         "{",
@@ -118,6 +121,7 @@ module.exports = grammar({
 
     enum_definition: ($) =>
       seq(
+        optional("pub"),
         "enum",
         field("name", $.identifier),
         optional(field("type_parameters", $.type_parameters)),
@@ -133,12 +137,13 @@ module.exports = grammar({
         prec.dynamic(
           1,
           seq(
+            optional("pub"),
             "error",
             field("name", $.identifier),
             field("variants", $.error_variant_block),
           ),
         ),
-        seq("error", field("name", $.identifier)),
+        seq(optional("pub"), "error", field("name", $.identifier)),
       ),
 
     error_variant_block: ($) =>

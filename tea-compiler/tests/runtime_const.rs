@@ -6,7 +6,7 @@ use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 #[test]
 fn const_bindings_are_immutable_and_accessible() -> anyhow::Result<()> {
     let source = r#"
-use assert = "std.assert"
+use assert from "std.assert"
 
 const SCALE = 5
 

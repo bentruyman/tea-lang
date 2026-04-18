@@ -25,7 +25,7 @@ fn browser_compiler(source_text: &str) -> (Compiler, SourceFile) {
 #[test]
 fn browser_target_expands_safe_source_stdlib() {
     let source = r#"
-use string = "std.string"
+use string from "std.string"
 
 @println(string.to_upper("tea"))
 "#;
@@ -44,7 +44,7 @@ use string = "std.string"
 #[test]
 fn browser_target_rejects_native_only_modules() {
     let source = r#"
-use fs = "std.fs"
+use fs from "std.fs"
 "#;
 
     let (mut compiler, source_file) = browser_compiler(source);

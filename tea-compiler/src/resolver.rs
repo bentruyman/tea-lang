@@ -67,9 +67,20 @@ pub struct ModuleAliasBinding {
     pub module_path: String,
     pub span: SourceSpan,
     pub exports: Vec<String>,
+    pub export_kinds: HashMap<String, ModuleExportKind>,
     pub export_types: HashMap<String, String>,
     pub export_docs: HashMap<String, String>,
     pub docstring: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModuleExportKind {
+    Function,
+    Const,
+    Struct,
+    Union,
+    Enum,
+    Error,
 }
 
 pub struct ResolverOutput {
@@ -163,6 +174,7 @@ impl Resolver {
                     module_path: module_path.to_string(),
                     span: alias.span,
                     exports: Vec::new(),
+                    export_kinds: HashMap::new(),
                     export_types: HashMap::new(),
                     export_docs: HashMap::new(),
                     docstring: module_doc,
@@ -179,6 +191,7 @@ impl Resolver {
                     module_path: module_path.to_string(),
                     span: alias.span,
                     exports: Vec::new(),
+                    export_kinds: HashMap::new(),
                     export_types: HashMap::new(),
                     export_docs: HashMap::new(),
                     docstring: None,
@@ -193,6 +206,7 @@ impl Resolver {
                     module_path: module_path.to_string(),
                     span: alias.span,
                     exports: Vec::new(),
+                    export_kinds: HashMap::new(),
                     export_types: HashMap::new(),
                     export_docs: HashMap::new(),
                     docstring: None,
@@ -430,7 +444,7 @@ impl Resolver {
                 .unwrap_or(module_path)
                 .to_string();
             format!(
-                "use of undefined binding '{}'; add `use {} = \"{}\"` to import it",
+                "use of undefined binding '{}'; add `use {} from \"{}\"` to import it",
                 identifier.name, suggested_alias, module_path
             )
         } else {

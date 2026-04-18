@@ -152,7 +152,12 @@ impl Compiler {
                 return Err(err);
             }
         };
-        self.diagnostics.extend(expander.into_diagnostics());
+        let diagnostics = expander.into_diagnostics();
+        let has_errors = diagnostics.has_errors();
+        self.diagnostics.extend(diagnostics);
+        if has_errors {
+            bail!("Module expansion failed");
+        }
 
         Ok(expanded_module)
     }

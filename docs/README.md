@@ -225,9 +225,9 @@ end
 **Standard Library:**
 
 ```tea
-use fs = "std.fs"
-use path = "std.path"
-use env = "std.env"
+use fs from "std.fs"
+use path from "std.path"
+use env from "std.env"
 
 var root = env.cwd()
 var entries = fs.read_dir(root)

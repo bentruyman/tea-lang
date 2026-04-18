@@ -56,7 +56,12 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::EnvHomeDir => "Return the user home directory when available.",
         StdFunctionKind::EnvConfigDir => "Return the user configuration directory when available.",
         StdFunctionKind::FsReadText => "Read an entire text file into a string.",
+        StdFunctionKind::FsReadBytes => "Read an entire file into a list of byte values.",
         StdFunctionKind::FsWriteText => "Write a string to a file, replacing existing contents.",
+        StdFunctionKind::FsWriteBytes => {
+            "Write a list of byte values to a file, replacing existing contents."
+        }
+        StdFunctionKind::FsWriteBytesAtomic => "Write a list of byte values to a file atomically.",
         StdFunctionKind::FsCreateDir => {
             "Create a directory. Parent directories must already exist."
         }
@@ -79,6 +84,13 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::PathRelative => "Compute the relative path from one location to another.",
         StdFunctionKind::PathIsAbsolute => "Return true when the path is absolute.",
         StdFunctionKind::PathSeparator => "Return the platform-specific path separator.",
+        StdFunctionKind::UrlEncodeComponent => "Percent-encode a URL component.",
+        StdFunctionKind::UrlDecodeComponent => "Decode a percent-encoded URL component.",
+        StdFunctionKind::UrlBuildQuery => {
+            "Encode a dictionary of query parameters as a query string."
+        }
+        StdFunctionKind::UrlAppendQuery => "Append encoded query parameters to an absolute URL.",
+        StdFunctionKind::UrlJoin => "Resolve a URL path against an absolute base URL.",
         StdFunctionKind::AssertSnapshot => {
             "Compare actual text against a stored snapshot, with optional hint."
         }
@@ -122,5 +134,7 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         // JSON module
         StdFunctionKind::JsonEncode => "Encode a value as a JSON string.",
         StdFunctionKind::JsonDecode => "Decode a JSON string into a Tea value.",
+        // HTTP module
+        StdFunctionKind::HttpSend => "Send an HTTP request and return a response dictionary.",
     }
 }

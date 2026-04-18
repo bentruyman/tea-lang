@@ -47,3 +47,11 @@ pub fn process_error(operation: &str, command: &str, error: impl fmt::Display) -
 pub fn env_error(operation: &str, target: Option<&str>, error: impl fmt::Display) -> String {
     format_operation_error("std.env", operation, target, error)
 }
+
+pub fn url_error(operation: &str, target: &str, error: impl fmt::Display) -> String {
+    format_operation_error("std.url", operation, Some(target), error)
+}
+
+pub fn http_error(operation: &str, target: &str, error: impl fmt::Display) -> String {
+    format_operation_error("std.http", operation, Some(target), error)
+}

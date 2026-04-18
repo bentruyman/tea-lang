@@ -1,0 +1,186 @@
+# Blocking HTTP client helpers for tool-style scripts.
+#
+# The client is intentionally small and synchronous: construct a Request,
+# send it, inspect the Response, and compose with std.json/std.fs helpers.
+use fs from "std.fs"
+use intrinsics from "std.intrinsics"
+use json from "std.json"
+use string from "std.string"
+use url from "std.url"
+
+pub struct Request {
+  method: String
+  url: String
+  headers: Dict[String, String]
+  body: String
+  timeout_ms: Int
+}
+
+pub struct Response {
+  status: Int
+  ok: Bool
+  url: String
+  headers: Dict[String, String]
+  body: String
+  body_bytes: List[Int]
+}
+
+## Create a request with empty headers/body and no timeout override.
+pub def new_request(method: String, url_text: String) -> Request
+  Request(
+    method: string.to_upper(method),
+    url: url_text,
+    headers: {},
+    body: "",
+    timeout_ms: 0
+  )
+end
+
+## Create a request with explicit headers, body, and timeout.
+pub def new_request_with(method: String, url_text: String, headers: Dict[String, String], body: String, timeout_ms: Int) -> Request
+  Request(
+    method: string.to_upper(method),
+    url: url_text,
+    headers: headers,
+    body: body,
+    timeout_ms: timeout_ms
+  )
+end
+
+## Append query parameters to a request URL.
+pub def with_query(req: Request, params: Dict[String, String]) -> Request
+  Request(
+    method: req.method,
+    url: url.append_query(req.url, params),
+    headers: req.headers,
+    body: req.body,
+    timeout_ms: req.timeout_ms
+  )
+end
+
+## Send an HTTP request synchronously.
+##
+## Response header keys are normalized to lowercase.
+pub def send(req: Request) -> Response
+  const raw = intrinsics.http_send(
+    req.method,
+    req.url,
+    req.headers,
+    req.body,
+    req.timeout_ms
+  )
+
+  Response(
+    status: raw["status"],
+    ok: raw["ok"],
+    url: raw["url"],
+    headers: raw["headers"],
+    body: raw["body"],
+    body_bytes: raw["body_bytes"]
+  )
+end
+
+## Send a GET request.
+pub def get(url_text: String) -> Response
+  send(new_request("GET", url_text))
+end
+
+## Send a GET request with headers.
+pub def get_with(url_text: String, headers: Dict[String, String]) -> Response
+  send(new_request_with("GET", url_text, headers, "", 0))
+end
+
+## Send a POST request with a text body.
+pub def post(url_text: String, body: String) -> Response
+  send(new_request_with("POST", url_text, {}, body, 0))
+end
+
+## Send a POST request with headers and a text body.
+pub def post_with(url_text: String, headers: Dict[String, String], body: String) -> Response
+  send(new_request_with("POST", url_text, headers, body, 0))
+end
+
+## Send a PUT request with a text body.
+pub def put(url_text: String, body: String) -> Response
+  send(new_request_with("PUT", url_text, {}, body, 0))
+end
+
+## Send a PATCH request with a text body.
+pub def patch(url_text: String, body: String) -> Response
+  send(new_request_with("PATCH", url_text, {}, body, 0))
+end
+
+## Send a DELETE request.
+pub def delete(url_text: String) -> Response
+  send(new_request("DELETE", url_text))
+end
+
+## Send a JSON POST request.
+pub def post_json[T](url_text: String, value: T) -> Response
+  send(
+    new_request_with(
+      "POST",
+      url_text,
+      { "content-type": "application/json" },
+      json.encode(value),
+      0
+    )
+  )
+end
+
+## Decode a JSON response body.
+pub def decode_json[T](response: Response) -> T
+  return json.decode(response.body)
+end
+
+## Return a response header by name when present.
+pub def header(response: Response, name: String) -> String?
+  if response.headers.has(name)
+    return response.headers[name]
+  end
+
+  const normalized = string.to_lower(name)
+
+  if response.headers.has(normalized)
+    return response.headers[normalized]
+  end
+
+  return nil
+end
+
+## Return a response header by name or a fallback value.
+pub def header_or(response: Response, name: String, fallback: String) -> String
+  const value = header(response, name)
+
+  if value != nil
+    return value!
+  end
+
+  fallback
+end
+
+## Return the text body of a response.
+pub def body_text(response: Response) -> String
+  response.body
+end
+
+## Return the raw body bytes of a response.
+pub def body_bytes(response: Response) -> List[Int]
+  response.body_bytes
+end
+
+## Fail when the response status is not successful.
+pub def check(response: Response) -> Response
+  if ! response.ok
+    @panic(`http request failed (${response.status}) for ${response.url}`)
+  end
+
+  response
+end
+
+## Download a URL to a file path and return the response.
+pub def download(url_text: String, file_path: String) -> Response
+  const response = check(get(url_text))
+  fs.write_bytes(file_path, response.body_bytes)
+  response
+end

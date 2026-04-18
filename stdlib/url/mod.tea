@@ -1,0 +1,30 @@
+# URL encoding and composition helpers for building HTTP requests.
+#
+# These helpers target tool-style scripts that need deterministic query
+# encoding and straightforward URL composition.
+use intrinsics from "std.intrinsics"
+
+## Percent-encode a single URL component.
+pub def encode_component(text: String) -> String
+  intrinsics.url_encode_component(text)
+end
+
+## Decode a percent-encoded URL component.
+pub def decode_component(text: String) -> String
+  intrinsics.url_decode_component(text)
+end
+
+## Encode query parameters without a leading "?".
+pub def build_query(params: Dict[String, String]) -> String
+  intrinsics.url_build_query(params)
+end
+
+## Append query parameters to an absolute URL.
+pub def append_query(base_url: String, params: Dict[String, String]) -> String
+  intrinsics.url_append_query(base_url, params)
+end
+
+## Resolve a relative path or URL against an absolute base URL.
+pub def join(base_url: String, path: String) -> String
+  intrinsics.url_join(base_url, path)
+end

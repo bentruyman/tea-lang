@@ -18,11 +18,13 @@ pub const SOURCE_STDLIB_MODULES: &[&str] = &[
     "std.args",
     "std.env",
     "std.fs",
+    "std.http",
     "std.parse",
     "std.path",
     "std.process",
     "std.regex",
     "std.string",
+    "std.url",
 ];
 
 pub const REFERENCE_STDLIB_MODULES: &[&str] = &[
@@ -30,12 +32,14 @@ pub const REFERENCE_STDLIB_MODULES: &[&str] = &[
     "std.assert",
     "std.env",
     "std.fs",
+    "std.http",
     "std.json",
     "std.parse",
     "std.path",
     "std.process",
     "std.regex",
     "std.string",
+    "std.url",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -80,7 +84,10 @@ pub enum StdFunctionKind {
     EnvHomeDir,
     EnvConfigDir,
     FsReadText,
+    FsReadBytes,
     FsWriteText,
+    FsWriteBytes,
+    FsWriteBytesAtomic,
     FsCreateDir,
     FsEnsureDir,
     FsRemove,
@@ -99,6 +106,11 @@ pub enum StdFunctionKind {
     PathRelative,
     PathIsAbsolute,
     PathSeparator,
+    UrlEncodeComponent,
+    UrlDecodeComponent,
+    UrlBuildQuery,
+    UrlAppendQuery,
+    UrlJoin,
     FsRename,
     FsStat,
     AssertSnapshot,
@@ -134,6 +146,8 @@ pub enum StdFunctionKind {
     // JSON module
     JsonEncode,
     JsonDecode,
+    // HTTP module
+    HttpSend,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -9,10 +9,31 @@ const FS_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
+        "read_bytes",
+        StdFunctionKind::FsReadBytes,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::List,
+    ),
+    std_function(
         "write_file",
         StdFunctionKind::FsWriteText,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "write_bytes",
+        StdFunctionKind::FsWriteBytes,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::List],
+        StdType::Void,
+    ),
+    std_function(
+        "write_bytes_atomic",
+        StdFunctionKind::FsWriteBytesAtomic,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::List],
         StdType::Void,
     ),
     std_function(

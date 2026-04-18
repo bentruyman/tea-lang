@@ -4,6 +4,9 @@ use crate::cli::{CliParseOutcome, CliScopeOutcome, RuntimeValue};
 use anyhow::{anyhow, Result};
 use dirs_next::{config_dir, home_dir};
 use glob::glob;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
+use reqwest::blocking::Client;
+use reqwest::Method;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::cell::Cell;
@@ -19,9 +22,10 @@ use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::ptr;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::UNIX_EPOCH;
-use tea_support::{cli_error, env_error, fs_error, io_error, process_error};
+use std::time::{Duration, UNIX_EPOCH};
+use tea_support::{cli_error, env_error, fs_error, http_error, io_error, process_error, url_error};
 use tempfile::NamedTempFile;
+use url::{form_urlencoded, Url};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -1237,6 +1241,89 @@ pub extern "C" fn tea_path_is_absolute(path: *const TeaString) -> c_int {
 pub extern "C" fn tea_path_separator() -> *mut TeaString {
     let sep = tea_intrinsics::path::separator();
     alloc_tea_string(&sep)
+}
+
+fn tea_query_pairs_from_dict(
+    dict: *const TeaDict,
+    operation: &str,
+    target: &str,
+) -> Vec<(String, String)> {
+    let mut pairs = tea_value_dict_to_string_map(tea_value_from_dict(dict))
+        .unwrap_or_else(|error| panic!("{}", url_error(operation, target, error)))
+        .into_iter()
+        .collect::<Vec<_>>();
+    pairs.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    pairs
+}
+
+#[no_mangle]
+pub extern "C" fn tea_url_encode_component(text: *const TeaString) -> *mut TeaString {
+    let value = expect_string(
+        text,
+        "url.encode_component expects the text to be a valid UTF-8 string",
+    );
+    let encoded = utf8_percent_encode(&value, NON_ALPHANUMERIC).to_string();
+    alloc_tea_string(&encoded)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_url_decode_component(text: *const TeaString) -> *mut TeaString {
+    let value = expect_string(
+        text,
+        "url.decode_component expects the text to be a valid UTF-8 string",
+    );
+    let decoded = percent_decode_str(&value)
+        .decode_utf8()
+        .unwrap_or_else(|error| panic!("{}", url_error("decode_component", &value, error)))
+        .into_owned();
+    alloc_tea_string(&decoded)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_url_build_query(params: *const TeaDict) -> *mut TeaString {
+    let mut serializer = form_urlencoded::Serializer::new(String::new());
+    for (key, value) in tea_query_pairs_from_dict(params, "build_query", "<query>") {
+        serializer.append_pair(&key, &value);
+    }
+    let query = serializer.finish();
+    alloc_tea_string(&query)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_url_append_query(
+    base_url: *const TeaString,
+    params: *const TeaDict,
+) -> *mut TeaString {
+    let base = expect_string(
+        base_url,
+        "url.append_query expects the base URL to be a valid UTF-8 string",
+    );
+    let mut parsed = Url::parse(&base)
+        .unwrap_or_else(|error| panic!("{}", url_error("append_query", &base, error)));
+    {
+        let mut query = parsed.query_pairs_mut();
+        for (key, value) in tea_query_pairs_from_dict(params, "append_query", &base) {
+            query.append_pair(&key, &value);
+        }
+    }
+    let result = parsed.to_string();
+    alloc_tea_string(&result)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_url_join(
+    base_url: *const TeaString,
+    path: *const TeaString,
+) -> *mut TeaString {
+    let base = expect_string(
+        base_url,
+        "url.join expects the base URL to be a valid UTF-8 string",
+    );
+    let next = expect_string(path, "url.join expects the path to be a valid UTF-8 string");
+    let joined = Url::parse(&base)
+        .and_then(|url| url.join(&next))
+        .unwrap_or_else(|error| panic!("{}", url_error("join", &base, error)));
+    alloc_tea_string(joined.as_ref())
 }
 
 #[no_mangle]
@@ -3800,6 +3887,116 @@ fn build_process_result_struct(
         fields[4] = tea_value_from_string(command_ptr);
     }
     Ok(instance)
+}
+
+fn runtime_bytes_value(bytes: &[u8]) -> RuntimeValue {
+    RuntimeValue::List(
+        bytes
+            .iter()
+            .map(|byte| RuntimeValue::Int(i64::from(*byte)))
+            .collect(),
+    )
+}
+
+fn runtime_http_headers(headers: &reqwest::header::HeaderMap) -> RuntimeValue {
+    let mut map = HashMap::new();
+    for (name, value) in headers {
+        let key = name.as_str().to_ascii_lowercase();
+        let value_text = value
+            .to_str()
+            .map(|text| text.to_string())
+            .unwrap_or_else(|_| String::from_utf8_lossy(value.as_bytes()).to_string());
+
+        if let Some(RuntimeValue::String(existing)) = map.get_mut(&key) {
+            existing.push_str(", ");
+            existing.push_str(&value_text);
+        } else {
+            map.insert(key, RuntimeValue::String(value_text));
+        }
+    }
+    RuntimeValue::Dict(map)
+}
+
+fn runtime_http_response(
+    status: i64,
+    ok: bool,
+    url: String,
+    headers: &reqwest::header::HeaderMap,
+    body_bytes: Vec<u8>,
+) -> Result<TeaValue> {
+    let body = String::from_utf8_lossy(&body_bytes).to_string();
+    let mut map = HashMap::new();
+    map.insert("status".to_string(), RuntimeValue::Int(status));
+    map.insert("ok".to_string(), RuntimeValue::Bool(ok));
+    map.insert("url".to_string(), RuntimeValue::String(url));
+    map.insert("headers".to_string(), runtime_http_headers(headers));
+    map.insert("body".to_string(), RuntimeValue::String(body));
+    map.insert("body_bytes".to_string(), runtime_bytes_value(&body_bytes));
+    runtime_dict_to_tea(&map)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_http_send(
+    method: *const TeaString,
+    url: *const TeaString,
+    headers: *const TeaDict,
+    body: *const TeaString,
+    timeout_ms: c_longlong,
+) -> TeaValue {
+    let method_text = expect_string(method, "http.send expects the method to be a valid string");
+    let url_text = expect_string(url, "http.send expects the URL to be a valid string");
+    let headers_map = tea_value_dict_to_string_map(tea_value_from_dict(headers))
+        .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)));
+    let body_text = expect_string(body, "http.send expects the body to be a valid string");
+
+    if timeout_ms < 0 {
+        panic!(
+            "{}",
+            http_error(
+                "send",
+                &url_text,
+                "timeout_ms must be greater than or equal to 0"
+            )
+        );
+    }
+
+    let method = Method::from_bytes(method_text.as_bytes())
+        .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)));
+    let client = Client::builder()
+        .user_agent("tea-stdlib-http")
+        .build()
+        .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)));
+
+    let mut request = client.request(method, &url_text);
+    if timeout_ms > 0 {
+        request = request.timeout(Duration::from_millis(timeout_ms as u64));
+    }
+    for (name, value) in &headers_map {
+        request = request.header(name, value);
+    }
+    if !body_text.is_empty() {
+        request = request.body(body_text);
+    }
+
+    let response = request
+        .send()
+        .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)));
+    let status = i64::from(response.status().as_u16());
+    let ok = response.status().is_success();
+    let final_url = response.url().to_string();
+    let response_headers = response.headers().clone();
+    let response_bytes = response
+        .bytes()
+        .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)));
+
+    runtime_http_response(
+        status,
+        ok,
+        final_url,
+        &response_headers,
+        response_bytes.to_vec(),
+    )
+    .unwrap_or_else(|error| panic!("{}", http_error("send", &url_text, error)))
 }
 
 #[no_mangle]

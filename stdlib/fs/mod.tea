@@ -25,12 +25,27 @@ pub def read_file(file_path: String) -> String
   intrinsics.fs_read_text(file_path)
 end
 
+## Read a file as raw bytes.
+pub def read_bytes(file_path: String) -> List[Int]
+  intrinsics.fs_read_bytes(file_path)
+end
+
 ## Write text to a file.
 ##
 ## Examples:
 ##   fs.write_file("file.txt", "Hello, world!")
 pub def write_file(file_path: String, content: String) -> Void
   intrinsics.fs_write_text(file_path, content)
+end
+
+## Write raw bytes to a file.
+pub def write_bytes(file_path: String, data: List[Int]) -> Void
+  intrinsics.fs_write_bytes(file_path, data)
+end
+
+## Write raw bytes to a file atomically.
+pub def write_bytes_atomic(file_path: String, data: List[Int]) -> Void
+  intrinsics.fs_write_bytes_atomic(file_path, data)
 end
 
 ## Create a directory.

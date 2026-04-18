@@ -356,9 +356,24 @@
           "summary": "Read a text file."
         },
         {
+          "name": "read_bytes",
+          "signature_display": "pub def read_bytes(file_path: String) -> List[Int]",
+          "summary": "Read a file as raw bytes."
+        },
+        {
           "name": "write_file",
           "signature_display": "pub def write_file(file_path: String, content: String) -> Void",
           "summary": "Write text to a file."
+        },
+        {
+          "name": "write_bytes",
+          "signature_display": "pub def write_bytes(file_path: String, data: List[Int]) -> Void",
+          "summary": "Write raw bytes to a file."
+        },
+        {
+          "name": "write_bytes_atomic",
+          "signature_display": "pub def write_bytes_atomic(file_path: String, data: List[Int]) -> Void",
+          "summary": "Write raw bytes to a file atomically."
         },
         {
           "name": "create_dir",
@@ -434,6 +449,112 @@
           "name": "append_file",
           "signature_display": "pub def append_file(file_path: String, content: String) -> Void",
           "summary": "Append text to a file, creating it when it does not exist."
+        }
+      ]
+    },
+    {
+      "slug": "http",
+      "kind": "module",
+      "title": "std.http",
+      "eyebrow": "Standard Library",
+      "summary": "Blocking HTTP client helpers for tool-style scripts.",
+      "module_path": "std.http",
+      "source_path": "stdlib/http/mod.tea",
+      "functions": [
+        {
+          "name": "new_request",
+          "signature_display": "pub def new_request(method: String, url_text: String) -> Request",
+          "summary": "Create a request with empty headers/body and no timeout override."
+        },
+        {
+          "name": "new_request_with",
+          "signature_display": "pub def new_request_with(method: String, url_text: String, headers: Dict[String, String], body: String, timeout_ms: Int) -> Request",
+          "summary": "Create a request with explicit headers, body, and timeout."
+        },
+        {
+          "name": "with_query",
+          "signature_display": "pub def with_query(req: Request, params: Dict[String, String]) -> Request",
+          "summary": "Append query parameters to a request URL."
+        },
+        {
+          "name": "send",
+          "signature_display": "pub def send(req: Request) -> Response",
+          "summary": "Send an HTTP request synchronously."
+        },
+        {
+          "name": "get",
+          "signature_display": "pub def get(url_text: String) -> Response",
+          "summary": "Send a GET request."
+        },
+        {
+          "name": "get_with",
+          "signature_display": "pub def get_with(url_text: String, headers: Dict[String, String]) -> Response",
+          "summary": "Send a GET request with headers."
+        },
+        {
+          "name": "post",
+          "signature_display": "pub def post(url_text: String, body: String) -> Response",
+          "summary": "Send a POST request with a text body."
+        },
+        {
+          "name": "post_with",
+          "signature_display": "pub def post_with(url_text: String, headers: Dict[String, String], body: String) -> Response",
+          "summary": "Send a POST request with headers and a text body."
+        },
+        {
+          "name": "put",
+          "signature_display": "pub def put(url_text: String, body: String) -> Response",
+          "summary": "Send a PUT request with a text body."
+        },
+        {
+          "name": "patch",
+          "signature_display": "pub def patch(url_text: String, body: String) -> Response",
+          "summary": "Send a PATCH request with a text body."
+        },
+        {
+          "name": "delete",
+          "signature_display": "pub def delete(url_text: String) -> Response",
+          "summary": "Send a DELETE request."
+        },
+        {
+          "name": "post_json",
+          "signature_display": "pub def post_json[T](url_text: String, value: T) -> Response",
+          "summary": "Send a JSON POST request."
+        },
+        {
+          "name": "decode_json",
+          "signature_display": "pub def decode_json[T](response: Response) -> T",
+          "summary": "Decode a JSON response body."
+        },
+        {
+          "name": "header",
+          "signature_display": "pub def header(response: Response, name: String) -> String?",
+          "summary": "Return a response header by name when present."
+        },
+        {
+          "name": "header_or",
+          "signature_display": "pub def header_or(response: Response, name: String, fallback: String) -> String",
+          "summary": "Return a response header by name or a fallback value."
+        },
+        {
+          "name": "body_text",
+          "signature_display": "pub def body_text(response: Response) -> String",
+          "summary": "Return the text body of a response."
+        },
+        {
+          "name": "body_bytes",
+          "signature_display": "pub def body_bytes(response: Response) -> List[Int]",
+          "summary": "Return the raw body bytes of a response."
+        },
+        {
+          "name": "check",
+          "signature_display": "pub def check(response: Response) -> Response",
+          "summary": "Fail when the response status is not successful."
+        },
+        {
+          "name": "download",
+          "signature_display": "pub def download(url_text: String, file_path: String) -> Response",
+          "summary": "Download a URL to a file path and return the response."
         }
       ]
     },
@@ -875,6 +996,42 @@
           "name": "pad_end",
           "signature_display": "pub def pad_end(text: String, width: Int) -> String",
           "summary": "Pad a string on the right with spaces until it reaches width."
+        }
+      ]
+    },
+    {
+      "slug": "url",
+      "kind": "module",
+      "title": "std.url",
+      "eyebrow": "Standard Library",
+      "summary": "URL encoding and composition helpers for building HTTP requests.",
+      "module_path": "std.url",
+      "source_path": "stdlib/url/mod.tea",
+      "functions": [
+        {
+          "name": "encode_component",
+          "signature_display": "pub def encode_component(text: String) -> String",
+          "summary": "Percent-encode a single URL component."
+        },
+        {
+          "name": "decode_component",
+          "signature_display": "pub def decode_component(text: String) -> String",
+          "summary": "Decode a percent-encoded URL component."
+        },
+        {
+          "name": "build_query",
+          "signature_display": "pub def build_query(params: Dict[String, String]) -> String",
+          "summary": "Encode query parameters without a leading \"?\"."
+        },
+        {
+          "name": "append_query",
+          "signature_display": "pub def append_query(base_url: String, params: Dict[String, String]) -> String",
+          "summary": "Append query parameters to an absolute URL."
+        },
+        {
+          "name": "join",
+          "signature_display": "pub def join(base_url: String, path: String) -> String",
+          "summary": "Resolve a relative path or URL against an absolute base URL."
         }
       ]
     }

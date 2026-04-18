@@ -437,6 +437,11 @@ struct LlvmCodeGenerator<'ctx> {
     path_relative_fn: Option<FunctionValue<'ctx>>,
     path_is_absolute_fn: Option<FunctionValue<'ctx>>,
     path_separator_fn: Option<FunctionValue<'ctx>>,
+    url_encode_component_fn: Option<FunctionValue<'ctx>>,
+    url_decode_component_fn: Option<FunctionValue<'ctx>>,
+    url_build_query_fn: Option<FunctionValue<'ctx>>,
+    url_append_query_fn: Option<FunctionValue<'ctx>>,
+    url_join_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
     args_program_fn: Option<FunctionValue<'ctx>>,
     string_index_of_fn: Option<FunctionValue<'ctx>>,
@@ -577,6 +582,7 @@ struct LlvmCodeGenerator<'ctx> {
     io_flush_fn: Option<FunctionValue<'ctx>>,
     json_encode_fn: Option<FunctionValue<'ctx>>,
     json_decode_fn: Option<FunctionValue<'ctx>>,
+    http_send_fn: Option<FunctionValue<'ctx>>,
     error_mode_stack: Vec<ErrorHandlingMode>,
     function_return_stack: Vec<ValueType>,
     function_can_throw_stack: Vec<bool>,
@@ -1163,6 +1169,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             path_relative_fn: None,
             path_is_absolute_fn: None,
             path_separator_fn: None,
+            url_encode_component_fn: None,
+            url_decode_component_fn: None,
+            url_build_query_fn: None,
+            url_append_query_fn: None,
+            url_join_fn: None,
             cli_args_fn: None,
             args_program_fn: None,
             string_index_of_fn: None,
@@ -1299,6 +1310,7 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             io_flush_fn: None,
             json_encode_fn: None,
             json_decode_fn: None,
+            http_send_fn: None,
             error_current_fn: None,
             error_set_current_fn: None,
             error_clear_current_fn: None,
@@ -5871,7 +5883,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                     let index_value = key_expr.into_int()?;
                     let list_get_fn = self.ensure_list_get();
                     let tea_value = self
-                        .call_function(list_get_fn, &[pointer.into(), index_value.into()], "list_get")?
+                        .call_function(
+                            list_get_fn,
+                            &[pointer.into(), index_value.into()],
+                            "list_get",
+                        )?
                         .try_as_basic_value()
                         .left()
                         .ok_or_else(|| anyhow!("expected TeaValue from list_get"))?
@@ -7782,11 +7798,35 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
                 self.compile_path_is_absolute_call(&call.arguments, function, locals)
             }
             StdFunctionKind::PathSeparator => self.compile_path_separator_call(&call.arguments),
+            StdFunctionKind::UrlEncodeComponent => {
+                self.compile_url_encode_component_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::UrlDecodeComponent => {
+                self.compile_url_decode_component_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::UrlBuildQuery => {
+                self.compile_url_build_query_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::UrlAppendQuery => {
+                self.compile_url_append_query_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::UrlJoin => {
+                self.compile_url_join_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsReadBytes => {
+                self.compile_fs_read_bytes_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsWriteText => {
                 self.compile_fs_write_text_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsWriteBytes => {
+                self.compile_fs_write_bytes_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsWriteBytesAtomic => {
+                self.compile_fs_write_bytes_atomic_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
@@ -7871,6 +7911,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             }
             StdFunctionKind::JsonDecode => {
                 self.compile_json_decode_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::HttpSend => {
+                self.compile_http_send_call(&call.arguments, function, locals)
             }
         }
     }
@@ -9204,6 +9247,118 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
+    compile_string_to_string_call!(
+        compile_url_encode_component_call,
+        ensure_url_encode_component_fn,
+        "tea_url_encode_component",
+        "url.encode_component"
+    );
+    compile_string_to_string_call!(
+        compile_url_decode_component_call,
+        ensure_url_decode_component_fn,
+        "tea_url_decode_component",
+        "url.decode_component"
+    );
+
+    fn compile_url_build_query_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("url.build_query expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for url.build_query");
+        }
+        let params_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let params_value =
+            self.convert_expr_to_type(params_expr, &ValueType::Dict(Box::new(ValueType::String)))?;
+        let params_ptr = match params_value {
+            ExprValue::Dict { pointer, .. } => pointer,
+            _ => bail!("url.build_query expects a Dict[String, String] argument"),
+        };
+        let func = self.ensure_url_build_query_fn();
+        let pointer = self
+            .call_function(func, &[params_ptr.into()], "tea_url_build_query")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_url_build_query returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_url_append_query_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("url.append_query expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for url.append_query");
+            }
+        }
+        let base_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let base_ptr = self.expect_string_pointer(
+            base_expr,
+            "url.append_query expects the base URL argument to be a String",
+        )?;
+        let params_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let params_value =
+            self.convert_expr_to_type(params_expr, &ValueType::Dict(Box::new(ValueType::String)))?;
+        let params_ptr = match params_value {
+            ExprValue::Dict { pointer, .. } => pointer,
+            _ => bail!("url.append_query expects a Dict[String, String] argument"),
+        };
+        let func = self.ensure_url_append_query_fn();
+        let pointer = self
+            .call_function(
+                func,
+                &[base_ptr.into(), params_ptr.into()],
+                "tea_url_append_query",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_url_append_query returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_url_join_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("url.join expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for url.join");
+            }
+        }
+        let base_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let base_ptr =
+            self.expect_string_pointer(base_expr, "url.join expects the base URL to be a String")?;
+        let next_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let next_ptr =
+            self.expect_string_pointer(next_expr, "url.join expects the path to be a String")?;
+        let func = self.ensure_url_join_fn();
+        let pointer = self
+            .call_function(func, &[base_ptr.into(), next_ptr.into()], "tea_url_join")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_url_join returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
     fn compile_io_read_bytes_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -9736,6 +9891,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
+    fn compile_fs_read_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("read_bytes expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for read_bytes");
+        }
+        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let path_ptr = self.expect_string_pointer(
+            path_expr,
+            "read_bytes expects the path argument to be a String",
+        )?;
+        let func = self.ensure_fs_read_bytes_fn();
+        let pointer = self
+            .call_function(func, &[path_ptr.into()], "tea_fs_read_bytes")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_fs_read_bytes returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::Int),
+        })
+    }
+
     fn compile_fs_write_text_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -9765,6 +9950,76 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             func,
             &[path_ptr.into(), contents_ptr.into()],
             "tea_fs_write_text",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_fs_write_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("write_bytes expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for write_bytes");
+            }
+        }
+        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let path_ptr = self.expect_string_pointer(
+            path_expr,
+            "write_bytes expects the path argument to be a String",
+        )?;
+        let data_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let data_value =
+            self.convert_expr_to_type(data_expr, &ValueType::List(Box::new(ValueType::Int)))?;
+        let data_ptr = match data_value {
+            ExprValue::List { pointer, .. } => pointer,
+            _ => bail!("write_bytes expects the data argument to be a List[Int]"),
+        };
+        let func = self.ensure_fs_write_bytes_fn();
+        self.call_function(
+            func,
+            &[path_ptr.into(), data_ptr.into()],
+            "tea_fs_write_bytes",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_fs_write_bytes_atomic_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("write_bytes_atomic expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for write_bytes_atomic");
+            }
+        }
+        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let path_ptr = self.expect_string_pointer(
+            path_expr,
+            "write_bytes_atomic expects the path argument to be a String",
+        )?;
+        let data_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let data_value =
+            self.convert_expr_to_type(data_expr, &ValueType::List(Box::new(ValueType::Int)))?;
+        let data_ptr = match data_value {
+            ExprValue::List { pointer, .. } => pointer,
+            _ => bail!("write_bytes_atomic expects the data argument to be a List[Int]"),
+        };
+        let func = self.ensure_fs_write_bytes_atomic_fn();
+        self.call_function(
+            func,
+            &[path_ptr.into(), data_ptr.into()],
+            "tea_fs_write_bytes_atomic",
         )?;
         Ok(ExprValue::Void)
     }
@@ -11078,7 +11333,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         function: FunctionValue<'ctx>,
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        let needle_expr = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let needle_expr =
+            self.compile_expression(&call.arguments[0].expression, function, locals)?;
         let needle = self.convert_expr_to_type(needle_expr, &element_type)?;
 
         let list_len_fn = self.ensure_list_len_ffi_fn();
@@ -11095,7 +11351,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let i32_type = self.context.i32_type();
         let result_alloca =
             map_builder_error(self.builder.build_alloca(i32_type, "list_contains_result"))?;
-        map_builder_error(self.builder.build_store(result_alloca, i32_type.const_zero()))?;
+        map_builder_error(
+            self.builder
+                .build_store(result_alloca, i32_type.const_zero()),
+        )?;
 
         let current_block = self
             .builder
@@ -11104,7 +11363,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let cond_block = self.context.append_basic_block(function, "contains_cond");
         let body_block = self.context.append_basic_block(function, "contains_body");
         let found_block = self.context.append_basic_block(function, "contains_found");
-        let continue_block = self.context.append_basic_block(function, "contains_continue");
+        let continue_block = self
+            .context
+            .append_basic_block(function, "contains_continue");
         let exit_block = self.context.append_basic_block(function, "contains_exit");
 
         map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
@@ -11151,10 +11412,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         ))?;
 
         self.builder.position_at_end(found_block);
-        map_builder_error(self.builder.build_store(
-            result_alloca,
-            i32_type.const_int(1, false),
-        ))?;
+        map_builder_error(
+            self.builder
+                .build_store(result_alloca, i32_type.const_int(1, false)),
+        )?;
         map_builder_error(self.builder.build_unconditional_branch(exit_block))?;
 
         self.builder.position_at_end(continue_block);
@@ -11186,7 +11447,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         function: FunctionValue<'ctx>,
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        let needle_expr = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let needle_expr =
+            self.compile_expression(&call.arguments[0].expression, function, locals)?;
         let needle = self.convert_expr_to_type(needle_expr, &element_type)?;
 
         let list_len_fn = self.ensure_list_len_ffi_fn();
@@ -11203,10 +11465,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let i64_type = self.context.i64_type();
         let result_alloca =
             map_builder_error(self.builder.build_alloca(i64_type, "list_index_of_result"))?;
-        map_builder_error(self.builder.build_store(
-            result_alloca,
-            i64_type.const_all_ones(),
-        ))?;
+        map_builder_error(
+            self.builder
+                .build_store(result_alloca, i64_type.const_all_ones()),
+        )?;
 
         let current_block = self
             .builder
@@ -11215,7 +11477,9 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         let cond_block = self.context.append_basic_block(function, "index_of_cond");
         let body_block = self.context.append_basic_block(function, "index_of_body");
         let found_block = self.context.append_basic_block(function, "index_of_found");
-        let continue_block = self.context.append_basic_block(function, "index_of_continue");
+        let continue_block = self
+            .context
+            .append_basic_block(function, "index_of_continue");
         let exit_block = self.context.append_basic_block(function, "index_of_exit");
 
         map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
@@ -11316,12 +11580,14 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         .into_int_value();
 
         let i64_type = self.context.i64_type();
-        let result_alloca =
-            map_builder_error(self.builder.build_alloca(i64_type, "list_find_index_result"))?;
-        map_builder_error(self.builder.build_store(
-            result_alloca,
-            i64_type.const_all_ones(),
-        ))?;
+        let result_alloca = map_builder_error(
+            self.builder
+                .build_alloca(i64_type, "list_find_index_result"),
+        )?;
+        map_builder_error(
+            self.builder
+                .build_store(result_alloca, i64_type.const_all_ones()),
+        )?;
 
         let current_block = self
             .builder
@@ -11329,8 +11595,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .ok_or_else(|| anyhow!("missing insertion block"))?;
         let cond_block = self.context.append_basic_block(function, "find_index_cond");
         let body_block = self.context.append_basic_block(function, "find_index_body");
-        let found_block = self.context.append_basic_block(function, "find_index_found");
-        let continue_block = self.context.append_basic_block(function, "find_index_continue");
+        let found_block = self
+            .context
+            .append_basic_block(function, "find_index_found");
+        let continue_block = self
+            .context
+            .append_basic_block(function, "find_index_continue");
         let exit_block = self.context.append_basic_block(function, "find_index_exit");
 
         map_builder_error(self.builder.build_unconditional_branch(cond_block))?;
@@ -11439,7 +11709,8 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
         take: bool,
     ) -> Result<ExprValue<'ctx>> {
-        let count_expr = self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let count_expr =
+            self.compile_expression(&call.arguments[0].expression, function, locals)?;
         let count_value = self.convert_expr_to_type(count_expr, &ValueType::Int)?;
         let count = count_value.into_int()?;
 
@@ -11462,10 +11733,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             zero,
             "list_slice_negative",
         ))?;
-        let non_negative = map_builder_error(
-            self.builder
-                .build_select(is_negative, zero, count, "list_slice_non_negative"),
-        )?
+        let non_negative = map_builder_error(self.builder.build_select(
+            is_negative,
+            zero,
+            count,
+            "list_slice_non_negative",
+        ))?
         .into_int_value();
         let is_too_large = map_builder_error(self.builder.build_int_compare(
             IntPredicate::SGT,
@@ -11473,10 +11746,12 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             length,
             "list_slice_too_large",
         ))?;
-        let clamped = map_builder_error(
-            self.builder
-                .build_select(is_too_large, length, non_negative, "list_slice_clamped"),
-        )?
+        let clamped = map_builder_error(self.builder.build_select(
+            is_too_large,
+            length,
+            non_negative,
+            "list_slice_clamped",
+        ))?
         .into_int_value();
 
         let start = if take { zero } else { clamped };
@@ -11992,15 +12267,24 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             "dict_has_value",
         ))?;
 
-        let result_alloca =
-            self.create_entry_alloca(function, "dict_get_or_result", self.basic_type(&value_type)?)?;
+        let result_alloca = self.create_entry_alloca(
+            function,
+            "dict_get_or_result",
+            self.basic_type(&value_type)?,
+        )?;
         let current_block = self
             .builder
             .get_insert_block()
             .ok_or_else(|| anyhow!("missing insertion block"))?;
-        let found_block = self.context.append_basic_block(function, "dict_get_or_found");
-        let fallback_block = self.context.append_basic_block(function, "dict_get_or_fallback");
-        let merge_block = self.context.append_basic_block(function, "dict_get_or_merge");
+        let found_block = self
+            .context
+            .append_basic_block(function, "dict_get_or_found");
+        let fallback_block = self
+            .context
+            .append_basic_block(function, "dict_get_or_fallback");
+        let merge_block = self
+            .context
+            .append_basic_block(function, "dict_get_or_merge");
 
         map_builder_error(self.builder.build_conditional_branch(
             has_value,
@@ -12043,8 +12327,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         function: FunctionValue<'ctx>,
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
-        let other_expr = self.compile_expression(&call.arguments[0].expression, function, locals)?;
-        let other_dict = self.convert_expr_to_type(other_expr, &ValueType::Dict(value_type.clone()))?;
+        let other_expr =
+            self.compile_expression(&call.arguments[0].expression, function, locals)?;
+        let other_dict =
+            self.convert_expr_to_type(other_expr, &ValueType::Dict(value_type.clone()))?;
         let other_ptr = match other_dict {
             ExprValue::Dict { pointer, .. } => pointer,
             _ => bail!("Dict.merge expects another Dict"),
@@ -12133,7 +12419,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         let dict_get_fn = self.ensure_dict_get();
         let value = self
-            .call_function(dict_get_fn, &[source_dict.into(), key_ptr.into()], "dict_get")?
+            .call_function(
+                dict_get_fn,
+                &[source_dict.into(), key_ptr.into()],
+                "dict_get",
+            )?
             .try_as_basic_value()
             .left()
             .ok_or_else(|| anyhow!("expected TeaValue from dict_get"))?
@@ -13135,6 +13425,69 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
 
         // Return the TeaValue as an Any type - the actual type is determined at runtime
         Ok(ExprValue::Any { value: tea_value })
+    }
+
+    fn compile_http_send_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 5 {
+            bail!("http.send expects exactly 5 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for http.send");
+            }
+        }
+
+        let method_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let method_ptr = self.expect_string_pointer(
+            method_expr,
+            "http.send expects the method argument to be a String",
+        )?;
+        let url_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let url_ptr = self.expect_string_pointer(
+            url_expr,
+            "http.send expects the URL argument to be a String",
+        )?;
+        let headers_expr = self.compile_expression(&arguments[2].expression, function, locals)?;
+        let headers_value =
+            self.convert_expr_to_type(headers_expr, &ValueType::Dict(Box::new(ValueType::String)))?;
+        let headers_ptr = match headers_value {
+            ExprValue::Dict { pointer, .. } => pointer,
+            _ => bail!("http.send expects the headers argument to be a Dict[String, String]"),
+        };
+        let body_expr = self.compile_expression(&arguments[3].expression, function, locals)?;
+        let body_ptr = self.expect_string_pointer(
+            body_expr,
+            "http.send expects the body argument to be a String",
+        )?;
+        let timeout_expr = self.compile_expression(&arguments[4].expression, function, locals)?;
+        let timeout_value = self.expect_int_value(
+            timeout_expr,
+            "http.send expects the timeout argument to be an Int",
+        )?;
+
+        let func = self.ensure_http_send_fn();
+        let value = self
+            .call_function(
+                func,
+                &[
+                    method_ptr.into(),
+                    url_ptr.into(),
+                    headers_ptr.into(),
+                    body_ptr.into(),
+                    timeout_value.into(),
+                ],
+                "tea_http_send",
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_http_send returned no value"))?
+            .into_struct_value();
+        self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::Any)))
     }
 
     fn compile_read_line_call(&mut self) -> Result<ExprValue<'ctx>> {
@@ -15671,6 +16024,46 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    // URL functions
+    define_ffi_string_transform_fn!(
+        ensure_url_encode_component_fn,
+        url_encode_component_fn,
+        "tea_url_encode_component"
+    );
+    define_ffi_string_transform_fn!(
+        ensure_url_decode_component_fn,
+        url_decode_component_fn,
+        "tea_url_decode_component"
+    );
+    define_ffi_string2_fn!(ensure_url_join_fn, url_join_fn, "tea_url_join");
+
+    fn ensure_url_build_query_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.url_build_query_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.dict_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_url_build_query", fn_type, Some(Linkage::External));
+        self.url_build_query_fn = Some(func);
+        func
+    }
+
+    fn ensure_url_append_query_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.url_append_query_fn {
+            return func;
+        }
+        let param_types = [self.string_ptr_type().into(), self.dict_ptr_type().into()];
+        let fn_type = self.string_ptr_type().fn_type(&param_types, false);
+        let func =
+            self.module
+                .add_function("tea_url_append_query", fn_type, Some(Linkage::External));
+        self.url_append_query_fn = Some(func);
+        func
+    }
+
     // Filesystem functions
     define_ffi_string_transform_fn!(ensure_fs_read_text_fn, fs_read_text_fn, "tea_fs_read_text");
     define_ffi_string_to_list_fn!(
@@ -17329,6 +17722,25 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_json_decode", fn_type, Some(Linkage::External));
         self.json_decode_fn = Some(func);
+        func
+    }
+
+    fn ensure_http_send_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.http_send_fn {
+            return func;
+        }
+        let param_types = [
+            self.string_ptr_type().into(),
+            self.string_ptr_type().into(),
+            self.dict_ptr_type().into(),
+            self.string_ptr_type().into(),
+            self.int_type().into(),
+        ];
+        let fn_type = self.value_type().fn_type(&param_types, false);
+        let func = self
+            .module
+            .add_function("tea_http_send", fn_type, Some(Linkage::External));
+        self.http_send_fn = Some(func);
         func
     }
 }

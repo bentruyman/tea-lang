@@ -3213,6 +3213,9 @@ impl TypeChecker {
             StdFunctionKind::PathComponents => {
                 return_type = Type::List(Box::new(Type::String));
             }
+            StdFunctionKind::FsReadBytes => {
+                return_type = Type::List(Box::new(Type::Int));
+            }
             StdFunctionKind::FsListDir | StdFunctionKind::FsWalk | StdFunctionKind::FsGlob => {
                 return_type = Type::List(Box::new(Type::String));
             }
@@ -4144,17 +4147,8 @@ impl TypeChecker {
             Type::List(ref _element_type) => {
                 // List methods.
                 match member.property.as_str() {
-                    "map"
-                    | "filter"
-                    | "reduce"
-                    | "find"
-                    | "any"
-                    | "all"
-                    | "contains"
-                    | "index_of"
-                    | "find_index"
-                    | "take"
-                    | "skip" => {
+                    "map" | "filter" | "reduce" | "find" | "any" | "all" | "contains"
+                    | "index_of" | "find_index" | "take" | "skip" => {
                         // Return Type::Unknown as a marker - actual type resolution happens in type_from_call
                         Type::Unknown
                     }

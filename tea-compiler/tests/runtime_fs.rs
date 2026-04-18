@@ -104,3 +104,47 @@ fs.read_file("{path}")
 
     Ok(())
 }
+
+#[test]
+fn fs_bytes_roundtrip_through_runtime() -> anyhow::Result<()> {
+    let dir_path = unique_temp_dir();
+    let file_path = dir_path.join("sample.bin");
+    let atomic_path = dir_path.join("sample-atomic.bin");
+
+    let dir_str = dir_path.to_string_lossy();
+    let file_str = file_path.to_string_lossy();
+    let atomic_str = atomic_path.to_string_lossy();
+
+    let source = format!(
+        r#"
+use assert from "std.assert"
+use fs from "std.fs"
+
+fs.mkdir_p("{dir}")
+fs.write_bytes("{file}", [0, 1, 2, 255])
+fs.write_bytes_atomic("{atomic}", [5, 4, 3, 2, 1])
+
+var first = fs.read_bytes("{file}")
+var second = fs.read_bytes("{atomic}")
+
+assert.eq(@len(first), 4)
+assert.eq(first[0], 0)
+assert.eq(first[3], 255)
+assert.eq(@len(second), 5)
+assert.eq(second[0], 5)
+assert.eq(second[4], 1)
+
+fs.remove("{file}")
+fs.remove("{atomic}")
+fs.remove("{dir}")
+@println("ok")
+"#,
+        dir = dir_str,
+        file = file_str,
+        atomic = atomic_str,
+    );
+
+    let stdout = support::run_script(&source, "fs-bytes.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
+    Ok(())
+}

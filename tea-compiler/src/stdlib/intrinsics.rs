@@ -205,10 +205,31 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::String,
     ),
     std_function(
+        "fs_read_bytes",
+        StdFunctionKind::FsReadBytes,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::List,
+    ),
+    std_function(
         "fs_write_text",
         StdFunctionKind::FsWriteText,
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_write_bytes",
+        StdFunctionKind::FsWriteBytes,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::List],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_write_bytes_atomic",
+        StdFunctionKind::FsWriteBytesAtomic,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::List],
         StdType::Void,
     ),
     std_function(
@@ -356,6 +377,42 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::PathSeparator,
         StdArity::Exact(0),
         &[],
+        StdType::String,
+    ),
+    // URL
+    std_function(
+        "url_encode_component",
+        StdFunctionKind::UrlEncodeComponent,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "url_decode_component",
+        StdFunctionKind::UrlDecodeComponent,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "url_build_query",
+        StdFunctionKind::UrlBuildQuery,
+        StdArity::Exact(1),
+        &[StdType::Dict],
+        StdType::String,
+    ),
+    std_function(
+        "url_append_query",
+        StdFunctionKind::UrlAppendQuery,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::Dict],
+        StdType::String,
+    ),
+    std_function(
+        "url_join",
+        StdFunctionKind::UrlJoin,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
         StdType::String,
     ),
     // Process execution
@@ -534,6 +591,20 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(1),
         &[StdType::String],
         StdType::Any,
+    ),
+    // HTTP
+    std_function(
+        "http_send",
+        StdFunctionKind::HttpSend,
+        StdArity::Exact(5),
+        &[
+            StdType::String,
+            StdType::String,
+            StdType::Dict,
+            StdType::String,
+            StdType::Int,
+        ],
+        StdType::Dict,
     ),
 ];
 

@@ -50,9 +50,9 @@ fn browser_stdlib_path(module_path: &str) -> Option<PathBuf> {
 fn embedded_source_stdlib_path(module_path: &str) -> Option<PathBuf> {
     let module_name = module_path.strip_prefix("std.")?;
     match module_name {
-        "args" | "env" | "fs" | "path" | "process" | "regex" | "string" => Some(PathBuf::from(
-            format!("/__tea_stdlib/{module_name}/mod.tea"),
-        )),
+        "args" | "env" | "fs" | "parse" | "path" | "process" | "regex" | "string" => {
+            Some(PathBuf::from(format!("/__tea_stdlib/{module_name}/mod.tea")))
+        }
         _ => None,
     }
 }
@@ -62,6 +62,7 @@ fn embedded_source_stdlib_contents(path: &Path) -> Option<&'static str> {
         "/__tea_stdlib/args/mod.tea" => Some(include_str!("../../stdlib/args/mod.tea")),
         "/__tea_stdlib/env/mod.tea" => Some(include_str!("../../stdlib/env/mod.tea")),
         "/__tea_stdlib/fs/mod.tea" => Some(include_str!("../../stdlib/fs/mod.tea")),
+        "/__tea_stdlib/parse/mod.tea" => Some(include_str!("../../stdlib/parse/mod.tea")),
         "/__tea_stdlib/path/mod.tea" => Some(include_str!("../../stdlib/path/mod.tea")),
         "/__tea_stdlib/process/mod.tea" => Some(include_str!("../../stdlib/process/mod.tea")),
         "/__tea_stdlib/regex/mod.tea" => Some(include_str!("../../stdlib/regex/mod.tea")),

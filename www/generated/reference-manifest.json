@@ -148,19 +148,94 @@
           "summary": "Parse an explicit argv list using a declarative command spec."
         },
         {
+          "name": "require",
+          "signature_display": "pub def require(parsed: CliParseResult) -> CliParseResult ! ArgsError.Usage",
+          "summary": "Require a parsed CLI result to be successful."
+        },
+        {
           "name": "has",
-          "signature_display": "pub def has(flag: String) -> Bool",
+          "signature_display": "pub def has(flag_name: String) -> Bool",
           "summary": "Check if a flag is present in the arguments."
         },
         {
           "name": "get",
-          "signature_display": "pub def get(option: String) -> String?",
+          "signature_display": "pub def get(option_name: String) -> String?",
           "summary": "Get the value of an option argument."
         },
         {
           "name": "positional",
           "signature_display": "pub def positional() -> List[String]",
           "summary": "Return positional arguments (arguments that are not flags or option values)."
+        },
+        {
+          "name": "option_string",
+          "signature_display": "pub def option_string(parsed: CliParseResult, name: String) -> String?",
+          "summary": "Return an optional parsed string option value by name."
+        },
+        {
+          "name": "option_int",
+          "signature_display": "pub def option_int(parsed: CliParseResult, name: String) -> Int?",
+          "summary": "Return an optional parsed integer option value by name."
+        },
+        {
+          "name": "option_bool",
+          "signature_display": "pub def option_bool(parsed: CliParseResult, name: String) -> Bool?",
+          "summary": "Return an optional parsed boolean option value by name."
+        },
+        {
+          "name": "flag",
+          "signature_display": "pub def flag(parsed: CliParseResult, name: String) -> Bool",
+          "summary": "Return true when a parsed command result contains a specific flag option."
+        },
+        {
+          "name": "option_string_or",
+          "signature_display": "pub def option_string_or(parsed: CliParseResult, name: String, fallback: String) -> String",
+          "summary": "Return a string option value or a fallback."
+        },
+        {
+          "name": "option_int_or",
+          "signature_display": "pub def option_int_or(parsed: CliParseResult, name: String, fallback: Int) -> Int",
+          "summary": "Return an integer option value or a fallback."
+        },
+        {
+          "name": "require_option_string",
+          "signature_display": "pub def require_option_string(parsed: CliParseResult, name: String) -> String ! ArgsError.MissingOption",
+          "summary": "Return a string option value or throw when it is missing."
+        },
+        {
+          "name": "require_option_int",
+          "signature_display": "pub def require_option_int(parsed: CliParseResult, name: String) -> Int ! ArgsError.MissingOption",
+          "summary": "Return an integer option value or throw when it is missing."
+        },
+        {
+          "name": "positional_value",
+          "signature_display": "pub def positional_value(parsed: CliParseResult, name: String) -> String?",
+          "summary": "Return an optional positional value by name."
+        },
+        {
+          "name": "positional_or",
+          "signature_display": "pub def positional_or(parsed: CliParseResult, name: String, fallback: String) -> String",
+          "summary": "Return a positional value or a fallback."
+        },
+        {
+          "name": "require_positional",
+          "signature_display": "pub def require_positional(parsed: CliParseResult, name: String) -> String ! ArgsError.MissingPositional",
+          "summary": "Return a positional value or throw when it is missing."
+        },
+        {
+          "name": "subcommand",
+          "signature_display": "pub def subcommand(parsed: CliParseResult) -> String?",
+          "summary": "Return the selected subcommand when one was provided."
+        },
+        {
+          "name": "require_subcommand",
+          "signature_display": "pub def require_subcommand(parsed: CliParseResult) -> String ! ArgsError.MissingCommand",
+          "summary": "Return the selected subcommand or throw when no subcommand was chosen."
+        },
+        {
+          "name": "command_is",
+          "signature_display": "pub def command_is(parsed: CliParseResult, name: String) -> Bool",
+          "summary": "Return true when the current parsed command matches a given command name."
         }
       ]
     },
@@ -390,6 +465,52 @@
           "name": "write_file",
           "signature_display": "pub def write_file[T](file_path: String, value: T) -> Void",
           "summary": "Encode a value as JSON and write it to a file."
+        }
+      ]
+    },
+    {
+      "slug": "parse",
+      "kind": "module",
+      "title": "std.parse",
+      "eyebrow": "Standard Library",
+      "summary": "Parsing helpers for turning text into typed Tea values.",
+      "module_path": "std.parse",
+      "source_path": "stdlib/parse/mod.tea",
+      "functions": [
+        {
+          "name": "try_int",
+          "signature_display": "pub def try_int(text: String) -> Int ! ParseError",
+          "summary": "Parse an integer from text."
+        },
+        {
+          "name": "int",
+          "signature_display": "pub def int(text: String) -> Int",
+          "summary": "Parse an integer from text and panic on invalid input."
+        },
+        {
+          "name": "try_float",
+          "signature_display": "pub def try_float(text: String) -> Float ! ParseError",
+          "summary": "Parse a floating-point number from text."
+        },
+        {
+          "name": "float",
+          "signature_display": "pub def float(text: String) -> Float",
+          "summary": "Parse a floating-point number from text and panic on invalid input."
+        },
+        {
+          "name": "try_bool",
+          "signature_display": "pub def try_bool(text: String) -> Bool ! ParseError",
+          "summary": "Parse a boolean from text."
+        },
+        {
+          "name": "bool",
+          "signature_display": "pub def bool(text: String) -> Bool",
+          "summary": "Parse a boolean from text and panic on invalid input."
+        },
+        {
+          "name": "words",
+          "signature_display": "pub def words(text: String) -> List[String]",
+          "summary": "Split text into non-empty whitespace-delimited tokens."
         }
       ]
     },
@@ -641,6 +762,11 @@
           "summary": "Split a string by a delimiter."
         },
         {
+          "name": "last_index_of",
+          "signature_display": "pub def last_index_of(text: String, pattern: String) -> Int",
+          "summary": "Find the last occurrence of a substring."
+        },
+        {
           "name": "starts_with",
           "signature_display": "pub def starts_with(text: String, prefix: String) -> Bool",
           "summary": "Check if a string starts with a given prefix."
@@ -676,6 +802,11 @@
           "summary": "Replace all occurrences of a substring with another string."
         },
         {
+          "name": "replace_once",
+          "signature_display": "pub def replace_once(text: String, pattern: String, replacement: String) -> String",
+          "summary": "Replace the first occurrence of a substring with another string."
+        },
+        {
           "name": "to_lower",
           "signature_display": "pub def to_lower(text: String) -> String",
           "summary": "Convert a string to lowercase."
@@ -696,9 +827,54 @@
           "summary": "Split text into lines, trimming a trailing \"\\r\" from each line and dropping the final empty line produced by a trailing newline."
         },
         {
+          "name": "split_once",
+          "signature_display": "pub def split_once(text: String, delimiter: String) -> List[String]?",
+          "summary": "Split a string into two parts at the first occurrence of a delimiter."
+        },
+        {
+          "name": "rsplit_once",
+          "signature_display": "pub def rsplit_once(text: String, delimiter: String) -> List[String]?",
+          "summary": "Split a string into two parts at the last occurrence of a delimiter."
+        },
+        {
+          "name": "count",
+          "signature_display": "pub def count(text: String, pattern: String) -> Int",
+          "summary": "Count non-overlapping occurrences of a substring."
+        },
+        {
+          "name": "strip_prefix",
+          "signature_display": "pub def strip_prefix(text: String, prefix: String) -> String?",
+          "summary": "Remove a prefix when present."
+        },
+        {
+          "name": "strip_suffix",
+          "signature_display": "pub def strip_suffix(text: String, suffix: String) -> String?",
+          "summary": "Remove a suffix when present."
+        },
+        {
           "name": "repeat",
-          "signature_display": "pub def repeat(text: String, count: Int) -> String",
+          "signature_display": "pub def repeat(text: String, times: Int) -> String",
           "summary": "Repeat a string count times."
+        },
+        {
+          "name": "pad_start_with",
+          "signature_display": "pub def pad_start_with(text: String, width: Int, fill: String) -> String",
+          "summary": "Pad a string on the left with a fill string until it reaches width."
+        },
+        {
+          "name": "pad_start",
+          "signature_display": "pub def pad_start(text: String, width: Int) -> String",
+          "summary": "Pad a string on the left with spaces until it reaches width."
+        },
+        {
+          "name": "pad_end_with",
+          "signature_display": "pub def pad_end_with(text: String, width: Int, fill: String) -> String",
+          "summary": "Pad a string on the right with a fill string until it reaches width."
+        },
+        {
+          "name": "pad_end",
+          "signature_display": "pub def pad_end(text: String, width: Int) -> String",
+          "summary": "Pad a string on the right with spaces until it reaches width."
         }
       ]
     }

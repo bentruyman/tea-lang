@@ -3998,9 +3998,9 @@ impl TypeChecker {
         let object_type = self.infer_expression(&member.object);
         match object_type {
             Type::Dict(ref value_type) => {
-                // Check for Dict methods: keys, values, entries
+                // Check for Dict methods.
                 match member.property.as_str() {
-                    "keys" | "values" | "entries" => {
+                    "keys" | "values" | "entries" | "items" | "has" | "get_or" | "merge" => {
                         // Return Type::Unknown as a marker - actual type resolution happens in type_from_call
                         Type::Unknown
                     }
@@ -4142,16 +4142,26 @@ impl TypeChecker {
                 }
             }
             Type::List(ref _element_type) => {
-                // List methods: map, filter, reduce, find, any, all
+                // List methods.
                 match member.property.as_str() {
-                    "map" | "filter" | "reduce" | "find" | "any" | "all" => {
+                    "map"
+                    | "filter"
+                    | "reduce"
+                    | "find"
+                    | "any"
+                    | "all"
+                    | "contains"
+                    | "index_of"
+                    | "find_index"
+                    | "take"
+                    | "skip" => {
                         // Return Type::Unknown as a marker - actual type resolution happens in type_from_call
                         Type::Unknown
                     }
                     _ => {
                         self.report_error(
                             format!(
-                                "List has no method named '{}'. Available methods: map, filter, reduce, find, any, all",
+                                "List has no method named '{}'. Available methods: map, filter, reduce, find, any, all, contains, index_of, find_index, take, skip",
                                 member.property
                             ),
                             Some(member.property_span),
@@ -5071,7 +5081,7 @@ impl TypeChecker {
         })
     }
 
-    /// Type check a List method call (map, filter, reduce, find, any, all)
+    /// Type check a List method call.
     fn type_from_list_method_call(
         &mut self,
         member: &crate::ast::MemberExpression,
@@ -5348,6 +5358,108 @@ impl TypeChecker {
                     Type::Unknown
                 }
             }
+            "contains" | "index_of" => {
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.{} expects 1 argument, found {}",
+                            member.property,
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let argument_type = self.infer_expression(&call.arguments[0].expression);
+                self.ensure_compatible(
+                    element_type,
+                    &argument_type,
+                    &format!("List.{} argument", member.property),
+                    Some(call.arguments[0].expression.span),
+                );
+
+                if member.property == "contains" {
+                    Type::Bool
+                } else {
+                    Type::Int
+                }
+            }
+            "find_index" => {
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.find_index expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let expected_param = element_type.clone();
+                let fn_type = self.infer_lambda_with_expected(
+                    &call.arguments[0].expression,
+                    &[expected_param.clone()],
+                );
+
+                if let Type::Function(params, return_type) = fn_type {
+                    if params.len() != 1 {
+                        self.report_error(
+                            format!(
+                                "List.find_index callback must take 1 parameter, found {}",
+                                params.len()
+                            ),
+                            Some(call.arguments[0].expression.span),
+                        );
+                        return Type::Unknown;
+                    }
+                    self.ensure_compatible(
+                        &expected_param,
+                        &params[0],
+                        "List.find_index callback parameter",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    self.ensure_compatible(
+                        &Type::Bool,
+                        &return_type,
+                        "List.find_index callback return type",
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Int
+                } else {
+                    self.report_error(
+                        format!(
+                            "List.find_index expects a function, found {}",
+                            fn_type.describe()
+                        ),
+                        Some(call.arguments[0].expression.span),
+                    );
+                    Type::Unknown
+                }
+            }
+            "take" | "skip" => {
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "List.{} expects 1 argument, found {}",
+                            member.property,
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let count_type = self.infer_expression(&call.arguments[0].expression);
+                self.ensure_compatible(
+                    &Type::Int,
+                    &count_type,
+                    &format!("List.{} count", member.property),
+                    Some(call.arguments[0].expression.span),
+                );
+                Type::List(Box::new(element_type.clone()))
+            }
             _ => {
                 self.report_error(
                     format!("List has no method named '{}'", member.property),
@@ -5358,7 +5470,7 @@ impl TypeChecker {
         }
     }
 
-    /// Type check a Dict method call (keys, values, entries)
+    /// Type check a Dict method call.
     fn type_from_dict_method_call(
         &mut self,
         member: &crate::ast::MemberExpression,
@@ -5410,6 +5522,90 @@ impl TypeChecker {
                 // Return type is a list of dicts with the same value type
                 // The entries have "key" (String) and "value" (V) fields
                 Type::List(Box::new(Type::Dict(Box::new(value_type.clone()))))
+            }
+            "items" => {
+                if !call.arguments.is_empty() {
+                    self.report_error(
+                        format!(
+                            "Dict.items expects 0 arguments, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+                Type::List(Box::new(Type::Dict(Box::new(value_type.clone()))))
+            }
+            "has" => {
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "Dict.has expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let key_type = self.infer_expression(&call.arguments[0].expression);
+                self.ensure_compatible(
+                    &Type::String,
+                    &key_type,
+                    "Dict.has key",
+                    Some(call.arguments[0].expression.span),
+                );
+                Type::Bool
+            }
+            "get_or" => {
+                if call.arguments.len() != 2 {
+                    self.report_error(
+                        format!(
+                            "Dict.get_or expects 2 arguments, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let key_type = self.infer_expression(&call.arguments[0].expression);
+                self.ensure_compatible(
+                    &Type::String,
+                    &key_type,
+                    "Dict.get_or key",
+                    Some(call.arguments[0].expression.span),
+                );
+
+                let fallback_type = self.infer_expression(&call.arguments[1].expression);
+                self.ensure_compatible(
+                    value_type,
+                    &fallback_type,
+                    "Dict.get_or fallback",
+                    Some(call.arguments[1].expression.span),
+                );
+                value_type.clone()
+            }
+            "merge" => {
+                if call.arguments.len() != 1 {
+                    self.report_error(
+                        format!(
+                            "Dict.merge expects 1 argument, found {}",
+                            call.arguments.len()
+                        ),
+                        Some(span),
+                    );
+                    return Type::Unknown;
+                }
+
+                let other_type = self.infer_expression(&call.arguments[0].expression);
+                self.ensure_compatible(
+                    &Type::Dict(Box::new(value_type.clone())),
+                    &other_type,
+                    "Dict.merge argument",
+                    Some(call.arguments[0].expression.span),
+                );
+                Type::Dict(Box::new(value_type.clone()))
             }
             _ => {
                 self.report_error(

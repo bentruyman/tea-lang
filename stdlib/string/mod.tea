@@ -23,6 +23,34 @@ pub def split(text: String, delimiter: String) -> List[String]
   intrinsics.string_split(text, delimiter)
 end
 
+## Find the last occurrence of a substring.
+##
+## Returns -1 when the substring is not present.
+pub def last_index_of(text: String, pattern: String) -> Int
+  const text_len = @len(text)
+  const pattern_len = @len(pattern)
+
+  if pattern_len == 0
+    return text_len
+  end
+
+  if pattern_len > text_len
+    return - 1
+  end
+
+  var i = text_len - pattern_len
+
+  while i >= 0
+    if text[i..(i + pattern_len)] == pattern
+      return i
+    end
+
+    i = i - 1
+  end
+
+    - 1
+end
+
 ## Check if a string starts with a given prefix.
 ##
 ## Examples:
@@ -148,6 +176,20 @@ pub def replace(text: String, pattern: String, replacement: String) -> String
   intrinsics.string_replace(text, pattern, replacement)
 end
 
+## Replace the first occurrence of a substring with another string.
+pub def replace_once(text: String, pattern: String, replacement: String) -> String
+  const match_index = index_of(text, pattern)
+
+  if match_index < 0
+    return text
+  end
+
+  const prefix = text[0..match_index]
+  const suffix_start = match_index + @len(pattern)
+  const suffix = text[suffix_start...@len(text)]
+  prefix + replacement + suffix
+end
+
 ## Convert a string to lowercase.
 ##
 ## Examples:
@@ -199,7 +241,7 @@ pub def lines(text: String) -> List[String]
     var line = raw[i]
 
     if ends_with(line, "\r")
-      line = line[0...(@len(line) - 1)]
+      line = line[0..(@len(line) - 1)]
     end
 
     if i == @len(raw) - 1 && @len(line) == 0
@@ -213,15 +255,139 @@ pub def lines(text: String) -> List[String]
   result
 end
 
+## Split a string into two parts at the first occurrence of a delimiter.
+##
+## Returns nil when the delimiter is not present.
+pub def split_once(text: String, delimiter: String) -> List[String]?
+  const match_index = index_of(text, delimiter)
+
+  if match_index < 0
+    return nil
+  end
+
+  const delimiter_len = @len(delimiter)
+  return[
+    text[0..match_index],
+    text[(match_index + delimiter_len)...@len(text)]
+  ]
+end
+
+## Split a string into two parts at the last occurrence of a delimiter.
+##
+## Returns nil when the delimiter is not present.
+pub def rsplit_once(text: String, delimiter: String) -> List[String]?
+  const match_index = last_index_of(text, delimiter)
+
+  if match_index < 0
+    return nil
+  end
+
+  const delimiter_len = @len(delimiter)
+  return[
+    text[0..match_index],
+    text[(match_index + delimiter_len)...@len(text)]
+  ]
+end
+
+## Count non-overlapping occurrences of a substring.
+pub def count(text: String, pattern: String) -> Int
+  const text_len = @len(text)
+  const pattern_len = @len(pattern)
+
+  if pattern_len == 0 || pattern_len > text_len
+    return 0
+  end
+
+  var total = 0
+  var i = 0
+
+  while i <= text_len - pattern_len
+    if text[i..(i + pattern_len)] == pattern
+      total = total + 1
+      i = i + pattern_len
+    else
+      i = i + 1
+    end
+  end
+
+  total
+end
+
+## Remove a prefix when present.
+##
+## Returns nil when the text does not start with the prefix.
+pub def strip_prefix(text: String, prefix: String) -> String?
+  if ! starts_with(text, prefix)
+    return nil
+  end
+
+  return text[@len(prefix)...@len(text)]
+end
+
+## Remove a suffix when present.
+##
+## Returns nil when the text does not end with the suffix.
+pub def strip_suffix(text: String, suffix: String) -> String?
+  if ! ends_with(text, suffix)
+    return nil
+  end
+
+  return text[0..(@len(text) - @len(suffix))]
+end
+
 ## Repeat a string count times.
-pub def repeat(text: String, count: Int) -> String
+pub def repeat(text: String, times: Int) -> String
   var result = ""
   var i = 0
 
-  while i < count
+  while i < times
     result = result + text
     i = i + 1
   end
 
   result
+end
+
+## Pad a string on the left with a fill string until it reaches width.
+pub def pad_start_with(text: String, width: Int, fill: String) -> String
+  if width <= @len(text) || @len(fill) == 0
+    return text
+  end
+
+  var needed = width - @len(text)
+  var padding = ""
+
+  while @len(padding) < needed
+    padding = padding + fill
+  end
+
+  padding = padding[0..needed]
+  padding + text
+end
+
+## Pad a string on the left with spaces until it reaches width.
+pub def pad_start(text: String, width: Int) -> String
+  pad_start_with(text, width, " ")
+end
+
+## Pad a string on the right with a fill string until it reaches width.
+pub def pad_end_with(text: String, width: Int, fill: String) -> String
+  if width <= @len(text) || @len(fill) == 0
+    return text
+  end
+
+  var needed = width - @len(text)
+  var padding = ""
+
+  while @len(padding) < needed
+    padding = padding + fill
+  end
+
+  padding = padding[0..needed]
+  text + padding
+end
+
+## Pad a string on the right with spaces until it reaches width.
+pub def pad_end(text: String, width: Int) -> String
+  pad_end_with(text, width, " ")
 end

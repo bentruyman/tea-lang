@@ -22,6 +22,13 @@
 #   const files = args.positional()
 use intrinsics from "std.intrinsics"
 
+pub error ArgsError {
+  Usage(message: String)
+  MissingOption(name: String)
+  MissingPositional(name: String)
+  MissingCommand
+}
+
 ## Return all command-line arguments as a list of strings.
 ##
 ## Returns arguments passed after the program name. Does not include
@@ -56,6 +63,15 @@ pub def parse_with[T](spec: T, argv: List[String]) -> CliParseResult
   intrinsics.cli_parse(spec, argv)
 end
 
+## Require a parsed CLI result to be successful.
+pub def require(parsed: CliParseResult) -> CliParseResult ! ArgsError.Usage
+  if parsed.ok
+    return parsed
+  end
+
+  throw ArgsError.Usage(parsed.message)
+end
+
 ## Check if a flag is present in the arguments.
 ##
 ## Searches for an exact match of the flag string in the argument list.
@@ -68,11 +84,11 @@ end
 ##   if args.has("-v") || args.has("--verbose")
 ##     verbose = true
 ##   end
-pub def has(flag: String) -> Bool
+pub def has(flag_name: String) -> Bool
   const arguments = @args()
 
   for arg in arguments
-    if arg == flag
+    if arg == flag_name
       return true
     end
   end
@@ -95,13 +111,13 @@ end
 ##
 ##   # With default value
 ##   const output = args.get("--output") ?? "default.txt"
-pub def get(option: String) -> String?
+pub def get(option_name: String) -> String?
   const arguments = @args()
   var i = 0
   const arg_count = @len(arguments)
 
   while i < arg_count - 1
-    if arguments[i] == option
+    if arguments[i] == option_name
       return arguments[i + 1]
     end
 
@@ -162,4 +178,140 @@ pub def positional() -> List[String]
     # Return a proper empty list by slicing the sentinel
     result[1...1]
   end
+end
+
+## Return an optional parsed string option value by name.
+pub def option_string(parsed: CliParseResult, name: String) -> String?
+  if parsed.options.has(name)
+    return parsed.options[name]
+  end
+
+  return nil
+end
+
+## Return an optional parsed integer option value by name.
+pub def option_int(parsed: CliParseResult, name: String) -> Int?
+  if parsed.options.has(name)
+    return parsed.options[name]
+  end
+
+  return nil
+end
+
+## Return an optional parsed boolean option value by name.
+pub def option_bool(parsed: CliParseResult, name: String) -> Bool?
+  if parsed.options.has(name)
+    return parsed.options[name]
+  end
+
+  return nil
+end
+
+## Return true when a parsed command result contains a specific flag option.
+pub def flag(parsed: CliParseResult, name: String) -> Bool
+  const value = option_bool(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  false
+end
+
+## Return a string option value or a fallback.
+pub def option_string_or(parsed: CliParseResult, name: String, fallback: String) -> String
+  const value = option_string(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  fallback
+end
+
+## Return an integer option value or a fallback.
+pub def option_int_or(parsed: CliParseResult, name: String, fallback: Int) -> Int
+  const value = option_int(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  fallback
+end
+
+## Return a string option value or throw when it is missing.
+pub def require_option_string(parsed: CliParseResult, name: String) -> String ! ArgsError.MissingOption
+  const value = option_string(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  throw ArgsError.MissingOption(name)
+end
+
+## Return an integer option value or throw when it is missing.
+pub def require_option_int(parsed: CliParseResult, name: String) -> Int ! ArgsError.MissingOption
+  const value = option_int(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  throw ArgsError.MissingOption(name)
+end
+
+## Return an optional positional value by name.
+pub def positional_value(parsed: CliParseResult, name: String) -> String?
+  if parsed.positionals.has(name)
+    return parsed.positionals[name]
+  end
+
+  return nil
+end
+
+## Return a positional value or a fallback.
+pub def positional_or(parsed: CliParseResult, name: String, fallback: String) -> String
+  const value = positional_value(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  fallback
+end
+
+## Return a positional value or throw when it is missing.
+pub def require_positional(parsed: CliParseResult, name: String) -> String ! ArgsError.MissingPositional
+  const value = positional_value(parsed, name)
+
+  if value != nil
+    return value!
+  end
+
+  throw ArgsError.MissingPositional(name)
+end
+
+## Return the selected subcommand when one was provided.
+pub def subcommand(parsed: CliParseResult) -> String?
+  if @len(parsed.path) <= 1
+    return nil
+  end
+
+  return parsed.command
+end
+
+## Return the selected subcommand or throw when no subcommand was chosen.
+pub def require_subcommand(parsed: CliParseResult) -> String ! ArgsError.MissingCommand
+  if @len(parsed.path) > 1
+    return parsed.command
+  end
+
+  throw ArgsError.MissingCommand()
+end
+
+## Return true when the current parsed command matches a given command name.
+pub def command_is(parsed: CliParseResult, name: String) -> Bool
+  parsed.command == name
 end

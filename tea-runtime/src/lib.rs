@@ -3181,6 +3181,27 @@ pub extern "C" fn tea_dict_get(dict: *const TeaDict, key: *const TeaString) -> T
 }
 
 #[no_mangle]
+pub extern "C" fn tea_dict_has(dict: *const TeaDict, key: *const TeaString) -> c_int {
+    if dict.is_null() {
+        panic!("null dict");
+    }
+
+    unsafe {
+        if key.is_null() {
+            panic!("dict key must be a valid string");
+        }
+
+        let key_str = expect_string_ref(&*key, "dict key must be a valid string");
+        let dict_ref = &*dict;
+        if dict_ref.entries.contains_key(key_str) {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn tea_dict_get_int(dict: *const TeaDict, key: *const TeaString) -> c_longlong {
     if dict.is_null() {
         panic!("null dict");

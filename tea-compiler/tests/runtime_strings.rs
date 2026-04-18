@@ -115,11 +115,53 @@ fn string_helpers_execute_with_collection_utilities() -> anyhow::Result<()> {
 use assert from "std.assert"
 use string from "std.string"
 
-assert.eq(string.index_of("hello", "ll"), 2)
-assert.ok(string.contains("hello", "ell"))
-assert.eq(@len(string.split("a,b,c", ",")), 3)
-assert.eq(string.join(["a", "b", "c"], "-"), "a-b-c")
-assert.eq(string.repeat("ha", 3), "hahaha")
+def verify() -> Void
+  var first_split = string.split_once("name=value", "=")
+  var last_split = string.rsplit_once("archive.tar.gz", ".")
+  var stripped_prefix = string.strip_prefix("prefix-value", "prefix-")
+  var stripped_suffix = string.strip_suffix("report.txt", ".txt")
+
+  if first_split == nil
+    @panic("expected split_once to succeed")
+    return
+  end
+
+  if last_split == nil
+    @panic("expected rsplit_once to succeed")
+    return
+  end
+
+  if stripped_prefix == nil
+    @panic("expected strip_prefix to succeed")
+    return
+  end
+
+  if stripped_suffix == nil
+    @panic("expected strip_suffix to succeed")
+    return
+  end
+
+  assert.eq(string.index_of("hello", "ll"), 2)
+  assert.eq(string.last_index_of("banana", "na"), 4)
+  assert.ok(string.contains("hello", "ell"))
+  assert.eq(@len(string.split("a,b,c", ",")), 3)
+  assert.eq(first_split![0], "name")
+  assert.eq(first_split![1], "value")
+  assert.eq(last_split![0], "archive.tar")
+  assert.eq(last_split![1], "gz")
+  assert.eq(string.replace_once("foo bar foo", "foo", "baz"), "baz bar foo")
+  assert.eq(string.count("bananana", "na"), 3)
+  assert.eq(stripped_prefix!, "value")
+  assert.eq(stripped_suffix!, "report")
+  assert.eq(string.pad_start("7", 3), "  7")
+  assert.eq(string.pad_end("7", 3), "7  ")
+  assert.eq(string.pad_start_with("tea", 6, "0"), "000tea")
+  assert.eq(string.pad_end_with("tea", 6, "."), "tea...")
+  assert.eq(string.join(["a", "b", "c"], "-"), "a-b-c")
+  assert.eq(string.repeat("ha", 3), "hahaha")
+end
+
+verify()
 @println("ok")
 "#;
 

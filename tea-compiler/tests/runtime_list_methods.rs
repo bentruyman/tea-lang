@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tea_compiler::{CompileOptions, Compiler, SourceFile, SourceId};
 
+mod support;
+
 /// Test List.map transforms each element
 #[test]
 fn test_list_map() -> anyhow::Result<()> {
@@ -358,4 +360,56 @@ print(run())
         result.is_err() || !compiler.diagnostics().is_empty(),
         "expected error or diagnostics for unknown method"
     );
+}
+
+#[test]
+fn list_and_dict_helpers_execute_at_runtime() -> anyhow::Result<()> {
+    let source = r#"
+use assert from "std.assert"
+
+var numbers = [1, 2, 3, 2]
+assert.ok(numbers.contains(2))
+assert.eq(numbers.index_of(2), 1)
+assert.eq(numbers.find_index(|x: Int| => x > 2), 2)
+assert.eq(@len(numbers.take(2)), 2)
+assert.eq(@len(numbers.skip(2)), 2)
+assert.eq(numbers.take(2)[1], 2)
+assert.eq(numbers.skip(2)[0], 3)
+
+var left = {"a": 1}
+var right = {"b": 2, "a": 3}
+assert.ok(left.has("a"))
+assert.ok(! left.has("b"))
+assert.eq(left.get_or("a", 99), 1)
+assert.eq(left.get_or("missing", 99), 99)
+assert.eq(@len(left.items()), 1)
+
+var merged: Dict[String, Int] = left.merge(right)
+assert.eq(merged["a"], 3)
+assert.eq(merged["b"], 2)
+@println("ok")
+"#;
+
+    let stdout = support::run_script(source, "list-dict-helpers.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
+    Ok(())
+}
+
+#[test]
+fn for_loops_iterate_over_heap_backed_lists_at_runtime() -> anyhow::Result<()> {
+    let source = r#"
+use assert from "std.assert"
+
+var total = 0
+for value in [1, 2, 3, 4, 5, 6, 7, 8]
+  total = total + value
+end
+
+assert.eq(total, 36)
+@println("ok")
+"#;
+
+    let stdout = support::run_script(source, "for-loop-heap-list.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
+    Ok(())
 }

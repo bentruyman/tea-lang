@@ -8,6 +8,7 @@ This directory contains the Tea standard library, written in Tea itself and buil
 - `args/` - Command-line argument helpers
 - `env/` - Environment variable access
 - `fs/` - Filesystem operations
+- `parse/` - Text parsing helpers
 - `path/` - Path manipulation utilities
 - `process/` - Subprocess execution helpers
 - `regex/` - Regular-expression helpers

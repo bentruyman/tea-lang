@@ -1000,6 +1000,132 @@
       ]
     },
     {
+      "slug": "time",
+      "kind": "module",
+      "title": "std.time",
+      "eyebrow": "Standard Library",
+      "summary": "Time helpers for tool-style scripts.",
+      "module_path": "std.time",
+      "source_path": "stdlib/time/mod.tea",
+      "functions": [
+        {
+          "name": "now",
+          "signature_display": "pub def now() -> Timestamp",
+          "summary": "Return the current UTC timestamp."
+        },
+        {
+          "name": "now_unix_seconds",
+          "signature_display": "pub def now_unix_seconds() -> Int",
+          "summary": "Return the current Unix timestamp in seconds."
+        },
+        {
+          "name": "now_unix_millis",
+          "signature_display": "pub def now_unix_millis() -> Int",
+          "summary": "Return the current Unix timestamp in milliseconds."
+        },
+        {
+          "name": "sleep",
+          "signature_display": "pub def sleep(delay_ms: Int) -> Void",
+          "summary": "Pause the current thread for the specified number of milliseconds."
+        },
+        {
+          "name": "sleep_for",
+          "signature_display": "pub def sleep_for(duration: Duration) -> Void",
+          "summary": "Pause the current thread for a duration value."
+        },
+        {
+          "name": "from_unix_seconds",
+          "signature_display": "pub def from_unix_seconds(value: Int) -> Timestamp",
+          "summary": "Construct a timestamp from Unix seconds."
+        },
+        {
+          "name": "from_unix_millis",
+          "signature_display": "pub def from_unix_millis(value: Int) -> Timestamp",
+          "summary": "Construct a timestamp from Unix milliseconds."
+        },
+        {
+          "name": "unix_seconds",
+          "signature_display": "pub def unix_seconds(timestamp: Timestamp) -> Int",
+          "summary": "Return the Unix seconds for a timestamp."
+        },
+        {
+          "name": "unix_millis",
+          "signature_display": "pub def unix_millis(timestamp: Timestamp) -> Int",
+          "summary": "Return the Unix milliseconds for a timestamp."
+        },
+        {
+          "name": "milliseconds",
+          "signature_display": "pub def milliseconds(value: Int) -> Duration",
+          "summary": "Create a duration in milliseconds."
+        },
+        {
+          "name": "seconds",
+          "signature_display": "pub def seconds(value: Int) -> Duration",
+          "summary": "Create a duration in seconds."
+        },
+        {
+          "name": "minutes",
+          "signature_display": "pub def minutes(value: Int) -> Duration",
+          "summary": "Create a duration in minutes."
+        },
+        {
+          "name": "hours",
+          "signature_display": "pub def hours(value: Int) -> Duration",
+          "summary": "Create a duration in hours."
+        },
+        {
+          "name": "days",
+          "signature_display": "pub def days(value: Int) -> Duration",
+          "summary": "Create a duration in days."
+        },
+        {
+          "name": "add",
+          "signature_display": "pub def add(left: Duration, right: Duration) -> Duration",
+          "summary": "Return the sum of two durations."
+        },
+        {
+          "name": "subtract",
+          "signature_display": "pub def subtract(left: Duration, right: Duration) -> Duration",
+          "summary": "Return the difference between two durations."
+        },
+        {
+          "name": "multiply",
+          "signature_display": "pub def multiply(duration: Duration, factor: Int) -> Duration",
+          "summary": "Multiply a duration by an integer factor."
+        },
+        {
+          "name": "between",
+          "signature_display": "pub def between(start: Timestamp, finish: Timestamp) -> Duration",
+          "summary": "Return the elapsed duration between two timestamps."
+        },
+        {
+          "name": "add_to",
+          "signature_display": "pub def add_to(timestamp: Timestamp, duration: Duration) -> Timestamp",
+          "summary": "Add a duration to a timestamp."
+        },
+        {
+          "name": "subtract_from",
+          "signature_display": "pub def subtract_from(timestamp: Timestamp, duration: Duration) -> Timestamp",
+          "summary": "Subtract a duration from a timestamp."
+        },
+        {
+          "name": "format_rfc3339",
+          "signature_display": "pub def format_rfc3339(timestamp: Timestamp) -> String",
+          "summary": "Format a timestamp as an RFC3339 string in UTC."
+        },
+        {
+          "name": "try_parse_rfc3339",
+          "signature_display": "pub def try_parse_rfc3339(text: String) -> Timestamp ! TimeError",
+          "summary": "Parse an RFC3339 string into a timestamp."
+        },
+        {
+          "name": "parse_rfc3339",
+          "signature_display": "pub def parse_rfc3339(text: String) -> Timestamp",
+          "summary": "Parse an RFC3339 string and panic on invalid input."
+        }
+      ]
+    },
+    {
       "slug": "url",
       "kind": "module",
       "title": "std.url",

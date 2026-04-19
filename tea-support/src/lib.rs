@@ -55,3 +55,7 @@ pub fn url_error(operation: &str, target: &str, error: impl fmt::Display) -> Str
 pub fn http_error(operation: &str, target: &str, error: impl fmt::Display) -> String {
     format_operation_error("std.http", operation, Some(target), error)
 }
+
+pub fn time_error(operation: &str, target: &str, error: impl fmt::Display) -> String {
+    format_operation_error("std.time", operation, Some(target), error)
+}

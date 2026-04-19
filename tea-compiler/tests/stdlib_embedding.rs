@@ -31,7 +31,7 @@ fn source_stdlib_is_available_outside_workspace() -> anyhow::Result<()> {
     let _cwd = CurrentDirGuard::change_to(tmp.path())?;
 
     let source = r#"
-use string = "std.string"
+use string from "std.string"
 
 var repeated = string.repeat("ha", 2)
 @println(string.to_upper(repeated))

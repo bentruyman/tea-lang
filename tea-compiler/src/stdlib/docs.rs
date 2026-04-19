@@ -91,6 +91,15 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         }
         StdFunctionKind::UrlAppendQuery => "Append encoded query parameters to an absolute URL.",
         StdFunctionKind::UrlJoin => "Resolve a URL path against an absolute base URL.",
+        StdFunctionKind::TimeNowUnixMillis => "Return the current Unix timestamp in milliseconds.",
+        StdFunctionKind::TimeUnixSeconds => {
+            "Convert Unix milliseconds to whole Unix seconds using floor division."
+        }
+        StdFunctionKind::TimeSleepMs => "Block the current thread for the specified milliseconds.",
+        StdFunctionKind::TimeFormatRfc3339 => {
+            "Format Unix milliseconds as an RFC3339 timestamp in UTC."
+        }
+        StdFunctionKind::TimeParseRfc3339 => "Parse an RFC3339 timestamp into a result dictionary.",
         StdFunctionKind::AssertSnapshot => {
             "Compare actual text against a stored snapshot, with optional hint."
         }

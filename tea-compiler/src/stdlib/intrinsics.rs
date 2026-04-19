@@ -415,6 +415,42 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         &[StdType::String, StdType::String],
         StdType::String,
     ),
+    // Time
+    std_function(
+        "time_now_unix_millis",
+        StdFunctionKind::TimeNowUnixMillis,
+        StdArity::Exact(0),
+        &[],
+        StdType::Int,
+    ),
+    std_function(
+        "time_unix_seconds",
+        StdFunctionKind::TimeUnixSeconds,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Int,
+    ),
+    std_function(
+        "time_sleep_ms",
+        StdFunctionKind::TimeSleepMs,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::Void,
+    ),
+    std_function(
+        "time_format_rfc3339",
+        StdFunctionKind::TimeFormatRfc3339,
+        StdArity::Exact(1),
+        &[StdType::Int],
+        StdType::String,
+    ),
+    std_function(
+        "time_parse_rfc3339",
+        StdFunctionKind::TimeParseRfc3339,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Dict,
+    ),
     // Process execution
     std_function(
         "process_run",

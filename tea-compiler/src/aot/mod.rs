@@ -442,6 +442,11 @@ struct LlvmCodeGenerator<'ctx> {
     url_build_query_fn: Option<FunctionValue<'ctx>>,
     url_append_query_fn: Option<FunctionValue<'ctx>>,
     url_join_fn: Option<FunctionValue<'ctx>>,
+    time_now_unix_millis_fn: Option<FunctionValue<'ctx>>,
+    time_unix_seconds_fn: Option<FunctionValue<'ctx>>,
+    time_sleep_ms_fn: Option<FunctionValue<'ctx>>,
+    time_format_rfc3339_fn: Option<FunctionValue<'ctx>>,
+    time_parse_rfc3339_fn: Option<FunctionValue<'ctx>>,
     cli_args_fn: Option<FunctionValue<'ctx>>,
     args_program_fn: Option<FunctionValue<'ctx>>,
     string_index_of_fn: Option<FunctionValue<'ctx>>,
@@ -1174,6 +1179,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             url_build_query_fn: None,
             url_append_query_fn: None,
             url_join_fn: None,
+            time_now_unix_millis_fn: None,
+            time_unix_seconds_fn: None,
+            time_sleep_ms_fn: None,
+            time_format_rfc3339_fn: None,
+            time_parse_rfc3339_fn: None,
             cli_args_fn: None,
             args_program_fn: None,
             string_index_of_fn: None,
@@ -7813,6 +7823,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::UrlJoin => {
                 self.compile_url_join_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::TimeNowUnixMillis => {
+                self.compile_time_now_unix_millis_call(&call.arguments)
+            }
+            StdFunctionKind::TimeUnixSeconds => {
+                self.compile_time_unix_seconds_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::TimeSleepMs => {
+                self.compile_time_sleep_ms_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::TimeFormatRfc3339 => {
+                self.compile_time_format_rfc3339_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::TimeParseRfc3339 => {
+                self.compile_time_parse_rfc3339_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsReadText => {
                 self.compile_fs_read_text_call(&call.arguments, function, locals)
             }
@@ -9357,6 +9382,130 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .ok_or_else(|| anyhow!("tea_url_join returned no value"))?
             .into_pointer_value();
         Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_time_now_unix_millis_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+    ) -> Result<ExprValue<'ctx>> {
+        if !arguments.is_empty() {
+            bail!("time.now_unix_millis expects no arguments");
+        }
+        let func = self.ensure_time_now_unix_millis_fn();
+        let value = self
+            .call_function(func, &[], "tea_time_now_unix_millis")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_time_now_unix_millis returned no value"))?
+            .into_int_value();
+        Ok(ExprValue::Int(value))
+    }
+
+    fn compile_time_unix_seconds_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("time.unix_seconds expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for time.unix_seconds");
+        }
+        let unix_millis_expr =
+            self.compile_expression(&arguments[0].expression, function, locals)?;
+        let unix_millis_value = self.expect_int_value(
+            unix_millis_expr,
+            "time.unix_seconds expects the unix_millis argument to be an Int",
+        )?;
+        let func = self.ensure_time_unix_seconds_fn();
+        let value = self
+            .call_function(func, &[unix_millis_value.into()], "tea_time_unix_seconds")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_time_unix_seconds returned no value"))?
+            .into_int_value();
+        Ok(ExprValue::Int(value))
+    }
+
+    fn compile_time_sleep_ms_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("time.sleep expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for time.sleep");
+        }
+        let milliseconds_expr =
+            self.compile_expression(&arguments[0].expression, function, locals)?;
+        let milliseconds_value = self.expect_int_value(
+            milliseconds_expr,
+            "time.sleep expects the milliseconds argument to be an Int",
+        )?;
+        let func = self.ensure_time_sleep_ms_fn();
+        self.call_function(func, &[milliseconds_value.into()], "tea_time_sleep_ms")?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_time_format_rfc3339_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("time.format_rfc3339 expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for time.format_rfc3339");
+        }
+        let unix_millis_expr =
+            self.compile_expression(&arguments[0].expression, function, locals)?;
+        let unix_millis_value = self.expect_int_value(
+            unix_millis_expr,
+            "time.format_rfc3339 expects the unix_millis argument to be an Int",
+        )?;
+        let func = self.ensure_time_format_rfc3339_fn();
+        let pointer = self
+            .call_function(func, &[unix_millis_value.into()], "tea_time_format_rfc3339")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_time_format_rfc3339 returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_time_parse_rfc3339_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("time.parse_rfc3339 expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for time.parse_rfc3339");
+        }
+        let text_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let text_ptr = self.expect_string_pointer(
+            text_expr,
+            "time.parse_rfc3339 expects the text argument to be a String",
+        )?;
+
+        let func = self.ensure_time_parse_rfc3339_fn();
+        let value = self
+            .call_function(func, &[text_ptr.into()], "tea_time_parse_rfc3339")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_time_parse_rfc3339 returned no value"))?
+            .into_struct_value();
+        self.tea_value_to_expr(value, ValueType::Dict(Box::new(ValueType::Any)))
     }
 
     fn compile_io_read_bytes_call(
@@ -16036,6 +16185,73 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         "tea_url_decode_component"
     );
     define_ffi_string2_fn!(ensure_url_join_fn, url_join_fn, "tea_url_join");
+
+    fn ensure_time_now_unix_millis_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.time_now_unix_millis_fn {
+            return func;
+        }
+        let fn_type = self.int_type().fn_type(&[], false);
+        let func =
+            self.module
+                .add_function("tea_time_now_unix_millis", fn_type, Some(Linkage::External));
+        self.time_now_unix_millis_fn = Some(func);
+        func
+    }
+
+    fn ensure_time_unix_seconds_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.time_unix_seconds_fn {
+            return func;
+        }
+        let fn_type = self.int_type().fn_type(&[self.int_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_time_unix_seconds", fn_type, Some(Linkage::External));
+        self.time_unix_seconds_fn = Some(func);
+        func
+    }
+
+    fn ensure_time_sleep_ms_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.time_sleep_ms_fn {
+            return func;
+        }
+        let fn_type = self
+            .context
+            .void_type()
+            .fn_type(&[self.int_type().into()], false);
+        let func = self
+            .module
+            .add_function("tea_time_sleep_ms", fn_type, Some(Linkage::External));
+        self.time_sleep_ms_fn = Some(func);
+        func
+    }
+
+    fn ensure_time_format_rfc3339_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.time_format_rfc3339_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.int_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_time_format_rfc3339", fn_type, Some(Linkage::External));
+        self.time_format_rfc3339_fn = Some(func);
+        func
+    }
+
+    fn ensure_time_parse_rfc3339_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.time_parse_rfc3339_fn {
+            return func;
+        }
+        let fn_type = self
+            .value_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_time_parse_rfc3339", fn_type, Some(Linkage::External));
+        self.time_parse_rfc3339_fn = Some(func);
+        func
+    }
 
     fn ensure_url_build_query_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.url_build_query_fn {

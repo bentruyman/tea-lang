@@ -148,3 +148,50 @@ fs.remove("{dir}")
     assert_eq!(stdout, "ok\n");
     Ok(())
 }
+
+#[test]
+fn fs_hardening_helpers_execute_through_runtime() -> anyhow::Result<()> {
+    let dir_path = unique_temp_dir();
+    let nested_path = dir_path.join("nested").join("child.txt");
+
+    let dir_str = dir_path.to_string_lossy();
+    let nested_str = nested_path.to_string_lossy();
+
+    let source = format!(
+        r#"
+use assert from "std.assert"
+use fs from "std.fs"
+use path from "std.path"
+
+fs.ensure_parent("{nested}")
+assert.ok(fs.exists(path.join(["{dir}", "nested"])))
+
+fs.write_file_atomic("{nested}", "tea")
+fs.append_file("{nested}", "-lang")
+fs.append_bytes("{nested}", [10, 33])
+
+var contents = fs.read_file("{nested}")
+assert.eq(contents, "tea-lang\n!")
+
+var temp_dir = fs.create_temp_dir("tea-fs-")
+var temp_file = fs.create_temp_file("tea-fs-")
+assert.ok(fs.exists(temp_dir))
+assert.ok(fs.exists(temp_file))
+assert.ok(fs.metadata(temp_dir).is_dir)
+assert.ok(fs.metadata(temp_file).is_file)
+assert.ok(! fs.is_symlink(temp_file))
+assert.ok(! fs.is_symlink(path.join([temp_dir, "definitely-missing"])))
+
+fs.remove(temp_file)
+fs.remove(temp_dir)
+fs.remove("{dir}")
+@println("ok")
+"#,
+        dir = dir_str,
+        nested = nested_str,
+    );
+
+    let stdout = support::run_script(&source, "fs-hardening.tea", &[])?;
+    assert_eq!(stdout, "ok\n");
+    Ok(())
+}

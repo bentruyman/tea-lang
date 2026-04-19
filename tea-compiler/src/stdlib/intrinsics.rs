@@ -219,6 +219,13 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "fs_write_text_atomic",
+        StdFunctionKind::FsWriteTextAtomic,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
         "fs_write_bytes",
         StdFunctionKind::FsWriteBytes,
         StdArity::Exact(2),
@@ -228,6 +235,20 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "fs_write_bytes_atomic",
         StdFunctionKind::FsWriteBytesAtomic,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::List],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_append_text",
+        StdFunctionKind::FsAppendText,
+        StdArity::Exact(2),
+        &[StdType::String, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "fs_append_bytes",
+        StdFunctionKind::FsAppendBytes,
         StdArity::Exact(2),
         &[StdType::String, StdType::List],
         StdType::Void,
@@ -250,6 +271,13 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdType::Void,
     ),
     std_function(
+        "fs_ensure_parent",
+        StdFunctionKind::FsEnsureParent,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Void,
+    ),
+    std_function(
         "fs_remove",
         StdFunctionKind::FsRemove,
         StdArity::Exact(1),
@@ -259,6 +287,13 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
     std_function(
         "fs_exists",
         StdFunctionKind::FsExists,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::Bool,
+    ),
+    std_function(
+        "fs_is_symlink",
+        StdFunctionKind::FsIsSymlink,
         StdArity::Exact(1),
         &[StdType::String],
         StdType::Bool,
@@ -290,6 +325,20 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdArity::Exact(2),
         &[StdType::String, StdType::String],
         StdType::Void,
+    ),
+    std_function(
+        "fs_create_temp_dir",
+        StdFunctionKind::FsCreateTempDir,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
+    ),
+    std_function(
+        "fs_create_temp_file",
+        StdFunctionKind::FsCreateTempFile,
+        StdArity::Exact(1),
+        &[StdType::String],
+        StdType::String,
     ),
     std_function(
         "fs_rename",
@@ -522,6 +571,27 @@ const INTRINSIC_FUNCTIONS: &[StdFunction] = &[
         StdFunctionKind::ProcessWriteStdin,
         StdArity::Exact(2),
         &[StdType::Int, StdType::String],
+        StdType::Void,
+    ),
+    std_function(
+        "process_read_stdout_bytes",
+        StdFunctionKind::ProcessReadStdoutBytes,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::Int],
+        StdType::List,
+    ),
+    std_function(
+        "process_read_stderr_bytes",
+        StdFunctionKind::ProcessReadStderrBytes,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::Int],
+        StdType::List,
+    ),
+    std_function(
+        "process_write_stdin_bytes",
+        StdFunctionKind::ProcessWriteStdinBytes,
+        StdArity::Exact(2),
+        &[StdType::Int, StdType::List],
         StdType::Void,
     ),
     std_function(

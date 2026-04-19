@@ -58,20 +58,29 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::FsReadText => "Read an entire text file into a string.",
         StdFunctionKind::FsReadBytes => "Read an entire file into a list of byte values.",
         StdFunctionKind::FsWriteText => "Write a string to a file, replacing existing contents.",
+        StdFunctionKind::FsWriteTextAtomic => "Write a string to a file atomically.",
         StdFunctionKind::FsWriteBytes => {
             "Write a list of byte values to a file, replacing existing contents."
         }
         StdFunctionKind::FsWriteBytesAtomic => "Write a list of byte values to a file atomically.",
+        StdFunctionKind::FsAppendText => "Append text to a file, creating it when needed.",
+        StdFunctionKind::FsAppendBytes => "Append byte values to a file, creating it when needed.",
         StdFunctionKind::FsCreateDir => {
             "Create a directory. Parent directories must already exist."
         }
         StdFunctionKind::FsEnsureDir => "Create a directory and all missing parent folders.",
+        StdFunctionKind::FsEnsureParent => "Create any missing parent directories for a path.",
         StdFunctionKind::FsRemove => "Remove a file or directory recursively.",
         StdFunctionKind::FsExists => "Return true when a filesystem path exists.",
+        StdFunctionKind::FsIsSymlink => "Return true when the path is a symbolic link.",
         StdFunctionKind::FsListDir => "List entries in a directory.",
         StdFunctionKind::FsWalk => "Recursively walk a directory and return all entries.",
         StdFunctionKind::FsGlob => "Return filesystem entries that match a glob pattern.",
         StdFunctionKind::FsCopy => "Copy a file to a new location.",
+        StdFunctionKind::FsCreateTempDir => {
+            "Create a unique temporary directory and return its path."
+        }
+        StdFunctionKind::FsCreateTempFile => "Create a unique temporary file and return its path.",
         StdFunctionKind::FsRename => "Rename or move a file or directory.",
         StdFunctionKind::FsStat => "Get metadata information about a file or directory.",
         StdFunctionKind::PathJoin => "Join multiple path segments.",
@@ -121,7 +130,14 @@ pub(super) const fn function_doc(kind: StdFunctionKind) -> &'static str {
         StdFunctionKind::ProcessKill => "Terminate a spawned process.",
         StdFunctionKind::ProcessReadStdout => "Read data from a spawned process's stdout.",
         StdFunctionKind::ProcessReadStderr => "Read data from a spawned process's stderr.",
+        StdFunctionKind::ProcessReadStdoutBytes => {
+            "Read raw bytes from a spawned process's stdout."
+        }
+        StdFunctionKind::ProcessReadStderrBytes => {
+            "Read raw bytes from a spawned process's stderr."
+        }
         StdFunctionKind::ProcessWriteStdin => "Write data to a spawned process's stdin.",
+        StdFunctionKind::ProcessWriteStdinBytes => "Write raw bytes to a spawned process's stdin.",
         StdFunctionKind::ProcessCloseStdin => "Close a spawned process's stdin pipe.",
         StdFunctionKind::ProcessClose => {
             "Close a spawned process handle without waiting for completion."

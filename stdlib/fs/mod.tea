@@ -38,6 +38,15 @@ pub def write_file(file_path: String, content: String) -> Void
   intrinsics.fs_write_text(file_path, content)
 end
 
+## Write text to a file atomically.
+##
+## Stages the contents in a sibling temp file, fsyncs it, then renames
+## it over the destination. The destination must live on the same
+## filesystem as its parent directory.
+pub def write_file_atomic(file_path: String, content: String) -> Void
+  intrinsics.fs_write_text_atomic(file_path, content)
+end
+
 ## Write raw bytes to a file.
 pub def write_bytes(file_path: String, data: List[Int]) -> Void
   intrinsics.fs_write_bytes(file_path, data)
@@ -61,6 +70,11 @@ pub def ensure_dir(dir_path: String) -> Void
   intrinsics.fs_ensure_dir(dir_path)
 end
 
+## Create any missing parent directories for a file path.
+pub def ensure_parent(file_path: String) -> Void
+  intrinsics.fs_ensure_parent(file_path)
+end
+
 ## Alias for ensure_dir().
 pub def mkdir_p(dir_path: String) -> Void
   ensure_dir(dir_path)
@@ -77,6 +91,13 @@ end
 ## Return true when a path exists.
 pub def exists(file_path: String) -> Bool
   intrinsics.fs_exists(file_path)
+end
+
+## Return true when the path is a symbolic link.
+##
+## Returns false when the path does not exist.
+pub def is_symlink(file_path: String) -> Bool
+  intrinsics.fs_is_symlink(file_path)
 end
 
 ## List all entries in a directory.
@@ -140,11 +161,34 @@ pub def write_lines(file_path: String, lines: List[String]) -> Void
   write_file(file_path, string.join(lines, "\n"))
 end
 
+## Append raw bytes to a file, creating it when it does not exist.
+pub def append_bytes(file_path: String, data: List[Int]) -> Void
+  intrinsics.fs_append_bytes(file_path, data)
+end
+
 ## Append text to a file, creating it when it does not exist.
 pub def append_file(file_path: String, content: String) -> Void
-  if exists(file_path)
-    write_file(file_path, read_file(file_path) + content)
-  else
-    write_file(file_path, content)
-  end
+  intrinsics.fs_append_text(file_path, content)
+end
+
+## Create a unique temporary directory and return its path.
+##
+## The directory lives under the system temp directory and is created
+## with restrictive permissions (mode 0700 on Unix). The caller owns
+## cleanup; pass the returned path to fs.remove() when done.
+pub def create_temp_dir(prefix: String) -> String
+  intrinsics.fs_create_temp_dir(prefix)
+end
+
+## Create a unique temporary file and return its path.
+##
+## The file lives under the system temp directory and is created with
+## O_EXCL under a unique name, but the open handle is closed before the
+## path is returned. Callers that need TOCTOU-safe access should treat
+## the path like one returned from mkstemp(3) followed by close(2): re-
+## open with care and rely on the system temp directory's sticky-bit
+## semantics. The caller owns cleanup; pass the returned path to
+## fs.remove() when done.
+pub def create_temp_file(prefix: String) -> String
+  intrinsics.fs_create_temp_file(prefix)
 end

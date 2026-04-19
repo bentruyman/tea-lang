@@ -1,0 +1,159 @@
+# Time helpers for tool-style scripts.
+#
+# The first slice is intentionally small and synchronous: wall-clock timestamps,
+# sleep, duration math, and RFC3339 conversions for logs and HTTP APIs.
+use intrinsics from "std.intrinsics"
+
+pub struct Timestamp {
+  unix_seconds: Int
+  unix_millis: Int
+}
+
+pub struct Duration {
+  milliseconds: Int
+}
+
+pub error TimeError {
+  InvalidRfc3339(input: String)
+}
+
+def timestamp_from_unix_millis(value: Int) -> Timestamp
+  Timestamp(
+    unix_seconds: intrinsics.time_unix_seconds(value),
+    unix_millis: value
+  )
+end
+
+def panic_invalid_rfc3339(input: String) -> Void
+  @panic(`invalid RFC3339 timestamp: '${input}'`)
+end
+
+## Return the current UTC timestamp.
+pub def now() -> Timestamp
+  timestamp_from_unix_millis(intrinsics.time_now_unix_millis())
+end
+
+## Return the current Unix timestamp in seconds.
+pub def now_unix_seconds() -> Int
+  now().unix_seconds
+end
+
+## Return the current Unix timestamp in milliseconds.
+pub def now_unix_millis() -> Int
+  now().unix_millis
+end
+
+## Pause the current thread for the specified number of milliseconds.
+pub def sleep(delay_ms: Int) -> Void
+  intrinsics.time_sleep_ms(delay_ms)
+end
+
+## Pause the current thread for a duration value.
+pub def sleep_for(duration: Duration) -> Void
+  sleep(duration.milliseconds)
+end
+
+## Construct a timestamp from Unix seconds.
+pub def from_unix_seconds(value: Int) -> Timestamp
+  timestamp_from_unix_millis(value * 1000)
+end
+
+## Construct a timestamp from Unix milliseconds.
+pub def from_unix_millis(value: Int) -> Timestamp
+  timestamp_from_unix_millis(value)
+end
+
+## Return the Unix seconds for a timestamp.
+pub def unix_seconds(timestamp: Timestamp) -> Int
+  timestamp.unix_seconds
+end
+
+## Return the Unix milliseconds for a timestamp.
+pub def unix_millis(timestamp: Timestamp) -> Int
+  timestamp.unix_millis
+end
+
+## Create a duration in milliseconds.
+pub def milliseconds(value: Int) -> Duration
+  Duration(milliseconds: value)
+end
+
+## Create a duration in seconds.
+pub def seconds(value: Int) -> Duration
+  milliseconds(value * 1000)
+end
+
+## Create a duration in minutes.
+pub def minutes(value: Int) -> Duration
+  seconds(value * 60)
+end
+
+## Create a duration in hours.
+pub def hours(value: Int) -> Duration
+  minutes(value * 60)
+end
+
+## Create a duration in days.
+pub def days(value: Int) -> Duration
+  hours(value * 24)
+end
+
+## Return the sum of two durations.
+pub def add(left: Duration, right: Duration) -> Duration
+  milliseconds(left.milliseconds + right.milliseconds)
+end
+
+## Return the difference between two durations.
+pub def subtract(left: Duration, right: Duration) -> Duration
+  milliseconds(left.milliseconds - right.milliseconds)
+end
+
+## Multiply a duration by an integer factor.
+pub def multiply(duration: Duration, factor: Int) -> Duration
+  milliseconds(duration.milliseconds * factor)
+end
+
+## Return the elapsed duration between two timestamps.
+pub def between(start: Timestamp, finish: Timestamp) -> Duration
+  milliseconds(finish.unix_millis - start.unix_millis)
+end
+
+## Add a duration to a timestamp.
+pub def add_to(timestamp: Timestamp, duration: Duration) -> Timestamp
+  from_unix_millis(timestamp.unix_millis + duration.milliseconds)
+end
+
+## Subtract a duration from a timestamp.
+pub def subtract_from(timestamp: Timestamp, duration: Duration) -> Timestamp
+  from_unix_millis(timestamp.unix_millis - duration.milliseconds)
+end
+
+## Format a timestamp as an RFC3339 string in UTC.
+pub def format_rfc3339(timestamp: Timestamp) -> String
+  intrinsics.time_format_rfc3339(timestamp.unix_millis)
+end
+
+## Parse an RFC3339 string into a timestamp.
+pub def try_parse_rfc3339(text: String) -> Timestamp ! TimeError
+  const raw = intrinsics.time_parse_rfc3339(text)
+  var ok: Int = raw["ok"]
+
+  if ok == 1
+    var parsed_unix_millis: Int = raw["unix_millis"]
+    return timestamp_from_unix_millis(parsed_unix_millis)
+  end
+
+  throw TimeError.InvalidRfc3339(text)
+end
+
+## Parse an RFC3339 string and panic on invalid input.
+pub def parse_rfc3339(text: String) -> Timestamp
+  var parsed = try try_parse_rfc3339(text) catch err
+  case is TimeError.InvalidRfc3339
+    panic_invalid_rfc3339(err.input)
+  case _
+    panic_invalid_rfc3339(text)
+end
+
+parsed
+end

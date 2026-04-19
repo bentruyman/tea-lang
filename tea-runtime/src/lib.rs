@@ -22,9 +22,14 @@ use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::ptr;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
-use tea_support::{cli_error, env_error, fs_error, http_error, io_error, process_error, url_error};
+use tea_support::{
+    cli_error, env_error, fs_error, http_error, io_error, process_error, time_error, url_error,
+};
 use tempfile::NamedTempFile;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 use url::{form_urlencoded, Url};
 
 #[cfg(unix)]
@@ -1324,6 +1329,118 @@ pub extern "C" fn tea_url_join(
         .and_then(|url| url.join(&next))
         .unwrap_or_else(|error| panic!("{}", url_error("join", &base, error)));
     alloc_tea_string(joined.as_ref())
+}
+
+fn time_from_unix_millis(unix_millis: i64) -> Result<OffsetDateTime> {
+    OffsetDateTime::from_unix_timestamp_nanos(i128::from(unix_millis) * 1_000_000)
+        .map_err(|error| anyhow!(error))
+}
+
+fn looks_like_rfc3339(input: &str) -> bool {
+    let bytes = input.as_bytes();
+    if bytes.len() < 20 {
+        return false;
+    }
+
+    if !bytes[0..4].iter().all(u8::is_ascii_digit)
+        || bytes[4] != b'-'
+        || !bytes[5..7].iter().all(u8::is_ascii_digit)
+        || bytes[7] != b'-'
+        || !bytes[8..10].iter().all(u8::is_ascii_digit)
+        || bytes[10] != b'T'
+        || !bytes[11..13].iter().all(u8::is_ascii_digit)
+        || bytes[13] != b':'
+        || !bytes[14..16].iter().all(u8::is_ascii_digit)
+        || bytes[16] != b':'
+        || !bytes[17..19].iter().all(u8::is_ascii_digit)
+    {
+        return false;
+    }
+
+    bytes[19] == b'Z' || bytes[19] == b'.' || bytes[19] == b'+' || bytes[19] == b'-'
+}
+
+fn time_parse_result(unix_millis: Option<i64>) -> Result<TeaValue> {
+    let mut map = HashMap::new();
+    match unix_millis {
+        Some(value) => {
+            map.insert("ok".to_string(), RuntimeValue::Int(1));
+            map.insert("unix_millis".to_string(), RuntimeValue::Int(value));
+        }
+        None => {
+            map.insert("ok".to_string(), RuntimeValue::Int(0));
+            map.insert("unix_millis".to_string(), RuntimeValue::Int(0));
+        }
+    }
+    runtime_dict_to_tea(&map)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_time_now_unix_millis() -> c_longlong {
+    let now = OffsetDateTime::now_utc();
+    let unix_millis = now.unix_timestamp_nanos() / 1_000_000;
+    unix_millis
+        .try_into()
+        .unwrap_or_else(|_| panic!("{}", time_error("now", "now", "timestamp out of range")))
+}
+
+#[no_mangle]
+pub extern "C" fn tea_time_unix_seconds(unix_millis: c_longlong) -> c_longlong {
+    unix_millis.div_euclid(1000)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_time_sleep_ms(milliseconds: c_longlong) {
+    if milliseconds < 0 {
+        panic!(
+            "{}",
+            time_error(
+                "sleep",
+                &milliseconds.to_string(),
+                "milliseconds must be greater than or equal to 0"
+            )
+        );
+    }
+
+    thread::sleep(Duration::from_millis(milliseconds as u64));
+}
+
+#[no_mangle]
+pub extern "C" fn tea_time_format_rfc3339(unix_millis: c_longlong) -> *mut TeaString {
+    let datetime = time_from_unix_millis(unix_millis).unwrap_or_else(|error| {
+        panic!(
+            "{}",
+            time_error("format_rfc3339", &unix_millis.to_string(), error)
+        )
+    });
+    let formatted = datetime.format(&Rfc3339).unwrap_or_else(|error| {
+        panic!(
+            "{}",
+            time_error("format_rfc3339", &unix_millis.to_string(), error)
+        )
+    });
+    alloc_tea_string(&formatted)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_time_parse_rfc3339(text: *const TeaString) -> TeaValue {
+    let input = expect_string(
+        text,
+        "time.parse_rfc3339 expects the text to be a valid UTF-8 string",
+    );
+    let parsed = if looks_like_rfc3339(&input) {
+        OffsetDateTime::parse(&input, &Rfc3339)
+            .ok()
+            .and_then(|datetime| {
+                (datetime.unix_timestamp_nanos() / 1_000_000)
+                    .try_into()
+                    .ok()
+            })
+    } else {
+        None
+    };
+    time_parse_result(parsed)
+        .unwrap_or_else(|error| panic!("{}", time_error("parse_rfc3339", &input, error)))
 }
 
 #[no_mangle]

@@ -24,6 +24,7 @@ pub const SOURCE_STDLIB_MODULES: &[&str] = &[
     "std.process",
     "std.regex",
     "std.string",
+    "std.time",
     "std.url",
 ];
 
@@ -39,6 +40,7 @@ pub const REFERENCE_STDLIB_MODULES: &[&str] = &[
     "std.process",
     "std.regex",
     "std.string",
+    "std.time",
     "std.url",
 ];
 
@@ -111,6 +113,11 @@ pub enum StdFunctionKind {
     UrlBuildQuery,
     UrlAppendQuery,
     UrlJoin,
+    TimeNowUnixMillis,
+    TimeUnixSeconds,
+    TimeSleepMs,
+    TimeFormatRfc3339,
+    TimeParseRfc3339,
     FsRename,
     FsStat,
     AssertSnapshot,

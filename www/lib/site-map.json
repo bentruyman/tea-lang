@@ -142,8 +142,16 @@
           "href": "/reference/fs"
         },
         {
+          "slug": "http",
+          "href": "/reference/http"
+        },
+        {
           "slug": "json",
           "href": "/reference/json"
+        },
+        {
+          "slug": "parse",
+          "href": "/reference/parse"
         },
         {
           "slug": "path",
@@ -160,6 +168,14 @@
         {
           "slug": "string",
           "href": "/reference/string"
+        },
+        {
+          "slug": "time",
+          "href": "/reference/time"
+        },
+        {
+          "slug": "url",
+          "href": "/reference/url"
         }
       ]
     }

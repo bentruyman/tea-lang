@@ -27,7 +27,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use tea_support::{
     cli_error, env_error, fs_error, http_error, io_error, process_error, time_error, url_error,
 };
-use tempfile::NamedTempFile;
+use tempfile::{Builder as TempBuilder, NamedTempFile};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use url::{form_urlencoded, Url};
@@ -363,6 +363,36 @@ fn strings_to_list(items: Vec<String>) -> *mut TeaList {
         tea_list_set(list, index as c_longlong, tea_value_from_string(string_ptr));
     }
     list
+}
+
+fn bytes_to_list(bytes: &[u8]) -> *mut TeaList {
+    let list = tea_alloc_list(bytes.len() as c_longlong);
+    for (index, byte) in bytes.iter().enumerate() {
+        tea_list_set(
+            list,
+            index as c_longlong,
+            tea_value_from_int(*byte as c_longlong),
+        );
+    }
+    list
+}
+
+fn tea_list_to_bytes(list: *const TeaList, function_name: &str) -> Vec<u8> {
+    if list.is_null() {
+        panic!("{function_name} expects a List argument");
+    }
+    let list_ref = unsafe { &*list };
+    let len = unsafe { tea_list_len(list_ref) };
+    let mut buffer = Vec::with_capacity(len as usize);
+    for index in 0..len {
+        let value = tea_list_get(list, index);
+        let byte = tea_value_as_int(&value);
+        if !(0..=255).contains(&byte) {
+            panic!("{function_name} expects values between 0 and 255");
+        }
+        buffer.push(byte as u8);
+    }
+    buffer
 }
 
 fn write_atomic_bytes(path: &Path, data: &[u8]) -> std::io::Result<()> {
@@ -2642,15 +2672,7 @@ pub extern "C" fn tea_fs_read_bytes(path: *const TeaString) -> *mut TeaList {
     let path_str = expect_path(path);
     let bytes = fs::read(&path_str)
         .unwrap_or_else(|error| panic!("{}", fs_error("read_bytes", &path_str, &error)));
-    let list = tea_alloc_list(bytes.len() as c_longlong);
-    for (index, byte) in bytes.into_iter().enumerate() {
-        tea_list_set(
-            list,
-            index as c_longlong,
-            tea_value_from_int(byte as c_longlong),
-        );
-    }
-    list
+    bytes_to_list(&bytes)
 }
 
 #[no_mangle]
@@ -2659,17 +2681,7 @@ pub extern "C" fn tea_fs_write_bytes(path: *const TeaString, data: *const TeaLis
         panic!("write_bytes expects a List argument");
     }
     let path_str = expect_path(path);
-    let list_ref = unsafe { &*data };
-    let len = unsafe { tea_list_len(list_ref) };
-    let mut buffer = Vec::with_capacity(len as usize);
-    for index in 0..len {
-        let value = tea_list_get(data, index);
-        let byte = tea_value_as_int(&value);
-        if byte < 0 || byte > 255 {
-            panic!("write_bytes expects values between 0 and 255");
-        }
-        buffer.push(byte as u8);
-    }
+    let buffer = tea_list_to_bytes(data, "write_bytes");
     fs::write(&path_str, buffer)
         .unwrap_or_else(|error| panic!("{}", fs_error("write_bytes", &path_str, &error)));
 }
@@ -2680,21 +2692,40 @@ pub extern "C" fn tea_fs_write_bytes_atomic(path: *const TeaString, data: *const
         panic!("write_bytes_atomic expects a List argument");
     }
     let path_str = expect_path(path);
-    let list_ref = unsafe { &*data };
-    let len = unsafe { tea_list_len(list_ref) };
-    let mut buffer = Vec::with_capacity(len as usize);
-    for index in 0..len {
-        let value = tea_list_get(data, index);
-        let byte = tea_value_as_int(&value);
-        if byte < 0 || byte > 255 {
-            panic!("write_bytes_atomic expects values between 0 and 255");
-        }
-        buffer.push(byte as u8);
-    }
+    let buffer = tea_list_to_bytes(data, "write_bytes_atomic");
     let fs_path = Path::new(&path_str);
     write_atomic_bytes(fs_path, &buffer).unwrap_or_else(|error| {
         panic!("{}", fs_error("write_bytes_atomic", &path_str, &error));
     });
+}
+
+#[no_mangle]
+pub extern "C" fn tea_fs_append_text(path: *const TeaString, contents: *const TeaString) {
+    let path_str = expect_path(path);
+    let text = expect_string(
+        contents,
+        "append_text expects the contents argument to be a valid string",
+    );
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path_str)
+        .unwrap_or_else(|error| panic!("{}", fs_error("append_text", &path_str, &error)));
+    file.write_all(text.as_bytes())
+        .unwrap_or_else(|error| panic!("{}", fs_error("append_text", &path_str, &error)));
+}
+
+#[no_mangle]
+pub extern "C" fn tea_fs_append_bytes(path: *const TeaString, data: *const TeaList) {
+    let path_str = expect_path(path);
+    let buffer = tea_list_to_bytes(data, "append_bytes");
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path_str)
+        .unwrap_or_else(|error| panic!("{}", fs_error("append_bytes", &path_str, &error)));
+    file.write_all(&buffer)
+        .unwrap_or_else(|error| panic!("{}", fs_error("append_bytes", &path_str, &error)));
 }
 
 #[no_mangle]
@@ -2764,6 +2795,7 @@ pub extern "C" fn tea_fs_is_symlink(path: *const TeaString) -> c_int {
                 0
             }
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
         Err(error) => panic!("{}", fs_error("is_symlink", &path_str, &error)),
     }
 }
@@ -2857,6 +2889,33 @@ pub extern "C" fn tea_fs_copy(source: *const TeaString, target: *const TeaString
     let source_str = expect_path(source);
     let target_str = expect_path(target);
     tea_intrinsics::fs::copy(&source_str, &target_str).unwrap_or_else(|error| panic!("{}", error));
+}
+
+#[no_mangle]
+pub extern "C" fn tea_fs_create_temp_dir(prefix: *const TeaString) -> *mut TeaString {
+    let prefix_str = expect_string(prefix, "create_temp_dir expects a valid prefix string");
+    let dir = TempBuilder::new()
+        .prefix(&prefix_str)
+        .tempdir()
+        .unwrap_or_else(|error| panic!("{}", fs_error("create_temp_dir", &prefix_str, &error)));
+    let path = dir.keep();
+    alloc_tea_string(path.to_string_lossy().as_ref())
+}
+
+#[no_mangle]
+pub extern "C" fn tea_fs_create_temp_file(prefix: *const TeaString) -> *mut TeaString {
+    let prefix_str = expect_string(prefix, "create_temp_file expects a valid prefix string");
+    let file = TempBuilder::new()
+        .prefix(&prefix_str)
+        .tempfile()
+        .unwrap_or_else(|error| panic!("{}", fs_error("create_temp_file", &prefix_str, &error)));
+    let (_file, path) = file.keep().unwrap_or_else(|error| {
+        panic!(
+            "{}",
+            fs_error("create_temp_file", &prefix_str, &error.error)
+        )
+    });
+    alloc_tea_string(path.to_string_lossy().as_ref())
 }
 
 #[no_mangle]
@@ -3959,10 +4018,10 @@ fn tea_value_dict_to_string_map(value: TeaValue) -> Result<HashMap<String, Strin
     }
 }
 
-fn read_process_pipe<R: Read>(
+fn read_process_pipe_bytes<R: Read>(
     reader: &mut Option<BufReader<R>>,
     size: Option<usize>,
-) -> std::io::Result<String> {
+) -> std::io::Result<Vec<u8>> {
     if let Some(ref mut handle) = reader {
         let mut buffer = Vec::new();
         if let Some(limit) = size {
@@ -3971,10 +4030,18 @@ fn read_process_pipe<R: Read>(
         } else {
             handle.read_to_end(&mut buffer)?;
         }
-        Ok(String::from_utf8_lossy(&buffer).to_string())
+        Ok(buffer)
     } else {
-        Ok(String::new())
+        Ok(Vec::new())
     }
+}
+
+fn read_process_pipe<R: Read>(
+    reader: &mut Option<BufReader<R>>,
+    size: Option<usize>,
+) -> std::io::Result<String> {
+    let buffer = read_process_pipe_bytes(reader, size)?;
+    Ok(String::from_utf8_lossy(&buffer).to_string())
 }
 
 fn build_process_result_struct(
@@ -4515,6 +4582,26 @@ pub extern "C" fn tea_process_read_stdout(handle: c_longlong, size: c_longlong) 
 }
 
 #[no_mangle]
+pub extern "C" fn tea_process_read_stdout_bytes(
+    handle: c_longlong,
+    size: c_longlong,
+) -> *mut TeaList {
+    let mut table = process_handles().lock().unwrap();
+    let target = format!("handle {}", handle);
+    let entry = table.get_mut(&(handle as i64)).unwrap_or_else(|| {
+        panic!(
+            "{}",
+            process_error("read_stdout_bytes", &target, "invalid process handle")
+        )
+    });
+    let command = entry.command.clone();
+    let limit = if size <= 0 { None } else { Some(size as usize) };
+    let output = read_process_pipe_bytes(&mut entry.stdout, limit)
+        .unwrap_or_else(|error| panic!("{}", process_error("read_stdout_bytes", &command, error)));
+    bytes_to_list(&output)
+}
+
+#[no_mangle]
 pub extern "C" fn tea_process_read_stderr(handle: c_longlong, size: c_longlong) -> *mut TeaString {
     let mut table = process_handles().lock().unwrap();
     let target = format!("handle {}", handle);
@@ -4529,6 +4616,26 @@ pub extern "C" fn tea_process_read_stderr(handle: c_longlong, size: c_longlong) 
     let output = read_process_pipe(&mut entry.stderr, limit)
         .unwrap_or_else(|error| panic!("{}", process_error("read_stderr", &command, error)));
     alloc_tea_string(&output)
+}
+
+#[no_mangle]
+pub extern "C" fn tea_process_read_stderr_bytes(
+    handle: c_longlong,
+    size: c_longlong,
+) -> *mut TeaList {
+    let mut table = process_handles().lock().unwrap();
+    let target = format!("handle {}", handle);
+    let entry = table.get_mut(&(handle as i64)).unwrap_or_else(|| {
+        panic!(
+            "{}",
+            process_error("read_stderr_bytes", &target, "invalid process handle")
+        )
+    });
+    let command = entry.command.clone();
+    let limit = if size <= 0 { None } else { Some(size as usize) };
+    let output = read_process_pipe_bytes(&mut entry.stderr, limit)
+        .unwrap_or_else(|error| panic!("{}", process_error("read_stderr_bytes", &command, error)));
+    bytes_to_list(&output)
 }
 
 #[no_mangle]
@@ -4562,6 +4669,30 @@ pub extern "C" fn tea_process_write_stdin(handle: c_longlong, data: TeaValue) {
         panic!(
             "{}",
             process_error("write_stdin", &command, "stdin has been closed")
+        );
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn tea_process_write_stdin_bytes(handle: c_longlong, data: *const TeaList) {
+    let mut table = process_handles().lock().unwrap();
+    let target = format!("handle {}", handle);
+    let entry = table.get_mut(&(handle as i64)).unwrap_or_else(|| {
+        panic!(
+            "{}",
+            process_error("write_stdin_bytes", &target, "invalid process handle")
+        )
+    });
+    let command = entry.command.clone();
+    let input = tea_list_to_bytes(data, "write_stdin_bytes");
+    if let Some(stdin) = entry.stdin.as_mut() {
+        stdin.write_all(&input).unwrap_or_else(|error| {
+            panic!("{}", process_error("write_stdin_bytes", &command, error))
+        });
+    } else {
+        panic!(
+            "{}",
+            process_error("write_stdin_bytes", &command, "stdin has been closed")
         );
     }
 }

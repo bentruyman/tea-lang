@@ -78,8 +78,8 @@ pub def read_stdout(handle: Int) -> String
 end
 
 ## Read up to the specified number of bytes from a spawned process's stdout.
-pub def read_stdout_bytes(handle: Int, bytes: Int) -> String
-  intrinsics.process_read_stdout(handle, bytes)
+pub def read_stdout_bytes(handle: Int, bytes: Int) -> List[Int]
+  intrinsics.process_read_stdout_bytes(handle, bytes)
 end
 
 ## Read data from a spawned process's stderr.
@@ -92,8 +92,8 @@ pub def read_stderr(handle: Int) -> String
 end
 
 ## Read up to the specified number of bytes from a spawned process's stderr.
-pub def read_stderr_bytes(handle: Int, bytes: Int) -> String
-  intrinsics.process_read_stderr(handle, bytes)
+pub def read_stderr_bytes(handle: Int, bytes: Int) -> List[Int]
+  intrinsics.process_read_stderr_bytes(handle, bytes)
 end
 
 ## Write data to a spawned process's stdin.
@@ -103,6 +103,11 @@ end
 ##   process.write_stdin(handle, "hello world")
 pub def write_stdin(handle: Int, data: String) -> Void
   intrinsics.process_write_stdin(handle, data)
+end
+
+## Write raw bytes to a spawned process's stdin.
+pub def write_stdin_bytes(handle: Int, data: List[Int]) -> Void
+  intrinsics.process_write_stdin_bytes(handle, data)
 end
 
 ## Close a spawned process's stdin pipe.

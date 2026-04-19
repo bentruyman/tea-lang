@@ -491,7 +491,10 @@ struct LlvmCodeGenerator<'ctx> {
     process_kill_fn: Option<FunctionValue<'ctx>>,
     process_read_stdout_fn: Option<FunctionValue<'ctx>>,
     process_read_stderr_fn: Option<FunctionValue<'ctx>>,
+    process_read_stdout_bytes_fn: Option<FunctionValue<'ctx>>,
+    process_read_stderr_bytes_fn: Option<FunctionValue<'ctx>>,
     process_write_stdin_fn: Option<FunctionValue<'ctx>>,
+    process_write_stdin_bytes_fn: Option<FunctionValue<'ctx>>,
     process_close_stdin_fn: Option<FunctionValue<'ctx>>,
     process_close_fn: Option<FunctionValue<'ctx>>,
     fs_read_text_fn: Option<FunctionValue<'ctx>>,
@@ -500,7 +503,11 @@ struct LlvmCodeGenerator<'ctx> {
     fs_read_bytes_fn: Option<FunctionValue<'ctx>>,
     fs_write_bytes_fn: Option<FunctionValue<'ctx>>,
     fs_write_bytes_atomic_fn: Option<FunctionValue<'ctx>>,
+    fs_append_text_fn: Option<FunctionValue<'ctx>>,
+    fs_append_bytes_fn: Option<FunctionValue<'ctx>>,
     fs_create_dir_fn: Option<FunctionValue<'ctx>>,
+    fs_create_temp_dir_fn: Option<FunctionValue<'ctx>>,
+    fs_create_temp_file_fn: Option<FunctionValue<'ctx>>,
     fs_ensure_dir_fn: Option<FunctionValue<'ctx>>,
     fs_ensure_parent_fn: Option<FunctionValue<'ctx>>,
     fs_remove_fn: Option<FunctionValue<'ctx>>,
@@ -1228,7 +1235,10 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             process_kill_fn: None,
             process_read_stdout_fn: None,
             process_read_stderr_fn: None,
+            process_read_stdout_bytes_fn: None,
+            process_read_stderr_bytes_fn: None,
             process_write_stdin_fn: None,
+            process_write_stdin_bytes_fn: None,
             process_close_stdin_fn: None,
             process_close_fn: None,
             fs_read_text_fn: None,
@@ -1237,7 +1247,11 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             fs_read_bytes_fn: None,
             fs_write_bytes_fn: None,
             fs_write_bytes_atomic_fn: None,
+            fs_append_text_fn: None,
+            fs_append_bytes_fn: None,
             fs_create_dir_fn: None,
+            fs_create_temp_dir_fn: None,
+            fs_create_temp_file_fn: None,
             fs_ensure_dir_fn: None,
             fs_ensure_parent_fn: None,
             fs_remove_fn: None,
@@ -7847,23 +7861,44 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::FsWriteText => {
                 self.compile_fs_write_text_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsWriteTextAtomic => {
+                self.compile_fs_write_text_atomic_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsWriteBytes => {
                 self.compile_fs_write_bytes_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsWriteBytesAtomic => {
                 self.compile_fs_write_bytes_atomic_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsAppendText => {
+                self.compile_fs_append_text_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsAppendBytes => {
+                self.compile_fs_append_bytes_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsCreateDir => {
                 self.compile_fs_create_dir_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::FsCreateTempDir => {
+                self.compile_fs_create_temp_dir_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsCreateTempFile => {
+                self.compile_fs_create_temp_file_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::FsEnsureDir => {
                 self.compile_fs_ensure_dir_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsEnsureParent => {
+                self.compile_fs_ensure_parent_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsRemove => {
                 self.compile_fs_remove_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsExists => {
                 self.compile_fs_exists_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::FsIsSymlink => {
+                self.compile_fs_is_symlink_call(&call.arguments, function, locals)
             }
             StdFunctionKind::FsListDir => {
                 self.compile_fs_list_dir_call(&call.arguments, function, locals)
@@ -7894,8 +7929,17 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             StdFunctionKind::ProcessReadStderr => {
                 self.compile_process_read_stderr_call(&call.arguments, function, locals)
             }
+            StdFunctionKind::ProcessReadStdoutBytes => {
+                self.compile_process_read_stdout_bytes_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessReadStderrBytes => {
+                self.compile_process_read_stderr_bytes_call(&call.arguments, function, locals)
+            }
             StdFunctionKind::ProcessWriteStdin => {
                 self.compile_process_write_stdin_call(&call.arguments, function, locals)
+            }
+            StdFunctionKind::ProcessWriteStdinBytes => {
+                self.compile_process_write_stdin_bytes_call(&call.arguments, function, locals)
             }
             StdFunctionKind::ProcessCloseStdin => {
                 self.compile_process_close_stdin_call(&call.arguments, function, locals)
@@ -9890,6 +9934,54 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::String(pointer))
     }
 
+    fn compile_process_read_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+        stdout: bool,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("process.read_*_bytes expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for process.read_*_bytes");
+            }
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "process.read_*_bytes expects the handle to be an Int",
+        )?;
+        let size_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let size_value =
+            self.expect_int_value(size_expr, "process.read_*_bytes expects bytes to be an Int")?;
+        let func = if stdout {
+            self.ensure_process_read_stdout_bytes_fn()
+        } else {
+            self.ensure_process_read_stderr_bytes_fn()
+        };
+        let pointer = self
+            .call_function(
+                func,
+                &[handle_value.into(), size_value.into()],
+                if stdout {
+                    "tea_process_read_stdout_bytes"
+                } else {
+                    "tea_process_read_stderr_bytes"
+                },
+            )?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_process_read_*_bytes returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::List {
+            pointer,
+            element_type: Box::new(ValueType::Int),
+        })
+    }
+
     fn compile_process_write_stdin_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -9914,6 +10006,39 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             func,
             &[handle_value.into(), data_value],
             "tea_process_write_stdin",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_process_write_stdin_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("process.write_stdin_bytes expects exactly 2 arguments");
+        }
+        if arguments[0].name.is_some() || arguments[1].name.is_some() {
+            bail!("named arguments are not supported for process.write_stdin_bytes");
+        }
+        let handle_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let handle_value = self.expect_int_value(
+            handle_expr,
+            "process.write_stdin_bytes expects the handle to be an Int",
+        )?;
+        let data_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let data_value =
+            self.convert_expr_to_type(data_expr, &ValueType::List(Box::new(ValueType::Int)))?;
+        let data_ptr = match data_value {
+            ExprValue::List { pointer, .. } => pointer,
+            _ => bail!("process.write_stdin_bytes expects the data argument to be a List[Int]"),
+        };
+        let func = self.ensure_process_write_stdin_bytes_fn();
+        self.call_function(
+            func,
+            &[handle_value.into(), data_ptr.into()],
+            "tea_process_write_stdin_bytes",
         )?;
         Ok(ExprValue::Void)
     }
@@ -10011,6 +10136,24 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         locals: &mut HashMap<String, LocalVariable<'ctx>>,
     ) -> Result<ExprValue<'ctx>> {
         self.compile_process_read_call(arguments, function, locals, false)
+    }
+
+    fn compile_process_read_stdout_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_process_read_bytes_call(arguments, function, locals, true)
+    }
+
+    fn compile_process_read_stderr_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        self.compile_process_read_bytes_call(arguments, function, locals, false)
     }
 
     fn compile_fs_read_text_call(
@@ -10173,6 +10316,74 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         Ok(ExprValue::Void)
     }
 
+    fn compile_fs_append_text_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("append_text expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for append_text");
+            }
+        }
+        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let path_ptr = self.expect_string_pointer(
+            path_expr,
+            "append_text expects the path argument to be a String",
+        )?;
+        let contents_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let contents_ptr = self.expect_string_pointer(
+            contents_expr,
+            "append_text expects the contents argument to be a String",
+        )?;
+        let func = self.ensure_fs_append_text_fn();
+        self.call_function(
+            func,
+            &[path_ptr.into(), contents_ptr.into()],
+            "tea_fs_append_text",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
+    fn compile_fs_append_bytes_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 2 {
+            bail!("append_bytes expects exactly 2 arguments");
+        }
+        for argument in arguments {
+            if argument.name.is_some() {
+                bail!("named arguments are not supported for append_bytes");
+            }
+        }
+        let path_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let path_ptr = self.expect_string_pointer(
+            path_expr,
+            "append_bytes expects the path argument to be a String",
+        )?;
+        let data_expr = self.compile_expression(&arguments[1].expression, function, locals)?;
+        let data_value =
+            self.convert_expr_to_type(data_expr, &ValueType::List(Box::new(ValueType::Int)))?;
+        let data_ptr = match data_value {
+            ExprValue::List { pointer, .. } => pointer,
+            _ => bail!("append_bytes expects the data argument to be a List[Int]"),
+        };
+        let func = self.ensure_fs_append_bytes_fn();
+        self.call_function(
+            func,
+            &[path_ptr.into(), data_ptr.into()],
+            "tea_fs_append_bytes",
+        )?;
+        Ok(ExprValue::Void)
+    }
+
     fn compile_fs_write_text_atomic_call(
         &mut self,
         arguments: &[crate::ast::CallArgument],
@@ -10242,6 +10453,60 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             "tea_fs_create_dir",
         )?;
         Ok(ExprValue::Void)
+    }
+
+    fn compile_fs_create_temp_dir_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("create_temp_dir expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for create_temp_dir");
+        }
+        let prefix_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let prefix_ptr = self.expect_string_pointer(
+            prefix_expr,
+            "create_temp_dir expects the prefix argument to be a String",
+        )?;
+        let func = self.ensure_fs_create_temp_dir_fn();
+        let pointer = self
+            .call_function(func, &[prefix_ptr.into()], "tea_fs_create_temp_dir")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_fs_create_temp_dir returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
+    }
+
+    fn compile_fs_create_temp_file_call(
+        &mut self,
+        arguments: &[crate::ast::CallArgument],
+        function: FunctionValue<'ctx>,
+        locals: &mut HashMap<String, LocalVariable<'ctx>>,
+    ) -> Result<ExprValue<'ctx>> {
+        if arguments.len() != 1 {
+            bail!("create_temp_file expects exactly 1 argument");
+        }
+        if arguments[0].name.is_some() {
+            bail!("named arguments are not supported for create_temp_file");
+        }
+        let prefix_expr = self.compile_expression(&arguments[0].expression, function, locals)?;
+        let prefix_ptr = self.expect_string_pointer(
+            prefix_expr,
+            "create_temp_file expects the prefix argument to be a String",
+        )?;
+        let func = self.ensure_fs_create_temp_file_fn();
+        let pointer = self
+            .call_function(func, &[prefix_ptr.into()], "tea_fs_create_temp_file")?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| anyhow!("tea_fs_create_temp_file returned no value"))?
+            .into_pointer_value();
+        Ok(ExprValue::String(pointer))
     }
 
     fn compile_fs_ensure_dir_call(
@@ -16370,6 +16635,32 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_fs_append_text_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_append_text_fn {
+            return func;
+        }
+        let param_types = [self.string_ptr_type().into(), self.string_ptr_type().into()];
+        let fn_type = self.context.void_type().fn_type(&param_types, false);
+        let func = self
+            .module
+            .add_function("tea_fs_append_text", fn_type, Some(Linkage::External));
+        self.fs_append_text_fn = Some(func);
+        func
+    }
+
+    fn ensure_fs_append_bytes_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_append_bytes_fn {
+            return func;
+        }
+        let param_types = [self.string_ptr_type().into(), self.list_ptr_type().into()];
+        let fn_type = self.context.void_type().fn_type(&param_types, false);
+        let func =
+            self.module
+                .add_function("tea_fs_append_bytes", fn_type, Some(Linkage::External));
+        self.fs_append_bytes_fn = Some(func);
+        func
+    }
+
     fn ensure_fs_create_dir_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.fs_create_dir_fn {
             return func;
@@ -16383,6 +16674,34 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             .module
             .add_function("tea_fs_create_dir", fn_type, Some(Linkage::External));
         self.fs_create_dir_fn = Some(func);
+        func
+    }
+
+    fn ensure_fs_create_temp_dir_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_create_temp_dir_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_fs_create_temp_dir", fn_type, Some(Linkage::External));
+        self.fs_create_temp_dir_fn = Some(func);
+        func
+    }
+
+    fn ensure_fs_create_temp_file_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.fs_create_temp_file_fn {
+            return func;
+        }
+        let fn_type = self
+            .string_ptr_type()
+            .fn_type(&[self.string_ptr_type().into()], false);
+        let func =
+            self.module
+                .add_function("tea_fs_create_temp_file", fn_type, Some(Linkage::External));
+        self.fs_create_temp_file_fn = Some(func);
         func
     }
 
@@ -17867,6 +18186,36 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
         func
     }
 
+    fn ensure_process_read_stdout_bytes_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.process_read_stdout_bytes_fn {
+            return func;
+        }
+        let param_types = [self.int_type().into(), self.int_type().into()];
+        let fn_type = self.list_ptr_type().fn_type(&param_types, false);
+        let func = self.module.add_function(
+            "tea_process_read_stdout_bytes",
+            fn_type,
+            Some(Linkage::External),
+        );
+        self.process_read_stdout_bytes_fn = Some(func);
+        func
+    }
+
+    fn ensure_process_read_stderr_bytes_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.process_read_stderr_bytes_fn {
+            return func;
+        }
+        let param_types = [self.int_type().into(), self.int_type().into()];
+        let fn_type = self.list_ptr_type().fn_type(&param_types, false);
+        let func = self.module.add_function(
+            "tea_process_read_stderr_bytes",
+            fn_type,
+            Some(Linkage::External),
+        );
+        self.process_read_stderr_bytes_fn = Some(func);
+        func
+    }
+
     fn ensure_process_write_stdin_fn(&mut self) -> FunctionValue<'ctx> {
         if let Some(func) = self.process_write_stdin_fn {
             return func;
@@ -17877,6 +18226,21 @@ impl<'ctx> LlvmCodeGenerator<'ctx> {
             self.module
                 .add_function("tea_process_write_stdin", fn_type, Some(Linkage::External));
         self.process_write_stdin_fn = Some(func);
+        func
+    }
+
+    fn ensure_process_write_stdin_bytes_fn(&mut self) -> FunctionValue<'ctx> {
+        if let Some(func) = self.process_write_stdin_bytes_fn {
+            return func;
+        }
+        let param_types = [self.int_type().into(), self.list_ptr_type().into()];
+        let fn_type = self.context.void_type().fn_type(&param_types, false);
+        let func = self.module.add_function(
+            "tea_process_write_stdin_bytes",
+            fn_type,
+            Some(Linkage::External),
+        );
+        self.process_write_stdin_bytes_fn = Some(func);
         func
     }
 

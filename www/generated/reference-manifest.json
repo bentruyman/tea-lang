@@ -366,6 +366,11 @@
           "summary": "Write text to a file."
         },
         {
+          "name": "write_file_atomic",
+          "signature_display": "pub def write_file_atomic(file_path: String, content: String) -> Void",
+          "summary": "Write text to a file atomically."
+        },
+        {
           "name": "write_bytes",
           "signature_display": "pub def write_bytes(file_path: String, data: List[Int]) -> Void",
           "summary": "Write raw bytes to a file."
@@ -386,6 +391,11 @@
           "summary": "Create a directory and any missing parent directories."
         },
         {
+          "name": "ensure_parent",
+          "signature_display": "pub def ensure_parent(file_path: String) -> Void",
+          "summary": "Create any missing parent directories for a file path."
+        },
+        {
           "name": "mkdir_p",
           "signature_display": "pub def mkdir_p(dir_path: String) -> Void",
           "summary": "Alias for ensure_dir()."
@@ -399,6 +409,11 @@
           "name": "exists",
           "signature_display": "pub def exists(file_path: String) -> Bool",
           "summary": "Return true when a path exists."
+        },
+        {
+          "name": "is_symlink",
+          "signature_display": "pub def is_symlink(file_path: String) -> Bool",
+          "summary": "Return true when the path is a symbolic link."
         },
         {
           "name": "read_dir",
@@ -446,9 +461,24 @@
           "summary": "Write a list of lines to a file, joining them with \"\\n\"."
         },
         {
+          "name": "append_bytes",
+          "signature_display": "pub def append_bytes(file_path: String, data: List[Int]) -> Void",
+          "summary": "Append raw bytes to a file, creating it when it does not exist."
+        },
+        {
           "name": "append_file",
           "signature_display": "pub def append_file(file_path: String, content: String) -> Void",
           "summary": "Append text to a file, creating it when it does not exist."
+        },
+        {
+          "name": "create_temp_dir",
+          "signature_display": "pub def create_temp_dir(prefix: String) -> String",
+          "summary": "Create a unique temporary directory and return its path."
+        },
+        {
+          "name": "create_temp_file",
+          "signature_display": "pub def create_temp_file(prefix: String) -> String",
+          "summary": "Create a unique temporary file and return its path."
         }
       ]
     },
@@ -757,7 +787,7 @@
         },
         {
           "name": "read_stdout_bytes",
-          "signature_display": "pub def read_stdout_bytes(handle: Int, bytes: Int) -> String",
+          "signature_display": "pub def read_stdout_bytes(handle: Int, bytes: Int) -> List[Int]",
           "summary": "Read up to the specified number of bytes from a spawned process's stdout."
         },
         {
@@ -767,13 +797,18 @@
         },
         {
           "name": "read_stderr_bytes",
-          "signature_display": "pub def read_stderr_bytes(handle: Int, bytes: Int) -> String",
+          "signature_display": "pub def read_stderr_bytes(handle: Int, bytes: Int) -> List[Int]",
           "summary": "Read up to the specified number of bytes from a spawned process's stderr."
         },
         {
           "name": "write_stdin",
           "signature_display": "pub def write_stdin(handle: Int, data: String) -> Void",
           "summary": "Write data to a spawned process's stdin."
+        },
+        {
+          "name": "write_stdin_bytes",
+          "signature_display": "pub def write_stdin_bytes(handle: Int, data: List[Int]) -> Void",
+          "summary": "Write raw bytes to a spawned process's stdin."
         },
         {
           "name": "close_stdin",
